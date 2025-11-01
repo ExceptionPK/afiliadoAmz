@@ -9,7 +9,6 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 
-// === Componentes simples de reemplazo ===
 const Button = ({ className = "", children, ...props }) => (
   <button
     {...props}
@@ -34,24 +33,45 @@ const Card = ({ className = "", children }) => (
   </div>
 );
 
-// === ID de afiliado de Amazon ===
 const AFFILIATE_ID = "dekolaps-21";
 
-// === Función segura para crear objetos URL ===
-const safeNewURL = (url) => {
-  try {
-    return new URL(url);
-  } catch {
-    try {
-      const fixed = url.startsWith("http")
-        ? url.split("?")[0]
-        : "https://" + url.split("?")[0];
-      return new URL(fixed);
-    } catch {
-      return null;
-    }
-  }
+// === Utilidades robustas ===
+
+// Limpia la URL quitando parámetros y espacios
+const cleanAmazonUrl = (url) => {
+  if (!url) return "";
+  return url
+    .trim()
+    .replace(/\s+/g, "")
+    .replace(/(ref|pf_rd|_encoding|psc)=.*$/gi, "")
+    .split("?")[0]
+    .split("&")[0];
 };
+
+// Extrae ASIN incluso de URLs incompletas
+const extractASIN = (url) => {
+  const patterns = [
+    /\/dp\/([A-Z0-9]{10})/i,
+    /\/gp\/product\/([A-Z0-9]{10})/i,
+    /\/product\/([A-Z0-9]{10})/i,
+    /\/ASIN\/([A-Z0-9]{10})/i,
+    /([A-Z0-9]{10})(?:[/?]|$)/i, // patrón de respaldo
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match && match[1]) return match[1].toUpperCase();
+  }
+  return null;
+};
+
+// Detecta el dominio de Amazon (por defecto .es)
+const getAmazonDomain = (url) => {
+  const match = url.match(/amazon\.[a-z.]+/i);
+  return match ? match[0].toLowerCase() : "amazon.es";
+};
+
+// Verifica si parece un enlace de Amazon
+const isAmazonUrl = (url) => /amazon\.[a-z.]+/i.test(url);
 
 export default function AmazonAffiliate() {
   const [inputUrl, setInputUrl] = useState("");
@@ -60,92 +80,46 @@ export default function AmazonAffiliate() {
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
-  // Extraer ASIN de una URL de Amazon
-  const extractASIN = (url) => {
-    const patterns = [
-      /\/dp\/([A-Z0-9]{10})/i,
-      /\/gp\/product\/([A-Z0-9]{10})/i,
-      /\/product\/([A-Z0-9]{10})/i,
-      /\/exec\/obidos\/ASIN\/([A-Z0-9]{10})/i,
-    ];
-    for (const pattern of patterns) {
-      const match = url.match(pattern);
-      if (match && match[1]) return match[1];
-    }
-    return null;
-  };
-
-  // Validar que sea un enlace de Amazon
-  const isAmazonUrl = (url) => {
-    const urlObj = safeNewURL(url);
-    if (!urlObj) return false;
-    return /amazon\./i.test(urlObj.hostname);
-  };
-
-  const getAmazonDomain = (url) => {
-    const urlObj = safeNewURL(url);
-    if (!urlObj) return "amazon.es";
-    return urlObj.hostname;
-  };
-
   const generateAffiliateLink = () => {
-    try {
-      setError("");
-      setAffiliateUrl("");
-      setCopied(false);
+    setError("");
+    setAffiliateUrl("");
+    setCopied(false);
 
-      if (!inputUrl.trim()) {
-        setError("Por favor, introduce una URL de Amazon");
-        return;
-      }
-
-      if (!isAmazonUrl(inputUrl)) {
-        setError("La URL introducida no es válida. Debe ser un enlace de Amazon.");
-        return;
-      }
-
-      const asin = extractASIN(inputUrl);
-      if (!asin) {
-        setError("No se pudo encontrar el código ASIN del producto. Verifica la URL.");
-        return;
-      }
-
-      setIsLoading(true);
-      setTimeout(() => {
-        const domain = getAmazonDomain(inputUrl);
-        const newAffiliateUrl = `https://${domain}/dp/${asin}/ref=nosim?tag=${AFFILIATE_ID}`;
-        setAffiliateUrl(newAffiliateUrl);
-        setIsLoading(false);
-      }, 800);
-    } catch (err) {
-      console.error("Error inesperado al generar enlace:", err);
-      setError("Ocurrió un error al procesar la URL. Intenta con otro enlace.");
-      setIsLoading(false);
+    const rawUrl = inputUrl.trim();
+    if (!rawUrl) {
+      setError("Por favor, introduce una URL de Amazon");
+      return;
     }
+
+    if (!isAmazonUrl(rawUrl)) {
+      setError("La URL introducida no parece ser de Amazon.");
+      return;
+    }
+
+    const cleanUrl = cleanAmazonUrl(rawUrl);
+    const asin = extractASIN(cleanUrl);
+
+    if (!asin) {
+      setError("No se pudo encontrar el código ASIN del producto. Verifica la URL.");
+      return;
+    }
+
+    setIsLoading(true);
+    setTimeout(() => {
+      const domain = getAmazonDomain(cleanUrl);
+      const newAffiliateUrl = `https://${domain}/dp/${asin}/ref=nosim?tag=${AFFILIATE_ID}`;
+      setAffiliateUrl(newAffiliateUrl);
+      setIsLoading(false);
+    }, 600);
   };
 
   const copyToClipboard = async () => {
     try {
-      if (navigator.clipboard && window.isSecureContext) {
-        await navigator.clipboard.writeText(affiliateUrl);
-      } else {
-        // Fallback para navegadores antiguos o PWAs
-        const textArea = document.createElement("textarea");
-        textArea.value = affiliateUrl;
-        textArea.style.position = "fixed";
-        textArea.style.opacity = 0;
-        document.body.appendChild(textArea);
-        textArea.focus();
-        textArea.select();
-        document.execCommand("copy");
-        document.body.removeChild(textArea);
-      }
-
+      await navigator.clipboard.writeText(affiliateUrl);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     } catch (err) {
       console.error("Error al copiar:", err);
-      alert("No se pudo copiar el enlace automáticamente. Cópialo manualmente.");
     }
   };
 
@@ -158,14 +132,12 @@ export default function AmazonAffiliate() {
 
   return (
     <div className="min-h-screen contenedor-sombra">
-      {/* Fondos decorativos */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
         <div className="absolute top-20 -left-20 w-96 h-96 bg-violet-200/20 rounded-full blur-3xl" />
         <div className="absolute bottom-20 -right-20 w-96 h-96 bg-indigo-200/20 rounded-full blur-3xl" />
       </div>
 
       <div className="relative z-10 container mx-auto px-4 py-12 md:py-20">
-        {/* Header */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -185,11 +157,10 @@ export default function AmazonAffiliate() {
           </h1>
 
           <p className="texto-descriptivo">
-            Transforma cualquier URL de Amazon en un enlace de afiliado.
+            Transforma cualquier URL de Amazon en un enlace de afiliado — incluso si está incompleta.
           </p>
         </motion.div>
 
-        {/* Tarjeta principal */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -198,7 +169,6 @@ export default function AmazonAffiliate() {
         >
           <Card>
             <div className="space-y-3">
-              {/* Input */}
               <div className="space-y-3">
                 <label className="text-sm font-medium text-slate-700 flex items-center gap-2">
                   <LinkIcon className="w-4 h-4 text-violet-500" />
@@ -225,7 +195,6 @@ export default function AmazonAffiliate() {
                 </div>
               </div>
 
-              {/* Error */}
               <AnimatePresence>
                 {error && (
                   <motion.div
@@ -240,7 +209,6 @@ export default function AmazonAffiliate() {
                 )}
               </AnimatePresence>
 
-              {/* Botón generar */}
               <Button
                 onClick={generateAffiliateLink}
                 disabled={isLoading || !inputUrl}
@@ -267,7 +235,6 @@ export default function AmazonAffiliate() {
                 )}
               </Button>
 
-              {/* Resultado */}
               <AnimatePresence>
                 {affiliateUrl && (
                   <motion.div
@@ -278,9 +245,7 @@ export default function AmazonAffiliate() {
                   >
                     <div className="flex items-center gap-2 text-green-600">
                       <CheckCircle2 className="w-5 h-5" />
-                      <span className="font-medium">
-                        ¡Enlace generado correctamente!
-                      </span>
+                      <span className="font-medium">¡Enlace generado correctamente!</span>
                     </div>
 
                     <div className="space-y-3">
