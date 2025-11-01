@@ -109,11 +109,25 @@ export default function AmazonAffiliate() {
 
     const copyToClipboard = async () => {
         try {
-            await navigator.clipboard.writeText(affiliateUrl);
+            if (navigator.clipboard && window.isSecureContext) {
+                await navigator.clipboard.writeText(affiliateUrl);
+            } else {
+                // Fallback para iOS standalone / navegadores antiguos
+                const textArea = document.createElement("textarea");
+                textArea.value = affiliateUrl;
+                textArea.style.position = "fixed"; // evitar scroll
+                textArea.style.opacity = 0;
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand("copy");
+                document.body.removeChild(textArea);
+            }
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         } catch (err) {
             console.error("Error al copiar:", err);
+            alert("No se pudo copiar el enlace automáticamente. Cópialo manualmente.");
         }
     };
 
