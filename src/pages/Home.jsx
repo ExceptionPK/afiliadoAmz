@@ -142,65 +142,66 @@ export default function AmazonAffiliate() {
     };
 
     const copyToClipboard = async () => {
-        if (!affiliateUrl) return;
-
-        let copied = false;
-
-        // 1. Clipboard API moderna
+        // 1. Método moderno (2025+)
         if (navigator.clipboard && window.isSecureContext) {
             try {
                 await navigator.clipboard.writeText(affiliateUrl);
-                copied = true;
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+                return;
             } catch (err) {
                 console.warn("Clipboard API falló:", err);
             }
         }
 
-        // 2. Fallback con textarea (iOS/Android antiguos)
-        if (!copied) {
-            try {
-                const textArea = document.createElement("textarea");
-                textArea.value = affiliateUrl;
-                textArea.style.position = "fixed";
-                textArea.style.left = "-9999px";
-                textArea.style.opacity = "0";
-                textArea.style.pointerEvents = "none";
-                textArea.setAttribute("readonly", "");
-                document.body.appendChild(textArea);
+        // 2. Fallback ULTRA SEGURO para móviles viejos
+        try {
+            // Crear textarea INVISIBLE y NO INTERACTIVA
+            const textArea = document.createElement("textarea");
+            Object.assign(textArea, {
+                value: affiliateUrl,
+                readOnly: true,        // ← CLAVE: no editable
+                contentEditable: false, // ← CLAVE: no enfocado
+                style: {
+                    position: "absolute",
+                    left: "-9999px",     // ← Fuera de pantalla
+                    opacity: 0,
+                    pointerEvents: "none", // ← NO TOCABLE
+                    fontSize: "12pt"       // ← Evita zoom en iOS viejo
+                }
+            });
 
-                // iOS necesita focus + select
-                textArea.focus();
-                textArea.select();
-                textArea.setSelectionRange(0, 99999);
+            document.body.appendChild(textArea);
 
-                copied = document.execCommand("copy");
-                document.body.removeChild(textArea);
-            } catch (err) {
-                console.error("Fallback falló:", err);
+            // Seleccionar SIN focus()
+            const range = document.createRange();
+            const selection = window.getSelection();
+            selection.removeAllRanges();
+            range.selectNodeContents(textArea);
+            selection.addRange(range);
+
+            const success = document.execCommand("copy");
+
+            selection.removeAllRanges();
+            document.body.removeChild(textArea);
+
+            if (success) {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 2000);
+                return;
             }
+        } catch (err) {
+            console.error("Fallback falló:", err);
         }
 
-        // 3. Mostrar estado "Copiado" sin setTimeout
-        if (copied) {
+        // 3. Último recurso: prompt() (funciona en TODO)
+        try {
+            await navigator.clipboard.writeText(affiliateUrl); // No await, solo intento
+        } catch { }
+        const copied = prompt("Copia este enlace (selecciona todo y Ctrl+C):", affiliateUrl);
+        if (copied !== null) {
             setCopied(true);
-            // Usamos requestAnimationFrame para resetear DESPUÉS del render
-            requestAnimationFrame(() => {
-                requestAnimationFrame(() => {
-                    requestAnimationFrame(() => {
-                        setCopied(false);
-                    });
-                });
-            });
-        } else {
-            // Si falló todo, mostramos mensaje claro
-            setError("No se pudo copiar. Toca y mantén el enlace para copiar.");
-
-            // Seleccionar el texto del input para copiar manual
-            const input = document.querySelector(".input-affiliate2");
-            if (input) {
-                input.focus();
-                input.select();
-            }
+            setTimeout(() => setCopied(false), 2000);
         }
     };
 
@@ -381,7 +382,8 @@ export default function AmazonAffiliate() {
 
                                                     <Button
                                                         onClick={copyToClipboard}
-                                                        className={`boton transition-colors ${copied ? "bg-green-600 hover:bg-green-700" : ""}`}
+                                                        className={`boton transition-all duration-300 ${copied ? "bg-green-600 hover:bg-green-700 scale-105" : ""
+                                                            }`}
                                                     >
                                                         {copied ? (
                                                             <>
