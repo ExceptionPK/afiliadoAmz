@@ -381,8 +381,7 @@ export default function AmazonAffiliate() {
 
                                                     <Button
                                                         onClick={copyToClipboard}
-                                                        className={`boton transition-all duration-300 ${copied ? "bg-green-600 hover:bg-green-700 scale-105" : ""
-                                                            }`}
+                                                        className={`boton transition-colors ${copied ? "bg-green-600 hover:bg-green-700" : ""}`}
                                                     >
                                                         {copied ? (
                                                             <>
