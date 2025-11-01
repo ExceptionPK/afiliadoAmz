@@ -142,64 +142,26 @@ export default function AmazonAffiliate() {
     };
 
     const copyToClipboard = async () => {
-        // 1. Método moderno (2025+)
+        const text = affiliateUrl;
+
+        // Intento moderno
         if (navigator.clipboard && window.isSecureContext) {
             try {
-                await navigator.clipboard.writeText(affiliateUrl);
+                await navigator.clipboard.writeText(text);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
                 return;
             } catch (err) {
-                console.warn("Clipboard API falló:", err);
+                console.warn("Clipboard falló:", err);
             }
         }
 
-        // 2. Fallback ULTRA SEGURO para móviles viejos
-        try {
-            // Crear textarea INVISIBLE y NO INTERACTIVA
-            const textArea = document.createElement("textarea");
-            Object.assign(textArea, {
-                value: affiliateUrl,
-                readOnly: true,        // ← CLAVE: no editable
-                contentEditable: false, // ← CLAVE: no enfocado
-                style: {
-                    position: "absolute",
-                    left: "-9999px",     // ← Fuera de pantalla
-                    opacity: 0,
-                    pointerEvents: "none", // ← NO TOCABLE
-                    fontSize: "12pt"       // ← Evita zoom en iOS viejo
-                }
-            });
+        // Fallback: confirm + copia manual
+        const confirmed = window.confirm(
+            `Copia este enlace:\n\n${text}\n\nPulsa OK, luego selecciona todo y COPIAR`
+        );
 
-            document.body.appendChild(textArea);
-
-            // Seleccionar SIN focus()
-            const range = document.createRange();
-            const selection = window.getSelection();
-            selection.removeAllRanges();
-            range.selectNodeContents(textArea);
-            selection.addRange(range);
-
-            const success = document.execCommand("copy");
-
-            selection.removeAllRanges();
-            document.body.removeChild(textArea);
-
-            if (success) {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-                return;
-            }
-        } catch (err) {
-            console.error("Fallback falló:", err);
-        }
-
-        // 3. Último recurso: prompt() (funciona en TODO)
-        try {
-            await navigator.clipboard.writeText(affiliateUrl); // No await, solo intento
-        } catch { }
-        const copied = prompt("Copia este enlace (selecciona todo y Ctrl+C):", affiliateUrl);
-        if (copied !== null) {
+        if (confirmed) {
             setCopied(true);
             setTimeout(() => setCopied(false), 2000);
         }
