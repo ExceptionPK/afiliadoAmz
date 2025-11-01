@@ -142,28 +142,65 @@ export default function AmazonAffiliate() {
     };
 
     const copyToClipboard = async () => {
-        const text = affiliateUrl;
+        if (!affiliateUrl) return;
 
-        // Intento moderno
+        let copied = false;
+
+        // 1. Clipboard API moderna
         if (navigator.clipboard && window.isSecureContext) {
             try {
-                await navigator.clipboard.writeText(text);
-                setCopied(true);
-                setTimeout(() => setCopied(false), 2000);
-                return;
+                await navigator.clipboard.writeText(affiliateUrl);
+                copied = true;
             } catch (err) {
-                console.warn("Clipboard falló:", err);
+                console.warn("Clipboard API falló:", err);
             }
         }
 
-        // Fallback: confirm + copia manual
-        const confirmed = window.confirm(
-            `Copia este enlace:\n\n${text}\n\nPulsa OK, luego selecciona todo y COPIAR`
-        );
+        // 2. Fallback con textarea (iOS/Android antiguos)
+        if (!copied) {
+            try {
+                const textArea = document.createElement("textarea");
+                textArea.value = affiliateUrl;
+                textArea.style.position = "fixed";
+                textArea.style.left = "-9999px";
+                textArea.style.opacity = "0";
+                textArea.style.pointerEvents = "none";
+                textArea.setAttribute("readonly", "");
+                document.body.appendChild(textArea);
 
-        if (confirmed) {
+                // iOS necesita focus + select
+                textArea.focus();
+                textArea.select();
+                textArea.setSelectionRange(0, 99999);
+
+                copied = document.execCommand("copy");
+                document.body.removeChild(textArea);
+            } catch (err) {
+                console.error("Fallback falló:", err);
+            }
+        }
+
+        // 3. Mostrar estado "Copiado" sin setTimeout
+        if (copied) {
             setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
+            // Usamos requestAnimationFrame para resetear DESPUÉS del render
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    requestAnimationFrame(() => {
+                        setCopied(false);
+                    });
+                });
+            });
+        } else {
+            // Si falló todo, mostramos mensaje claro
+            setError("No se pudo copiar. Toca y mantén el enlace para copiar.");
+
+            // Seleccionar el texto del input para copiar manual
+            const input = document.querySelector(".input-affiliate2");
+            if (input) {
+                input.focus();
+                input.select();
+            }
         }
     };
 
