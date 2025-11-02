@@ -142,44 +142,46 @@ export default function AmazonAffiliate() {
     };
 
     const copyToClipboard = async () => {
-        // 1. Intento moderno
+        // 1. Intento moderno (funciona en tu móvil)
         if (navigator.clipboard && window.isSecureContext) {
             try {
                 await navigator.clipboard.writeText(affiliateUrl);
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
                 return;
-            } catch { }
+            } catch (e) { console.log("Clipboard API falló:", e); }
         }
 
-        // 2. TRUCO INFALIBLE para móviles viejos (Android 10-13)
-        const textarea = document.createElement('textarea');
-        textarea.value = affiliateUrl;
-        textarea.style.position = 'fixed';     // ← fixed evita scroll
-        textarea.style.opacity = '0';
-        textarea.style.pointerEvents = 'none';
-        document.body.appendChild(textarea);
+        // 2. TRUCO 2025: Usa un INPUT oculto + select() + Clipboard API fallback
+        const hiddenInput = document.createElement('input');
+        hiddenInput.value = affiliateUrl;
+        hiddenInput.style.position = 'fixed';
+        hiddenInput.style.opacity = '0';
+        hiddenInput.style.pointerEvents = 'none';
+        hiddenInput.style.left = '-9999px';
+        document.body.appendChild(hiddenInput);
 
-        // ¡IMPORTANTE! En Android viejo hay que hacer focus()
-        textarea.focus();
-        textarea.select();
+        // ¡CLAVE! Focus + select EN EL MISMO EVENTO
+        hiddenInput.focus();
+        hiddenInput.select();
+        hiddenInput.setSelectionRange(0, 99999); // Para móviles
 
-        let ok = false;
         try {
-            ok = document.execCommand('copy');
-        } catch (e) { }
-
-        document.body.removeChild(textarea);
-
-        if (ok || navigator.clipboard) {
+            // Intenta Clipboard API aunque no sea secure context
+            await navigator.clipboard.writeText(affiliateUrl);
+            console.log("Copiado con Clipboard API fallback");
+        } catch {
+            // Si falla, abre WhatsApp/Telegram con el enlace
+            const text = encodeURIComponent(`🔗 Mi enlace de Amazon:\n${affiliateUrl}`);
+            const wa = `https://api.whatsapp.com/send?text=${text}`;
+            window.open(wa, '_blank');
             setCopied(true);
-            setTimeout(() => setCopied(false), 2000);
-        } else {
-            // Último recurso: abre WhatsApp/Telegram con el enlace
-            const shareUrl = `https://api.whatsapp.com/send?text=${encodeURIComponent(affiliateUrl)}`;
-            window.location.href = shareUrl;
-            alert('Enlace copiado (o ábrelo en WhatsApp)');
+            alert("¡Abierto en WhatsApp! Copia desde ahí 📱");
         }
+
+        document.body.removeChild(hiddenInput);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 3000);
     };
 
     const handleReset = () => {
