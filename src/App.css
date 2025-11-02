@@ -77,14 +77,14 @@ html, body {
   border-radius:.2rem;
   height: 3rem;
   padding-right: 3rem;
-  font-size: .9rem;
+  font-size: .85rem;
   transition: all 0.2s ease;
 }
 
 .boton {
   border-radius: 0.2rem;
   height: 3rem;
-  background-color: #000;
+  background-color: #39355b;
   color: white;
   border: none;
   padding: 0 1.5rem;
@@ -94,23 +94,8 @@ html, body {
 }
 
 .boton:hover{
-  box-shadow: 0 0 10px rgba(24, 24, 24, 0.5);
-}
-
-/* Estado copiado → verde brillante */
-.boton--copiado {
-  background-color: #22c55e !important;
-  box-shadow: 0 0 10px rgba(34, 197, 94, 0.5);
-}
-
-/* Transición suave de regreso */
-.boton--copiado:hover {
-  background-color: #16a34a !important; /* Verde más oscuro */
-}
-
-
-.boton:hover{
-  background-color: #000 !important;
+  box-shadow: 0 0 10px rgba(52, 42, 88, 0.2);
+  background-color: #39355b !important;
 }
 
 /* Active (clic o estado .active) */
@@ -118,6 +103,22 @@ html, body {
 .boton.active {
   background-color: #16a34a; /* Verde (green-600) */
   transform: scale(0.97);
+}
+
+.botonWhatsApp{
+  border-radius: .2rem;
+  height: 3rem;
+  background-color: #25d366;
+  color: white;
+  border: none;
+  padding: 0 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.botonWhatsApp:hover{
+  background-color: #128c7e !important;
 }
 
 .boton-gradiente {
