@@ -7,6 +7,7 @@ import {
     Sparkles,
     ExternalLink,
 } from "lucide-react";
+import { addToHistory } from '../utils/storage';
 
 const Button = ({ className = "", children, ...props }) => (
     <button
@@ -103,9 +104,8 @@ export default function AmazonAffiliate() {
 
     const generateAffiliateLink = () => {
         try {
-            // Si la URL no cambió → no hacer nada
             if (inputUrl === lastProcessedUrl && affiliateUrl) {
-                return; // ← MANTIENE EL RESULTADO
+                return;
             }
 
             setError("");
@@ -133,7 +133,15 @@ export default function AmazonAffiliate() {
 
             setAffiliateUrl(newAffiliateUrl);
             setLastProcessedUrl(inputUrl); // ← Guardamos la URL procesada
-            setShowResult(true); // ← Forzamos mostrar (aunque ya esté visible)
+
+
+            // === ESPERA a que se guarde con título ===
+            addToHistory({
+                originalUrl: inputUrl,
+                affiliateUrl: newAffiliateUrl,
+                asin,
+                domain,
+            });
 
         } catch (err) {
             console.error("Error inesperado al generar enlace:", err);
@@ -251,13 +259,13 @@ export default function AmazonAffiliate() {
                     <div className="absolute bottom-20 -right-20 w-96 h-96 bg-indigo-200/20 rounded-full blur-3xl" />
                 </div>
 
-                <div className="relative z-10 container mx-auto px-4 py-12 md:py-20">
+                <div className="relative z-10 container mx-auto px-4 py-40 md:py-40">
                     {/* Header - Aparece suavemente */}
                     <div className="text-center mb-12 md:mb-16 opacity-0 animate-fade-in-down" style={{ animationDelay: "0.1s" }}>
-                        <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full border border-violet-100 mb-6 shadow-sm">
+                        {/* <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full border border-violet-100 mb-6 shadow-sm">
                             <Sparkles className="w-4 h-4 text-violet-500" />
                             <span className="text-sm font-medium text-slate-700">Made by PKM</span>
-                        </div>
+                        </div> */}
 
                         <h1 className="text-2xl md:text-5xl font-bold text-slate-900 mb-4 tracking-tight">
                             Convierte tus enlaces de{" "}
@@ -321,7 +329,7 @@ export default function AmazonAffiliate() {
                                 <Button
                                     onClick={generateAffiliateLink}
                                     disabled={!inputUrl}
-                                    className="boton-gradiente w-full transition-all duration-300 hover:scale-105"
+                                    className="boton-gradiente w-full transition-all duration-300"
                                 >
                                     <Sparkles className="w-5 h-5 mr-2" />
                                     Generar enlace
