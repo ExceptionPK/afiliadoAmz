@@ -428,7 +428,7 @@ export default function HistoryPage() {
                                 </button>
                             )}
                         </div>
-                        <div className="flex gap-4 sm:gap-14 md:gap-2 lg:gap-2 xl:gap-2">
+                        <div className="flex gap-2 sm:gap-2 md:gap-2 lg:gap-2 xl:gap-2">
                             <button
                                 type="button"
                                 onClick={() => document.getElementById('file-input').click()}
