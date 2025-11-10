@@ -171,15 +171,20 @@ export default function HistoryPage() {
     }, []);
 
     // Cerrar menú al hacer clic fuera
+    const handleClickOutside = (e) => {
+        if (exportButtonRef.current && !exportButtonRef.current.contains(e.target)) {
+            setShowExportMenu(false);
+        }
+    };
+
+    // Usa "click" en vez de "mousedown" (más fiable)
     useEffect(() => {
-        const handleClickOutside = (e) => {
-            if (exportButtonRef.current && !exportButtonRef.current.contains(e.target)) {
-                setShowExportMenu(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
+        if (!showExportMenu) return;
+
+        const handler = (e) => handleClickOutside(e);
+        document.addEventListener("click", handler);
+        return () => document.removeEventListener("click", handler);
+    }, [showExportMenu]); // ← solo cuando se abre
 
     const filtered = useMemo(() => {
         if (!search.trim()) return history;
@@ -451,8 +456,8 @@ export default function HistoryPage() {
                                     onClick={() => history.length > 0 && setShowExportMenu(!showExportMenu)}
                                     disabled={history.length === 0}
                                     className={`botonesImportarExportar flex items-center gap-2 transition-all ${history.length === 0
-                                            ? 'opacity-60 cursor-not-allowed'
-                                            : 'hover:bg-[#8575da]'
+                                        ? 'opacity-60 cursor-not-allowed'
+                                        : 'hover:bg-[#8575da]'
                                         }`}
                                     title={history.length === 0 ? "No hay enlaces para exportar" : "Exportar en varios formatos"}
                                     ref={exportButtonRef}
