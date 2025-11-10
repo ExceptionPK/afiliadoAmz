@@ -131,8 +131,6 @@ html, body {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding-left: 1rem;
-  padding-right: 1rem;
   padding-top: 0.5rem;
   padding-bottom: 0.5rem;
   background-color: #9f8ff0;
@@ -141,8 +139,8 @@ html, body {
   font-weight: 500;
   transition: background-color 0.2s ease;
   border-radius: .2rem;
-  height: 2.59rem; /* ← ALTURA FIJA */
-  min-width: 7rem; /* ← ANCHO MÍNIMO */
+  height: 2.59rem;
+  min-width: 7rem;
   white-space: nowrap;
 }
 
@@ -281,5 +279,21 @@ html, body {
   }
   .noResultado{
   min-width:0px !important;
+}
+.botonesImportarExportar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  padding-bottom: 0.5rem;
+  background-color: #9f8ff0;
+  color: #ffffff;
+  font-size: 0.875rem;
+  transition: background-color 0.2s ease;
+  border-radius: .2rem;
+  height: 2.59rem;
+  min-width: 6.3rem;
+  white-space: nowrap;
 }
 }

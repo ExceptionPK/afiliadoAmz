@@ -511,7 +511,7 @@ export default function HistoryPage() {
                                 title={history.length === 0 ? "No hay enlaces para borrar" : "Borrar todo el historial"}
                             >
                                 <Trash2 className="w-4 h-4" />
-                                Borrar todo
+                                Vaciar
                             </button>
                         </div>
                     </div>
