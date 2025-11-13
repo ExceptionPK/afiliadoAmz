@@ -259,24 +259,29 @@ export default function AmazonAffiliate() {
                     <div className="absolute bottom-20 -right-20 w-96 h-96 bg-indigo-200/20 rounded-full blur-3xl" />
                 </div>
 
-                <div className="relative z-10 container mx-auto px-4 py-40 md:py-40">
+                <div className="relative z-10 container mx-auto px-0 py-60 md:py-40">
                     {/* Header - Aparece suavemente */}
-                    <div className="text-center mb-12 md:mb-16 opacity-0 animate-fade-in-down" style={{ animationDelay: "0.1s" }}>
+                    <div className="text-center mb-4 md:mb-16 opacity-0 animate-fade-in-down" style={{ animationDelay: "0.1s" }}>
                         {/* <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 rounded-full border border-violet-100 mb-6 shadow-sm">
                             <Sparkles className="w-4 h-4 text-violet-500" />
                             <span className="text-sm font-medium text-slate-700">Made by PKM</span>
                         </div> */}
 
-                        <h1 className="text-2xl md:text-5xl font-bold text-slate-900 mb-4 tracking-tight">
+                        <h1 className="text-2xl md:text-5xl text-slate-900 mb-4 tracking-tight">
                             Convierte tus enlaces de{" "}
-                            <span className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent">
-                                Amazon
-                            </span>
+                            <a
+                                href="https://www.amazon.es"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent inline-block hover:from-violet-700 hover:to-indigo-700 transition-all duration-200 underline decoration-violet-600 underline-offset-2 hover:decoration-violet-700"
+                            >
+                                AMZ
+                            </a>
                         </h1>
 
-                        <p className="texto-descriptivo">
+                        {/* <p className="texto-descriptivo">
                             Transforma cualquier URL de Amazon en un enlace de afiliado.
-                        </p>
+                        </p> */}
                     </div>
 
                     {/* Tarjeta principal */}
