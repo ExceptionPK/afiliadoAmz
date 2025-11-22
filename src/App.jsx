@@ -8,7 +8,18 @@ import History from './pages/History';
 function App() {
   return (
     <>
-      <Toaster position="top-center" richColors />
+      <Toaster
+        position="top-center"
+        richColors
+        toastOptions={{
+          classNames: {
+            toast: "justify-start",
+            title: "!text-center",
+            description: "!text-center",
+            content: "flex-1 text-center",
+          }
+        }}
+      />
       <Navbar />
       <Routes>
         <Route path="/" element={<Home />} />

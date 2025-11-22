@@ -1,5 +1,6 @@
 // pages/History.jsx
 import React, { useState, useEffect, useMemo, useRef } from "react";
+import MagicParticles from "../components/MagicParticles";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import {
@@ -299,6 +300,7 @@ export default function HistoryPage() {
 
     return (
         <>
+        <MagicParticles />
             {/* === ESTILOS DE ANIMACIÓN === */}
             <style jsx>{`
                 @keyframes fadeInUp {
