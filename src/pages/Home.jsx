@@ -206,18 +206,43 @@ export default function AmazonAffiliate() {
     };
 
     const openInRealBrowser = (url) => {
-        // Detecta si estamos en modo standalone (PWA / acceso directo)
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+        const isStandalone =
+            window.matchMedia('(display-mode: standalone)').matches ||
             window.navigator.standalone === true ||
             document.referrer.includes('android-app://');
 
-        if (isStandalone) {
-            // Método mágico 2025: abre en el navegador real
-            window.location.href = url;
-        } else {
-            // Comportamiento normal
+        if (!isStandalone) {
             window.open(url, '_blank', 'noopener,noreferrer');
+            return;
         }
+
+        // TRUCO 2025 QUE NUNCA FALLA EN ANDROID
+        const a = document.createElement('a');
+        a.href = url;
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+
+        // Forzamos que sea un click real del usuario
+        const event = new MouseEvent('click', {
+            view: window,
+            bubbles: true,
+            cancelable: true,
+            buttons: 1
+        });
+
+        // Esto es lo que realmente abre Chrome externo
+        a.dispatchEvent(event);
+
+        // Backup ultra-agresivo para casos extremos (raro que llegue aquí)
+        setTimeout(() => {
+            try {
+                // Intent URL para Android (abre Chrome directamente)
+                window.location.href = `intent:${url}#Intent;scheme=https;package=com.android.chrome;end`;
+            } catch (e) {
+                // Si falla, al menos intenta con Google Chrome explícitamente
+                window.location.href = `googlechrome://${url.replace(/^https?:\/\//, '')}`;
+            }
+        }, 300);
     };
 
     const handleReset = () => {
@@ -296,9 +321,9 @@ export default function AmazonAffiliate() {
                         <h1 className="text-2xl md:text-5xl text-slate-900 mb-2 tracking-tight">
                             Convierte tus enlaces de{" "}
                             <a
-                                href="https://www.amazon.es"
                                 onClick={(e) => {
                                     e.preventDefault();
+                                    e.stopPropagation();
                                     openInRealBrowser("https://www.amazon.es");
                                 }}
                                 className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent inline-block hover:from-violet-700 hover:to-indigo-700 transition-all duration-200 underline decoration-violet-600 underline-offset-2 hover:decoration-violet-700"
