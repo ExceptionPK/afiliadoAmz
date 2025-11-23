@@ -220,6 +220,29 @@ html, body {
   /* box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2); */
 }
 
+.amazon-morado {
+  filter: brightness(0) saturate(100%) 
+  invert(27%) sepia(88%) saturate(2476%) 
+  hue-rotate(250deg) brightness(95%) contrast(102%);
+}
+
+.amazon-glass {
+  background: rgba(255, 255, 255, 0.09);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: .3rem;
+  box-shadow: 
+    0 8px 32px rgba(0, 0, 0, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  padding: 1rem;
+}
+
+.amazon-glass:active {
+  transform: translateY(-3px) scale(1.02);
+}
+
 .contenedorCosas{
   border-radius:.3rem;
 }

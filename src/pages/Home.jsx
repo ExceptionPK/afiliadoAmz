@@ -29,7 +29,7 @@ const Input = ({ className = "", ...props }) => (
 
 const Card = ({ className = "", children }) => (
     <div
-        className={`contenedorCosas bg-white p-8 shadow-xl shadow-slate-200/50 border border-slate-100 contenedorCosas transition-all duration-500 ${className}`}
+        className={`md:min-w-[680px] w-full bg-white p-8 shadow-2xl shadow-slate-900/10 backdrop-blur-sm border border-slate-200/70 contenedorCosas transition-all duration-500 rounded-2xl ${className}`}
     >
         {children}
     </div>
@@ -258,7 +258,7 @@ export default function AmazonAffiliate() {
         <>
             <MagicParticles />
             {/* === ESTILOS DE ANIMACIÓN === */}
-            <style jsx>{`
+            <style>{`
         @keyframes fadeInUp {
           from {
             opacity: 0;
@@ -307,19 +307,13 @@ export default function AmazonAffiliate() {
         }
       `}</style>
 
-            <div className="min-h-screen contenedor-sombra">
+            <div className="min-h-screen">
+                <div className="relative z-10 container mx-auto px-0 py-[200px] md:py-40">
 
-                <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
-                    <div className="absolute top-20 -left-20 w-96 h-96 bg-violet-200/20 contenedorCosas blur-3xl" />
-                    <div className="absolute bottom-20 -right-20 w-96 h-96 bg-indigo-200/20 contenedorCosas blur-3xl" />
-                </div>
+                    {/* <div className="text-center mb-4 md:mb-10 opacity-0 animate-fade-in-down" style={{ animationDelay: "0.1s" }}>
 
-                <div className="relative z-10 container mx-auto px-0 py-60 md:py-40">
-                    {/* Header - Aparece suavemente */}
-                    <div className="text-center mb-4 md:mb-10 opacity-0 animate-fade-in-down" style={{ animationDelay: "0.1s" }}>
-
-                        <h1 className="text-2xl md:text-5xl text-slate-900 mb-2 tracking-tight">
-                            Convierte tus enlaces de{" "}
+                        <h1 className="text-2xl md:text-5xl text-slate-900 tracking-tight">
+                            Convierte tus enlaces de {" "}
                             <a
                                 onClick={(e) => {
                                     e.preventDefault();
@@ -331,10 +325,25 @@ export default function AmazonAffiliate() {
                                 AMZ
                             </a>
                         </h1>
+                    </div> */}
 
-                        {/* <p className="texto-descriptivo">
-                            Transforma cualquier URL de Amazon en un enlace de afiliado.
-                        </p> */}
+                    {/* Logo de Amazon arriba de la tarjeta - clicable y con animación */}
+                    <div className="text-center mb-2 md:mb-2 opacity-0 animate-fade-in-down" style={{ animationDelay: "0.3s" }}>
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                openInRealBrowser("https://www.amazon.es");
+                            }}
+                            className="inline-block transition-all duration-300 hover:scale-105 active:scale-100 focus:outline-none group"
+                            aria-label="Ir a Amazon.es"
+                        >
+                            <img
+                                src="../amazon.svg"
+                                alt="Amazon"
+                                className="h-20 md:h-20 lg:h-20 amazon-morado amazon-glass"
+                            />
+                        </button>
                     </div>
 
                     {/* Tarjeta principal */}
