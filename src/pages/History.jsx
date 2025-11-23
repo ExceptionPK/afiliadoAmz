@@ -126,7 +126,7 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
                     </div>
 
                     <p className="text-xs text-slate-500 mt-1">
-                        <Calendar className="w-3 h-3 inline mr-1" />
+                        <Calendar className="w-3 h-3 inline mr-1 calendario" />
                         {new Date(propItem.timestamp).toLocaleString("es-ES")}
                     </p>
                 </div>
@@ -259,17 +259,23 @@ export default function HistoryPage() {
                 break;
 
             case "csv":
-                const headers = ["ASIN", "Título", "Dominio", "URL Afiliado", "Fecha"];
+                const headers = ["Fecha", "Título", "Dominio", "URL Afiliado", "ASIN"];
                 const rows = data.map(item => [
-                    item.asin,
+                    new Date(item.timestamp).toLocaleString("es-ES"),
                     `"${(item.productTitle || "").replace(/"/g, '""')}"`,
                     item.domain,
                     item.affiliateUrl,
-                    new Date(item.timestamp).toLocaleString("es-ES")
+                    item.asin
                 ]);
-                content = [headers, ...rows].map(row => row.join(",")).join("\n");
+
+                // EXCEL ENTENDERÁ ESTO EN TODO EL MUNDO
+                const BOM = "\uFEFF";
+                content = BOM + [headers, ...rows]
+                    .map(row => row.join(";"))
+                    .join("\r\n");
+
                 mimeType = "text/csv";
-                filename = "amazon-affiliate-history.csv";
+                filename = "historialUrlAfiliado.csv";
                 break;
 
             case "txt":
@@ -450,7 +456,7 @@ export default function HistoryPage() {
                             <input
                                 id="file-input"
                                 type="file"
-                                accept=".json"
+                                accept=".json,.csv,text/csv,application/json"
                                 onChange={handleImport}
                                 className="hidden"
                             />
@@ -489,7 +495,7 @@ export default function HistoryPage() {
                                     >
                                         {[
                                             { label: "JSON", format: "json", icon: <Package className="w-4 h-4" /> },
-                                            { label: "CSV", format: "csv", icon: <Copy className="w-4 h-4" /> },
+                                            { label: "CSV", format: "csv", icon: <Copy className="w-4 h-4 text-green-600" /> },
                                             { label: "TXT (URLs)", format: "txt", icon: <ExternalLink className="w-4 h-4" /> },
                                             { label: "Markdown", format: "md", icon: <Globe className="w-4 h-4" /> },
                                         ].map((opt) => (
@@ -499,7 +505,11 @@ export default function HistoryPage() {
                                                     handleExportFormat(opt.format);
                                                     setShowExportMenu(false);
                                                 }}
-                                                className="w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 text-slate-700 hover:bg-violet-50 hover:text-violet-700 transition contenedorCosas"
+                                                className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 transition contenedorCosas
+            ${opt.format === "csv"
+                                                        ? "text-green-700 hover:bg-green-50 hover:text-green-800"
+                                                        : "text-slate-700 hover:bg-violet-50 hover:text-violet-700"
+                                                    }`}
                                             >
                                                 {opt.icon}
                                                 <span>{opt.label}</span>

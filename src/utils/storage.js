@@ -99,7 +99,6 @@ export const addToHistory = (entry) => {
     const newCache = { ...cache, [entry.asin]: productTitle.slice(0, 120) };
     saveTitleCache(newCache);
 
-    // === 4. OBTENER TÍTULO REAL DESDE AMAZON (en segundo plano) ===
     // === 4. OBTENER TÍTULO REAL DESDE AMAZON (proxy FIABLE) ===
     const fetchRealTitle = async () => {
         try {
@@ -181,20 +180,126 @@ export const exportHistory = () => {
     URL.revokeObjectURL(url);
 };
 
+// utils/storage.js → NUEVA VERSIÓN DE importHistory
 export const importHistory = (file, callback) => {
     const reader = new FileReader();
+
     reader.onload = (e) => {
+        const content = e.target.result.trim();
+
         try {
-            const data = JSON.parse(e.target.result);
-            if (Array.isArray(data)) {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-                callback(true);
-            } else {
-                callback(false);
+            // -------------------------------------------------
+            // 1. INTENTAR COMO JSON (formato original)
+            // -------------------------------------------------
+            if (
+                file.type === "application/json" ||
+                file.name.endsWith(".json") ||
+                content.startsWith("[") ||
+                content.startsWith("{")
+            ) {
+                const data = JSON.parse(content);
+
+                if (Array.isArray(data)) {
+                    // Aseguramos que cada item tenga ID (por si viene de exportación antigua)
+                    const normalized = data.map(item => ({
+                        ...item,
+                        id: item.id || Date.now() + Math.random(),
+                        timestamp: item.timestamp || new Date().toISOString(),
+                        productTitle: item.productTitle || `Producto ${item.asin || "sin ASIN"}`
+                    }));
+
+                    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
+                    callback(true);
+                    return;
+                }
             }
-        } catch {
+
+            // -------------------------------------------------
+            // 2. INTENTAR COMO CSV
+            // -------------------------------------------------
+            const lines = content.split(/\r\n|\n|\r/).map(l => l.trim()).filter(Boolean);
+            if (lines.length === 0) throw new Error("Archivo vacío");
+
+            // Detectar separador: ; o ,
+            const sampleLine = lines[0];
+            const delimiter = sampleLine.includes(";") ? ";" : ",";
+
+            // Detectar si tiene cabecera
+            const hasHeader = /fecha|título|dominio|url|asin/i.test(lines[0]);
+            const startIndex = hasHeader ? 1 : 0;
+
+            const imported = [];
+
+            for (let i = startIndex; i < lines.length; i++) {
+                const line = lines[i];
+                if (!line) continue;
+
+                // Separar columnas (soporta comillas)
+                const rawCols = line.split(delimiter);
+                const cols = rawCols.map(col =>
+                    col.replace(/^"|"$/g, "").replace(/""/g, '"').trim()
+                );
+
+                // Tu formato actual de exportación CSV:
+                // Fecha, Título, Dominio, URL Afiliado, ASIN
+                let [fechaStr, titulo = "", dominio = "", urlAfiliado = "", asin = ""] = cols;
+
+                // Si no hay columnas suficientes, intentar parsear de forma más flexible
+                if (cols.length === 1 && cols[0].includes("amazon")) {
+                    urlAfiliado = cols[0];
+                    asin = urlAfiliado.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || "UNKNOWN";
+                    dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
+                    titulo = `Producto ${asin}`;
+                    fechaStr = new Date().toLocaleString("es-ES");
+                }
+
+                // Validación mínima
+                if (!asin && !urlAfiliado) continue;
+
+                // Extraer ASIN si no viene explícito
+                if (!asin && urlAfiliado) {
+                    asin = urlAfiliado.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || "UNKNOWN";
+                }
+
+                // Extraer dominio si falta
+                if (!dominio && urlAfiliado) {
+                    try {
+                        dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
+                    } catch {}
+                }
+
+                const item = {
+                    id: Date.now() + Math.random() + i,
+                    timestamp: fechaStr
+                        ? isNaN(new Date(fechaStr).getTime())
+                            ? new Date().toISOString()
+                            : new Date(fechaStr).toISOString()
+                        : new Date().toISOString(),
+                    productTitle: (titulo || `Producto ${asin}`).slice(0, 120),
+                    domain: dominio || "amazon",
+                    affiliateUrl: urlAfiliado || "",
+                    asin: asin || "UNKNOWN",
+                    originalUrl: urlAfiliado || "",
+                };
+
+                imported.push(item);
+            }
+
+            if (imported.length === 0) throw new Error("No se encontraron enlaces válidos");
+
+            // Opción: mezclar con el historial actual (recomendado)
+            const current = getHistory();
+            const merged = [...current, ...imported];
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            callback(true);
+
+        } catch (err) {
+            console.error("Error importando archivo:", err);
             callback(false);
         }
     };
-    reader.readAsText(file);
+
+    reader.onerror = () => callback(false);
+    reader.readAsText(file, "UTF-8");
 };
