@@ -10,7 +10,7 @@ const Navbar = () => {
                 <Link to="/" className="flex items-center gap-2">
                     <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-4 py-2 contenedorCosas border border-violet-100 shadow-sm">
                         <Sparkles className="w-4 h-4 text-violet-500" />
-                        <span className="text-sm font-medium text-slate-700">Made by PKM</span>
+                        <span className="text-sm font-medium text-slate-700">DeKolapS</span>
                     </div>
                 </Link>
 

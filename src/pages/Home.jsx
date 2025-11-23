@@ -172,11 +172,9 @@ export default function AmazonAffiliate() {
                 return;
             } catch (err) {
                 console.log("Clipboard API falló (normal en móvil):", err);
-                // No hacemos nada aún, pasamos al método infalible
             }
         }
 
-        // 2. MÉTODO INFALIBLE 2025 PARA MÓVILES (funciona en el 99.9% de casos)
         const textArea = document.createElement("textarea");
         textArea.value = textToCopy;
         textArea.style.position = "fixed";
@@ -198,13 +196,27 @@ export default function AmazonAffiliate() {
             }
         } catch (err) {
             console.log("Método antiguo también falló, abriendo WhatsApp como último recurso");
-            // Solo aquí abrimos WhatsApp como último recurso
             const waText = encodeURIComponent(`Enlace de Amazon:\n${textToCopy}`);
             window.open(`https://api.whatsapp.com/send?text=${waText}`, '_blank');
             toast.info("Abierto en WhatsApp para copiar");
-            setCopied(true); // Aunque no se copió, evitamos bucle
+            setCopied(true);
         } finally {
             document.body.removeChild(textArea);
+        }
+    };
+
+    const openInRealBrowser = (url) => {
+        // Detecta si estamos en modo standalone (PWA / acceso directo)
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches ||
+            window.navigator.standalone === true ||
+            document.referrer.includes('android-app://');
+
+        if (isStandalone) {
+            // Método mágico 2025: abre en el navegador real
+            window.location.href = url;
+        } else {
+            // Comportamiento normal
+            window.open(url, '_blank', 'noopener,noreferrer');
         }
     };
 
@@ -285,8 +297,10 @@ export default function AmazonAffiliate() {
                             Convierte tus enlaces de{" "}
                             <a
                                 href="https://www.amazon.es"
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    openInRealBrowser("https://www.amazon.es");
+                                }}
                                 className="bg-gradient-to-r from-violet-600 to-indigo-600 bg-clip-text text-transparent inline-block hover:from-violet-700 hover:to-indigo-700 transition-all duration-200 underline decoration-violet-600 underline-offset-2 hover:decoration-violet-700"
                             >
                                 AMZ

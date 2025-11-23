@@ -91,9 +91,12 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
         <div className="bg-white border border-slate-200 contenedorCosas p-4 hover:shadow-md transition">
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 text-xs text-slate-500 mb-1">
+                    <div className="flex items-center gap-1 text-xs text-slate-500 mb-1">
                         <Package className="w-3 h-3" />
                         <code className="font-mono">{propItem.asin}</code>
+
+                        <span className="text-slate-400">·</span>   {/* separador */}
+
                         <Globe className="w-3 h-3" />
                         <span>{propItem.domain}</span>
                     </div>
@@ -300,7 +303,7 @@ export default function HistoryPage() {
 
     return (
         <>
-        <MagicParticles />
+            <MagicParticles />
             {/* === ESTILOS DE ANIMACIÓN === */}
             <style jsx>{`
                 @keyframes fadeInUp {
@@ -396,11 +399,11 @@ export default function HistoryPage() {
                 </div>
             )}
 
-            <div className="min-h-screen bg-gradient-to-b pt-20 pb-12">
-                <div className="containerHistory mx-auto px-4 max-w-3xl space-y-8">
+            <div className="min-h-screen bg-gradient-to-b pt-16">
+                <div className="containerHistory mx-auto px-4 max-w-3xl space-y-4">
 
                     {/* Stats */}
-                    <div className="grid grid-cols-3 gap-4 mb-8">
+                    <div className="grid grid-cols-3 gap-4">
                         <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
                             <div className="text-2xl font-bold text-violet-600">{stats.total}</div>
                             <div className="text-xs text-slate-600">Total</div>
