@@ -255,7 +255,7 @@ export const importHistory = (file, callback) => {
 
         try {
             // -------------------------------------------------
-            // 1. INTENTAR COMO JSON (formato original)
+            // 1. INTENTAR COMO JSON (sin cambios)
             // -------------------------------------------------
             if (
                 file.type === "application/json" ||
@@ -281,7 +281,7 @@ export const importHistory = (file, callback) => {
             }
 
             // -------------------------------------------------
-            // 2. INTENTAR COMO CSV (CORREGIDO: IDs SECUENCIALES + ORDEN EXACTO) 
+            // 2. CSV CON FECHAS ESPAÑOLAS + HORA (CORREGIDO)
             // -------------------------------------------------
             const lines = content.split(/\r\n|\n|\r/).map(l => l.trim()).filter(Boolean);
             if (lines.length === 0) throw new Error("Archivo vacío");
@@ -294,6 +294,43 @@ export const importHistory = (file, callback) => {
             const hasHeader = /fecha|título|precio|dominio|url|asin/i.test(lines[0]);
             const startIndex = hasHeader ? 1 : 0;
 
+            // 🔥 FUNCIÓN PARA PARSEAR FECHAS ESPAÑOLAS CON HORA
+            const parseSpanishDate = (dateStr) => {
+                if (!dateStr || typeof dateStr !== 'string') return null;
+
+                const trimmed = dateStr.trim();
+
+                // Caso 1: "dd/mm/yyyy, HH:MM:SS" → convertir coma a espacio
+                let clean = trimmed.replace(/,\s*/, ' ');  // "23/11/2025, 18:51:06" → "23/11/2025 18:51:06"
+
+                // Extraer fecha y hora por separado
+                const dateTimeParts = clean.split(' ');
+                if (dateTimeParts.length < 1) return null;
+
+                const datePart = dateTimeParts[0];
+
+                // Validar formato dd/mm/yyyy
+                const match = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                if (!match) return null;
+
+                const [, day, month, year] = match;
+                const dayPadded = day.padStart(2, '0');
+                const monthPadded = month.padStart(2, '0');
+
+                // Construir fecha ISO completa
+                let isoDateStr;
+                if (dateTimeParts.length >= 2) {
+                    // Con hora: "2025-11-23 18:51:06"
+                    isoDateStr = `${year}-${monthPadded}-${dayPadded} ${dateTimeParts[1]}`;
+                } else {
+                    // Solo fecha: "2025-11-23 00:00:00"
+                    isoDateStr = `${year}-${monthPadded}-${dayPadded} 00:00:00`;
+                }
+
+                const date = new Date(isoDateStr);
+                return !isNaN(date.getTime()) ? date : null;
+            };
+
             const imported = [];
 
             for (let i = startIndex; i < lines.length; i++) {
@@ -305,8 +342,7 @@ export const importHistory = (file, callback) => {
                     col.replace(/^"|"$/g, "").replace(/""/g, '"').trim()
                 );
 
-                // Soporte para CSV NUEVO (6 columnas): Fecha,Título,Precio,Dominio,URL,ASIN
-                // Soporte para CSV ANTIGUO (5 columnas): Fecha,Título,Dominio,URL,ASIN
+                // ORDEN CORRECTO: [Fecha, Título, Precio, Dominio, URL, ASIN]
                 let fechaStr = "", titulo = "", precio = "", dominio = "", urlAfiliado = "", asin = "";
 
                 if (cols.length >= 6) {
@@ -338,13 +374,15 @@ export const importHistory = (file, callback) => {
                 }
 
                 const item = {
-                    // 🔥 FIX: ID SECUENCIAL PERFECTO (mantiene orden EXACTO del CSV)
+                    // ID único que mantiene orden del CSV
                     id: `csv-import-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-                    timestamp: fechaStr
-                        ? isNaN(new Date(fechaStr).getTime())
-                            ? new Date().toISOString()
-                            : new Date(fechaStr).toISOString()
-                        : new Date().toISOString(),
+
+                    // 🔥 TIMESTAMP CON FECHAS ESPAÑOLAS + HORA CORRECTAS
+                    timestamp: (() => {
+                        const parsed = parseSpanishDate(fechaStr);
+                        return parsed ? parsed.toISOString() : new Date().toISOString();
+                    })(),
+
                     productTitle: (titulo || `Producto ${asin}`).slice(0, 120),
                     price: precio && precio.trim() ? precio.trim() : null,
                     domain: dominio || "amazon",

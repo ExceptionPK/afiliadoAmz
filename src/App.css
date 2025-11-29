@@ -303,6 +303,62 @@ html, body {
   height: 1rem;
 }
 
+/* === DRAG & DROP STYLES (CORREGIDO) === */
+    .history-item {
+        transition: all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        cursor: grab;
+    }
+    .history-item:active {
+        cursor: grabbing;
+    }
+
+    .history-item.dragging {
+        opacity: 0.85 !important;
+        transform: rotate(3deg) scale(1.02) !important;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25) !important;
+        z-index: 1000 !important;
+        background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%) !important;
+    }
+
+    .history-item.drag-over {
+        transform: translateX(8px) !important;
+        border-left: 4px solid #8b5cf6 !important;
+        background: linear-gradient(90deg, #f3e8ff 0%, #ffffff 100%) !important;
+        box-shadow: 0 10px 25px -3px rgba(139, 92, 246, 0.1) !important;
+    }
+
+    /* HANDLE VISUAL (SOLO APLICA touch-action: none AQUÍ) */
+    .drag-handle {
+        position: absolute;
+        top: -8px;
+        right: -8px;
+        width: 32px;
+        height: 32px;
+        background: linear-gradient(135deg, #8b5cf6, #7c3aed);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: 600;
+        font-size: 12px;
+        box-shadow: 0 4px 12px rgba(139, 92, 246, 0.4);
+        opacity: 0;
+        transition: all 0.2s ease;
+        z-index: 10;
+        user-select: none;
+        touch-action: none; /* ← SOLO AQUÍ para móvil */
+    }
+
+    .history-item:hover .drag-handle,
+    .history-item.dragging .drag-handle {
+        opacity: 1;
+    }
+
+    .history-item.dragging .drag-handle {
+        transform: scale(1.1);
+    }
+
 
 /* ============================================= */
 /*     ESTRELLAS MORADAS PEQUEÑAS Y MÁGICAS      */
