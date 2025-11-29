@@ -246,7 +246,7 @@ export const exportHistory = () => {
     URL.revokeObjectURL(url);
 };
 
-// utils/storage.js → NUEVA VERSIÓN DE importHistory
+// utils/storage.js → FUNCIÓN importHistory CORREGIDA (VERSIÓN FINAL)
 export const importHistory = (file, callback) => {
     const reader = new FileReader();
 
@@ -271,7 +271,7 @@ export const importHistory = (file, callback) => {
                         id: item.id || Date.now() + Math.random(),
                         timestamp: item.timestamp || new Date().toISOString(),
                         productTitle: item.productTitle || `Producto ${item.asin || "sin ASIN"}`,
-                        price: item.price || null, // Aseguramos que el precio venga si existe
+                        price: item.price || null,
                     }));
 
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
@@ -281,7 +281,7 @@ export const importHistory = (file, callback) => {
             }
 
             // -------------------------------------------------
-            // 2. INTENTAR COMO CSV (con o sin precio)
+            // 2. INTENTAR COMO CSV (CORREGIDO: IDs SECUENCIALES + ORDEN EXACTO) 
             // -------------------------------------------------
             const lines = content.split(/\r\n|\n|\r/).map(l => l.trim()).filter(Boolean);
             if (lines.length === 0) throw new Error("Archivo vacío");
@@ -298,7 +298,7 @@ export const importHistory = (file, callback) => {
 
             for (let i = startIndex; i < lines.length; i++) {
                 const line = lines[i];
-                if (!line.trim() === "") continue;
+                if (!line.trim()) continue;
 
                 const rawCols = line.split(delimiter);
                 const cols = rawCols.map(col =>
@@ -313,9 +313,8 @@ export const importHistory = (file, callback) => {
                     [fechaStr, titulo, precio, dominio, urlAfiliado, asin] = cols;
                 } else if (cols.length >= 5) {
                     [fechaStr, titulo, dominio, urlAfiliado, asin] = cols;
-                    precio = ""; // versión antigua sin precio
+                    precio = "";
                 } else if (cols.length === 1 && cols[0].includes("amazon")) {
-                    // Caso raro: solo URL
                     urlAfiliado = cols[0];
                     asin = urlAfiliado.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || "UNKNOWN";
                     dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
@@ -323,7 +322,7 @@ export const importHistory = (file, callback) => {
                     fechaStr = new Date().toLocaleString("es-ES");
                     precio = "";
                 } else {
-                    continue; // línea inválida
+                    continue;
                 }
 
                 // Extraer ASIN si no viene explícito
@@ -335,54 +334,32 @@ export const importHistory = (file, callback) => {
                 if (!dominio && urlAfiliado) {
                     try {
                         dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
-                    } catch {}
+                    } catch { }
                 }
 
                 const item = {
-                    id: Date.now() + Math.random() + i,
+                    // 🔥 FIX: ID SECUENCIAL PERFECTO (mantiene orden EXACTO del CSV)
+                    id: `csv-import-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
                     timestamp: fechaStr
                         ? isNaN(new Date(fechaStr).getTime())
                             ? new Date().toISOString()
                             : new Date(fechaStr).toISOString()
                         : new Date().toISOString(),
                     productTitle: (titulo || `Producto ${asin}`).slice(0, 120),
-                    price: precio && precio.trim() ? precio.trim() : null, // PRECIO BIEN GUARDADO
+                    price: precio && precio.trim() ? precio.trim() : null,
                     domain: dominio || "amazon",
                     affiliateUrl: urlAfiliado || "",
                     asin: asin || "UNKNOWN",
                     originalUrl: urlAfiliado || "",
                 };
 
-                // Evitar duplicados (opcional pero recomendado)
-                const exists = imported.some(h =>
-                    h.asin === item.asin && h.domain === item.domain
-                );
-                if (!exists) {
-                    imported.push(item);
-                }
+                imported.push(item);
             }
 
             if (imported.length === 0) throw new Error("No se encontraron enlaces válidos");
 
-            // Mezclar con historial actual (sin duplicados por ASIN + dominio)
-            const current = getHistory();
-            const merged = [...current];
-
-            for (const newItem of imported) {
-                const duplicateIndex = merged.findIndex(h =>
-                    h.asin === newItem.asin && h.domain === newItem.domain
-                );
-                if (duplicateIndex !== -1) {
-                    // Actualizar si el nuevo tiene precio y el viejo no
-                    if (!merged[duplicateIndex].price && newItem.price) {
-                        merged[duplicateIndex] = { ...merged[duplicateIndex], ...newItem };
-                    }
-                } else {
-                    merged.push(newItem);
-                }
-            }
-
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+            // 🔥 GUARDAR MANTENIENDO ORDEN EXACTO DEL ARCHIVO
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(imported));
             callback(true);
 
         } catch (err) {

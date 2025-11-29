@@ -73,26 +73,45 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
 
     const startEditingPrice = (e) => {
         e.stopPropagation();
+
+        let priceToEdit = (propItem.price || '').replace(' €', '');
+
+        // Si termina en ,00 → mostrar solo el entero para editar
+        if (priceToEdit.endsWith(',00')) {
+            priceToEdit = priceToEdit.replace(',00', '');
+        }
+
+        setEditPrice(priceToEdit);
         setEditingPriceId(propItem.id);
-        setEditPrice(propItem.price || "");
         setTimeout(() => priceInputRef.current?.focus(), 50);
     };
 
     const savePrice = () => {
-        let newPrice = editPrice.trim();
+        let newPrice = editPrice.trim().replace(/\s/g, '');
 
-        // Si hay precio y NO contiene ya el símbolo € → lo añadimos al final
+        // *** LÓGICA DE FORMATEO DE PRECIO ***
+        if (newPrice) {
+            // Si es un número entero → formatear con puntos de miles y añadir ,00
+            if (/^\d+$/.test(newPrice)) {
+                // Convertir a número para formatear miles
+                const num = parseInt(newPrice);
+                newPrice = num.toLocaleString('es-ES') + ',00';
+            }
+            // Si ya tiene decimales → mantener como está (ya formateado o no)
+        }
+
+        // Añadir símbolo € si no lo tiene
         if (newPrice && !newPrice.includes('€')) {
             newPrice = newPrice + ' €';
         }
 
-        // Si no ha cambiado realmente → cerramos sin guardar
+        // Si no ha cambiado realmente → cerrar
         if (newPrice === propItem.price) {
             setEditingPriceId(null);
             return;
         }
 
-        // Guardar en el historial
+        // Guardar
         const history = getHistory();
         const updated = history.map(h =>
             h.id === propItem.id ? { ...h, price: newPrice || null } : h
@@ -188,11 +207,20 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
                                 ref={priceInputRef}
                                 type="text"
                                 value={editPrice}
-                                onChange={(e) => setEditPrice(e.target.value)}
+                                onChange={(e) => {
+                                    // Solo permitir: dígitos, una sola coma, y punto (por si alguien usa .)
+                                    let value = e.target.value;
+                                    value = value.replace(/[^0-9,.]/g, ''); // Solo números, coma y punto
+                                    value = value.replace(/[,.]/g, match => match === ',' ? ',' : ','); // Normalizar . a ,
+                                    value = value.replace(/,/g, (match, offset) =>
+                                        value.indexOf(',') === offset ? match : '' // Solo UNA coma
+                                    );
+                                    setEditPrice(value);
+                                }}
                                 onBlur={savePrice}
                                 onKeyDown={handlePriceKeyDown}
                                 className="w-20 px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-400 contenedorCosas focus:outline-none focus:ring-0.5 focus:ring-emerald-500 transition"
-                                placeholder="24,99"
+                                placeholder=""
                                 style={{ animation: 'fadeInScale 0.15s ease-out forwards' }}
                             />
                         ) : (
@@ -203,7 +231,8 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
                             >
                                 {propItem.price ? (
                                     <>
-                                        {propItem.price.replace(' €', '')} <span className="text-emerald-500 ml-0.5">€</span>
+                                        {propItem.price.replace(' €', '').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
+                                        <span className="text-emerald-500 ml-0.5">€</span>
                                     </>
                                 ) : (
                                     "Sin precio"
@@ -386,20 +415,6 @@ export default function HistoryPage() {
 
                 mimeType = "text/csv";
                 filename = "historialUrlAmazon.csv";
-                break;
-
-            case "txt":
-                content = data.map(item => item.affiliateUrl).join("\n");
-                mimeType = "text/plain";
-                filename = "amazon-affiliate-urls.txt";
-                break;
-
-            case "md":
-                content = data
-                    .map(item => `- [${item.productTitle || item.asin}](${item.affiliateUrl}) (${item.domain})`)
-                    .join("\n");
-                mimeType = "text/markdown";
-                filename = "amazon-affiliate-history.md";
                 break;
 
             default:
@@ -606,8 +621,6 @@ export default function HistoryPage() {
                                         {[
                                             { label: "JSON", format: "json", icon: <Package className="w-4 h-4" /> },
                                             { label: "CSV", format: "csv", icon: <Copy className="w-4 h-4 text-green-600" /> },
-                                            { label: "TXT (URLs)", format: "txt", icon: <ExternalLink className="w-4 h-4" /> },
-                                            { label: "Markdown", format: "md", icon: <Globe className="w-4 h-4" /> },
                                         ].map((opt) => (
                                             <button
                                                 key={opt.format}
