@@ -146,7 +146,7 @@ export default function AmazonAffiliate() {
 
             // Notificación bonita
             toast.success("Enlace de afiliado generado", {
-                duration: 4000,
+                duration: 1500,
             });
 
         } catch (err) {

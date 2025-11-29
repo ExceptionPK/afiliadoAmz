@@ -11,6 +11,7 @@ function App() {
       <Toaster
         position="top-center"
         richColors
+        duration={1500}
         toastOptions={{
           classNames: {
             toast: "justify-start",

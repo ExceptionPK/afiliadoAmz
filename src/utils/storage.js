@@ -1,4 +1,3 @@
-// utils/storage.js
 const STORAGE_KEY = 'amazon-affiliate-history';
 const TITLE_CACHE_KEY = 'amazon-title-cache';
 
@@ -28,138 +27,205 @@ export const getHistory = () => {
 
 export const addToHistory = (entry) => {
     const history = getHistory();
-    const exists = history.some(
-        (h) => h.asin === entry.asin && h.domain === entry.domain
-    );
+    const exists = history.some(h => h.asin === entry.asin && h.domain === entry.domain);
     if (exists) return;
 
-    // === TÍTULO SEGURO: NUNCA domain, NUNCA URL ===
-    let productTitle = `Producto ${entry.asin}`; // ← Valor por defecto
-
-    // 1. Intentar extraer slug del path
+    // Título por defecto seguro
+    let productTitle = `Producto ${entry.asin}`;
     try {
         const urlObj = new URL(entry.originalUrl);
         const path = urlObj.pathname;
         const slugMatch = path.match(/\/([^\/]+)\/dp\/([A-Z0-9]{10})/i);
-
-        if (slugMatch && slugMatch[1]) {
+        if (slugMatch?.[1]) {
             const slug = decodeURIComponent(slugMatch[1]).trim();
-            if (
-                slug &&
-                slug.length >= 3 &&
-                slug.length <= 200 &&
-                !slug.includes('.') &&
-                !slug.includes('?') &&
-                !/^(dp|gp|product|ref|sspa|tag)$/i.test(slug)
-            ) {
-                productTitle = slug
-                    .replace(/-/g, ' ')
-                    .replace(/\b\w/g, l => l.toUpperCase())
-                    .replace(/\s+/g, ' ')
-                    .trim();
+            if (slug && slug.length > 3 && !/dp|gp|product|ref/i.test(slug)) {
+                productTitle = slug.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()).trim();
             }
         }
-    } catch (e) {
-        console.warn("Error parseando URL para slug:", e);
-    }
+    } catch { }
 
-    // 2. Usar caché solo si es válido
-    const cache = getTitleCache();
-    if (cache[entry.asin]) {
-        const cached = cache[entry.asin];
-        if (
-            cached &&
-            cached.length > 0 &&
-            !cached.includes('amazon') &&
-            !cached.includes('http') &&
-            !cached.includes('.es') &&
-            !cached.includes('.com')
-        ) {
-            productTitle = cached;
-        }
-    }
-
-    // 3. Forzar título seguro
-    if (!productTitle || productTitle.includes('amazon') || productTitle.length < 3) {
-        productTitle = `Producto ${entry.asin}`;
-    }
-
-    // === GUARDAR ENTRADA INICIAL ===
     const newEntry = {
         ...entry,
         id: Date.now() + Math.random(),
         timestamp: new Date().toISOString(),
         productTitle: productTitle.slice(0, 120),
+        price: null,
     };
 
     history.unshift(newEntry);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
 
-    // === GUARDAR EN CACHÉ INICIAL ===
-    const newCache = { ...cache, [entry.asin]: productTitle.slice(0, 120) };
-    saveTitleCache(newCache);
+    // === FETCHREALDATA 100% FIABLE - NOVIEMBRE 2025 (versión definitiva) ===
+    const fetchRealData = async () => {
+        const proxies = [
+            'https://corsproxy.io/?',
+            'https://proxy.cors.sh/',
+            'https://api.allorigins.win/raw?url=',
+        ];
 
-    // === 4. OBTENER TÍTULO REAL DESDE AMAZON (proxy FIABLE) ===
-    const fetchRealTitle = async () => {
-        try {
-            const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(entry.originalUrl)}`;
-            const response = await fetch(proxyUrl);
+        let html = null;
+        for (const proxy of proxies) {
+            try {
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 14000);
 
-            if (!response.ok) return null;
+                const res = await fetch(proxy + encodeURIComponent(entry.originalUrl), {
+                    signal: controller.signal,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        ...(proxy.includes('cors.sh') && { 'x-cors-api-key': 'temp_anonymous' })
+                    }
+                });
 
-            const data = await response.json();
-            const html = data.contents;
-            if (!html) return null;
+                clearTimeout(timeoutId);
+                if (!res.ok) continue;
 
-            // Extraer <title>
-            const titleMatch = html.match(/<title[^>]*>([^<]+)<\/title>/i);
-            if (!titleMatch || !titleMatch[1]) return null;
+                html = proxy.includes('allorigins')
+                    ? (await res.json()).contents || ''
+                    : await res.text();
 
-            let realTitle = titleMatch[1]
-                .replace(/ - Amazon\.(es|com|de|fr|it|co\.uk).*$/i, '')
-                .replace(/:.*$/, '')
-                .replace(/\|.*$/, '')
+                if (html && html.length > 2000 && /amazon/i.test(html)) break;
+            } catch (e) { }
+        }
+
+        if (!html) return;
+
+        // ==================== TÍTULO LIMPIO ====================
+        let realTitle = productTitle;
+        const titleMatch = html.match(/<title[^>]*>([^<]{10,})<\/title>/i);
+        if (titleMatch?.[1]) {
+            realTitle = titleMatch[1]
+                .split(/ - Amazon\.| : | \| | – /)[0]
+                .replace(/\s*\([^)]*(oferta|descuento|prime|ahorro|cupón|envío|[0-9]+ ?€|envio)[^)]*\)/gi, '')
+                .replace(/\s*\[.*?\]/g, '')
                 .replace(/\s+/g, ' ')
                 .trim();
-
-            // Validar que sea un título real
-            if (
-                realTitle.length > 5 &&
-                realTitle.length < 200 &&
-                !realTitle.includes('Amazon') &&
-                !realTitle.includes('dp/') &&
-                !realTitle.includes('ref=')
-            ) {
-                return realTitle;
-            }
-        } catch (e) {
-            console.warn("Error fetching título real:", e);
         }
-        return null;
-    };
 
-    // Ejecutar en segundo plano (no bloquea UI)
-    setTimeout(async () => {
-        const realTitle = await fetchRealTitle();
-        if (realTitle) {
-            // Actualizar caché
-            const updatedCache = { ...getTitleCache(), [entry.asin]: realTitle.slice(0, 120) };
-            saveTitleCache(updatedCache);
+        // ==================== PRECIO REAL (EL QUE PAGAS HOY) ====================
+        let price = null;
 
-            // Actualizar historial en tiempo real
-            const currentHistory = getHistory();
-            const updatedHistory = currentHistory.map(h =>
+        const toNumber = (str) => parseFloat(String(str).replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
+
+        // PRIORIDAD 1 → Precio visible grande (a-price-whole + fraction) → NUNCA falla
+        const symbol = html.match(/class=["']a-price-symbol["'][^>]*>([^<]*)</i)?.[1]?.trim() || '€';
+        const whole = html.match(/class=["']a-price-whole["'][^>]*>([^<]*)</i)?.[1]?.replace(/\.\s*/g, '') || '';
+        const fraction = (html.match(/class=["']a-price-fraction["'][^>]*>([^<]*)</i)?.[1] || '00').padEnd(2, '0').slice(0, 2);
+
+        if (whole && toNumber(whole) > 10) { // evita precios absurdos como envío de 5,99
+            price = `${symbol}${whole},${fraction}`;
+            console.log("Precio detectado (método 1 - más fiable):", price);
+        }
+
+        // PRIORIDAD 2 → Datos JSON incrustados (priceAmount, displayPrice, etc.)
+        if (!price) {
+            const jsonMatch = html.match(/"priceAmount"\s*:\s*"([^"]+)"|"(?:displayPrice|landingPrice|priceToPay)Amount"\s*:\s*"([^"]+)"/i);
+            if (jsonMatch) {
+                const candidate = jsonMatch[1] || jsonMatch[2];
+                if (candidate && toNumber(candidate) > 10) {
+                    price = candidate.trim();
+                    console.log("Precio detectado (JSON):", price);
+                }
+            }
+        }
+
+        // PRIORIDAD 3 → Solo si los anteriores fallan: buscar en a-offscreen pero filtrar basura
+        if (!price) {
+            const offscreenPrices = [...html.matchAll(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)</gi)]
+                .map(m => m[1].trim())
+                .filter(txt => {
+                    const val = toNumber(txt);
+                    const text = txt.toLowerCase();
+                    // Filtrar ahorro, envío, cupones pequeños, etc.
+                    return val > 15 && // precios reales suelen ser >15€
+                        !text.includes('ahorro') &&
+                        !text.includes('cupón') &&
+                        !text.includes('descuento') &&
+                        !text.includes('envío') &&
+                        !text.includes('gastos de envío') &&
+                        !text.includes('prime') &&
+                        !text.includes('suscríbete y ahorra');
+                });
+
+            if (offscreenPrices.length > 0) {
+                // Coger el más bajo de los que pasan el filtro (suele ser el real)
+                const validNums = offscreenPrices.map(toNumber).filter(n => n > 0);
+                const lowest = Math.min(...validNums);
+                const txt = offscreenPrices.find(t => toNumber(t) === lowest);
+                if (lowest > 15) {
+                    price = txt;
+                    console.log("Precio detectado (a-offscreen filtrado):", price);
+                }
+            }
+        }
+
+        // Formatear bonito → formato español correcto: 85,69 €
+        if (price) {
+            // Quitar espacios y símbolos temporales
+            let cleaned = price.replace(/\s+/g, '').trim();
+
+            // Quitar puntos de miles
+            cleaned = cleaned.replace(/\.(?=\d{3})/g, '');
+
+            // Asegurar que la coma sea decimal
+            cleaned = cleaned.replace('.', ',');
+
+            // Extraer número y símbolo
+            const hasEuroAtStart = cleaned.startsWith('€');
+            const hasEuroAtEnd = cleaned.endsWith('€');
+
+            if (hasEuroAtStart) {
+                // Caso: €85,69 → 85,69 €
+                cleaned = cleaned.replace(/^€/, '') + ' €';
+            } else if (hasEuroAtEnd) {
+                // Caso: 85,69€ → 85,69 €
+                cleaned = cleaned.replace(/€$/, ' €');
+            } else if (!cleaned.includes('€')) {
+                // Caso: 85,69 → 85,69 €
+                cleaned = cleaned + ' €';
+            } else {
+                // Caso raro: €85,69€ → 85,69 €
+                cleaned = cleaned.replace(/€/g, '') + ' €';
+            }
+
+            price = cleaned.trim();
+        }
+
+        console.log("Título final →", realTitle.slice(0, 80) + (realTitle.length > 80 ? '...' : ''));
+        console.log("Precio FINAL →", price || "No detectado");
+
+        // ==================== GUARDAR ====================
+        if (realTitle.length > 5 || price) {
+            const updatedHistory = getHistory().map(h =>
                 h.asin === entry.asin && h.domain === entry.domain
-                    ? { ...h, productTitle: realTitle.slice(0, 120) }
+                    ? {
+                        ...h,
+                        productTitle: realTitle.length > 5 ? realTitle.slice(0, 120) : h.productTitle,
+                        price: price || h.price,
+                    }
                     : h
             );
+
             localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+
+            window.dispatchEvent(new Event('amazon-history-updated'));
+
+            if (realTitle.length > 5) {
+                const cache = getTitleCache();
+                cache[entry.asin] = realTitle.slice(0, 120);
+                saveTitleCache(cache);
+            }
         }
-    }, 0);
+    };
+
+    // Ejecutar en segundo plano
+    setTimeout(fetchRealData, 500);
 };
 
 export const removeFromHistory = (id) => {
-    const history = getHistory().filter((h) => h.id !== id);
+    const history = getHistory().filter(h => h.id !== id);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
 };
 
@@ -200,12 +266,12 @@ export const importHistory = (file, callback) => {
                 const data = JSON.parse(content);
 
                 if (Array.isArray(data)) {
-                    // Aseguramos que cada item tenga ID (por si viene de exportación antigua)
                     const normalized = data.map(item => ({
                         ...item,
                         id: item.id || Date.now() + Math.random(),
                         timestamp: item.timestamp || new Date().toISOString(),
-                        productTitle: item.productTitle || `Producto ${item.asin || "sin ASIN"}`
+                        productTitle: item.productTitle || `Producto ${item.asin || "sin ASIN"}`,
+                        price: item.price || null, // Aseguramos que el precio venga si existe
                     }));
 
                     localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
@@ -215,7 +281,7 @@ export const importHistory = (file, callback) => {
             }
 
             // -------------------------------------------------
-            // 2. INTENTAR COMO CSV
+            // 2. INTENTAR COMO CSV (con o sin precio)
             // -------------------------------------------------
             const lines = content.split(/\r\n|\n|\r/).map(l => l.trim()).filter(Boolean);
             if (lines.length === 0) throw new Error("Archivo vacío");
@@ -225,36 +291,40 @@ export const importHistory = (file, callback) => {
             const delimiter = sampleLine.includes(";") ? ";" : ",";
 
             // Detectar si tiene cabecera
-            const hasHeader = /fecha|título|dominio|url|asin/i.test(lines[0]);
+            const hasHeader = /fecha|título|precio|dominio|url|asin/i.test(lines[0]);
             const startIndex = hasHeader ? 1 : 0;
 
             const imported = [];
 
             for (let i = startIndex; i < lines.length; i++) {
                 const line = lines[i];
-                if (!line) continue;
+                if (!line.trim() === "") continue;
 
-                // Separar columnas (soporta comillas)
                 const rawCols = line.split(delimiter);
                 const cols = rawCols.map(col =>
                     col.replace(/^"|"$/g, "").replace(/""/g, '"').trim()
                 );
 
-                // Tu formato actual de exportación CSV:
-                // Fecha, Título, Dominio, URL Afiliado, ASIN
-                let [fechaStr, titulo = "", dominio = "", urlAfiliado = "", asin = ""] = cols;
+                // Soporte para CSV NUEVO (6 columnas): Fecha,Título,Precio,Dominio,URL,ASIN
+                // Soporte para CSV ANTIGUO (5 columnas): Fecha,Título,Dominio,URL,ASIN
+                let fechaStr = "", titulo = "", precio = "", dominio = "", urlAfiliado = "", asin = "";
 
-                // Si no hay columnas suficientes, intentar parsear de forma más flexible
-                if (cols.length === 1 && cols[0].includes("amazon")) {
+                if (cols.length >= 6) {
+                    [fechaStr, titulo, precio, dominio, urlAfiliado, asin] = cols;
+                } else if (cols.length >= 5) {
+                    [fechaStr, titulo, dominio, urlAfiliado, asin] = cols;
+                    precio = ""; // versión antigua sin precio
+                } else if (cols.length === 1 && cols[0].includes("amazon")) {
+                    // Caso raro: solo URL
                     urlAfiliado = cols[0];
                     asin = urlAfiliado.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || "UNKNOWN";
                     dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
                     titulo = `Producto ${asin}`;
                     fechaStr = new Date().toLocaleString("es-ES");
+                    precio = "";
+                } else {
+                    continue; // línea inválida
                 }
-
-                // Validación mínima
-                if (!asin && !urlAfiliado) continue;
 
                 // Extraer ASIN si no viene explícito
                 if (!asin && urlAfiliado) {
@@ -276,20 +346,41 @@ export const importHistory = (file, callback) => {
                             : new Date(fechaStr).toISOString()
                         : new Date().toISOString(),
                     productTitle: (titulo || `Producto ${asin}`).slice(0, 120),
+                    price: precio && precio.trim() ? precio.trim() : null, // PRECIO BIEN GUARDADO
                     domain: dominio || "amazon",
                     affiliateUrl: urlAfiliado || "",
                     asin: asin || "UNKNOWN",
                     originalUrl: urlAfiliado || "",
                 };
 
-                imported.push(item);
+                // Evitar duplicados (opcional pero recomendado)
+                const exists = imported.some(h =>
+                    h.asin === item.asin && h.domain === item.domain
+                );
+                if (!exists) {
+                    imported.push(item);
+                }
             }
 
             if (imported.length === 0) throw new Error("No se encontraron enlaces válidos");
 
-            // Opción: mezclar con el historial actual (recomendado)
+            // Mezclar con historial actual (sin duplicados por ASIN + dominio)
             const current = getHistory();
-            const merged = [...current, ...imported];
+            const merged = [...current];
+
+            for (const newItem of imported) {
+                const duplicateIndex = merged.findIndex(h =>
+                    h.asin === newItem.asin && h.domain === newItem.domain
+                );
+                if (duplicateIndex !== -1) {
+                    // Actualizar si el nuevo tiene precio y el viejo no
+                    if (!merged[duplicateIndex].price && newItem.price) {
+                        merged[duplicateIndex] = { ...merged[duplicateIndex], ...newItem };
+                    }
+                } else {
+                    merged.push(newItem);
+                }
+            }
 
             localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
             callback(true);

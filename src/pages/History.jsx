@@ -27,6 +27,9 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
     const [editingId, setEditingId] = useState(null);
     const [editTitle, setEditTitle] = useState("");
     const [localTitle, setLocalTitle] = useState(propItem.productTitle);
+    const [editingPriceId, setEditingPriceId] = useState(null);
+    const [editPrice, setEditPrice] = useState("");
+    const priceInputRef = useRef(null);
     const inputRef = useRef(null);
 
     useEffect(() => {
@@ -68,6 +71,47 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
         setEditingId(null);
     };
 
+    const startEditingPrice = (e) => {
+        e.stopPropagation();
+        setEditingPriceId(propItem.id);
+        setEditPrice(propItem.price || "");
+        setTimeout(() => priceInputRef.current?.focus(), 50);
+    };
+
+    const savePrice = () => {
+        let newPrice = editPrice.trim();
+
+        // Si hay precio y NO contiene ya el símbolo € → lo añadimos al final
+        if (newPrice && !newPrice.includes('€')) {
+            newPrice = newPrice + ' €';
+        }
+
+        // Si no ha cambiado realmente → cerramos sin guardar
+        if (newPrice === propItem.price) {
+            setEditingPriceId(null);
+            return;
+        }
+
+        // Guardar en el historial
+        const history = getHistory();
+        const updated = history.map(h =>
+            h.id === propItem.id ? { ...h, price: newPrice || null } : h
+        );
+        localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
+        setHistory(updated);
+        setEditingPriceId(null);
+    };
+
+    const handlePriceKeyDown = (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            priceInputRef.current?.blur();
+        } else if (e.key === 'Escape') {
+            setEditingPriceId(null);
+            setEditPrice("");
+        }
+    };
+
     const handleKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -91,11 +135,11 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
         <div className="bg-white border border-slate-200 contenedorCosas p-4 hover:shadow-md transition">
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1 text-xs text-slate-500 mb-1">
+                    <div className="flex items-center gap-1 text-xs text-slate-500 mb-2">
                         <Package className="w-3 h-3" />
                         <code className="font-mono">{propItem.asin}</code>
 
-                        <span className="text-slate-400">·</span>   {/* separador */}
+                        <span className="text-slate-400">·</span>
 
                         <Globe className="w-3 h-3" />
                         <span>{propItem.domain}</span>
@@ -110,7 +154,7 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
                                 onChange={(e) => setEditTitle(e.target.value)}
                                 onBlur={saveTitle}
                                 onKeyDown={handleKeyDown}
-                                className="input-edit w-full px-2 py-1 text-sm font-medium text-slate-900 bg-violet-50 border border-violet-400 contenedorCosas focus:outline-none focus:ring-violet-500 transition"
+                                className="input-edit w-full px-2 py-0.5 text-sm font-medium text-slate-900 bg-violet-50 border border-violet-400 contenedorCosas focus:outline-none focus:ring-violet-500 transition"
                                 style={{ animation: 'fadeInScale 0.15s ease-out forwards' }}
                             />
                         ) : (
@@ -125,9 +169,47 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
                         )}
                     </div>
 
-                    <p className="text-xs text-slate-500 mt-1">
-                        <Calendar className="w-3 h-3 inline mr-1 calendario" />
-                        {new Date(propItem.timestamp).toLocaleString("es-ES")}
+                    <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
+                        <span className="flex items-center gap-1 text-xs text-slate-500">
+                            <Calendar className="w-3 h-3 -mt-0.5" />
+                            <span className="font-medium">
+                                {new Date(propItem.timestamp).toLocaleDateString("es-ES", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "numeric"
+                                })}
+                            </span>
+                        </span>
+
+                        <span className="text-slate-400">|</span>
+
+                        {editingPriceId === propItem.id ? (
+                            <input
+                                ref={priceInputRef}
+                                type="text"
+                                value={editPrice}
+                                onChange={(e) => setEditPrice(e.target.value)}
+                                onBlur={savePrice}
+                                onKeyDown={handlePriceKeyDown}
+                                className="w-20 px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-400 contenedorCosas focus:outline-none focus:ring-0.5 focus:ring-emerald-500 transition"
+                                placeholder="24,99"
+                                style={{ animation: 'fadeInScale 0.15s ease-out forwards' }}
+                            />
+                        ) : (
+                            <button
+                                onClick={startEditingPrice}
+                                className="inline-flex items-center justify-center min-w-[20px] text-xs font-bold text-emerald-500 contenedorCosas transition cursor-pointer whitespace-nowrap"
+                                title="Clic para editar precio"
+                            >
+                                {propItem.price ? (
+                                    <>
+                                        {propItem.price.replace(' €', '')} <span className="text-emerald-500 ml-0.5">€</span>
+                                    </>
+                                ) : (
+                                    "Sin precio"
+                                )}
+                            </button>
+                        )}
                     </p>
                 </div>
 
@@ -136,14 +218,14 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
                         href={propItem.affiliateUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="p-2 contenedorCosas hover:bg-slate-100 transition"
+                        className="p-2 -mt-2 contenedorCosas hover:bg-slate-100 transition"
                         title="Abrir"
                     >
                         <ExternalLink className="w-4 h-4 text-slate-600" />
                     </a>
                     <button
                         onClick={() => share("whatsapp")}
-                        className="p-2 contenedorCosas hover:bg-slate-100 transition"
+                        className="p-2 -mt-2 contenedorCosas hover:bg-slate-100 transition"
                         title="WhatsApp"
                     >
                         <svg className="w-4 h-4" viewBox="0 0 24 24" fill="#25D366">
@@ -152,7 +234,7 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
                     </button>
                     <button
                         onClick={() => onDelete(propItem.id)}
-                        className="p-2 contenedorCosas hover:bg-red-50 text-red-600 transition"
+                        className="p-2 -mt-2 contenedorCosas hover:bg-red-50 text-red-600 transition"
                         title="Eliminar"
                     >
                         <Trash2 className="w-4 h-4" />
@@ -170,8 +252,35 @@ export default function HistoryPage() {
     const [showExportMenu, setShowExportMenu] = useState(false);
     const exportButtonRef = useRef(null);
 
+    // === ACTUALIZACIÓN EN TIEMPO REAL DEL HISTORIAL ===
     useEffect(() => {
-        setHistory(getHistory());
+        // Cargar historial inicial
+        const loadHistory = () => {
+            setHistory(getHistory());
+        };
+
+        loadHistory();
+
+        // Escuchar cambios en localStorage (incluso desde otras pestañas o background)
+        const handleStorageChange = (e) => {
+            if (e.key === STORAGE_KEY || e.key === null) {  // null = cualquier cambio
+                loadHistory();
+            }
+        };
+
+        // También escuchar nuestro propio evento personalizado (más rápido)
+        const handleCustomUpdate = () => {
+            loadHistory();
+        };
+
+        window.addEventListener('storage', handleStorageChange);
+        window.addEventListener('amazon-history-updated', handleCustomUpdate);
+
+        // Limpieza
+        return () => {
+            window.removeEventListener('storage', handleStorageChange);
+            window.removeEventListener('amazon-history-updated', handleCustomUpdate);
+        };
     }, []);
 
     // Cerrar menú al hacer clic fuera
@@ -259,23 +368,24 @@ export default function HistoryPage() {
                 break;
 
             case "csv":
-                const headers = ["Fecha", "Título", "Dominio", "URL Afiliado", "ASIN"];
+                const headers = ["Fecha", "Título", "Precio", "Dominio", "URL Afiliado", "ASIN"];
                 const rows = data.map(item => [
                     new Date(item.timestamp).toLocaleString("es-ES"),
                     `"${(item.productTitle || "").replace(/"/g, '""')}"`,
-                    item.domain,
-                    item.affiliateUrl,
-                    item.asin
+                    item.price ? `"${item.price.replace(/"/g, '""')}"` : '""', // con comillas por si tiene € o comas
+                    item.domain || "",
+                    item.affiliateUrl || "",
+                    item.asin || ""
                 ]);
 
-                // EXCEL ENTENDERÁ ESTO EN TODO EL MUNDO
+                // BOM para que Excel entienda UTF-8 y tildes correctamente
                 const BOM = "\uFEFF";
                 content = BOM + [headers, ...rows]
                     .map(row => row.join(";"))
                     .join("\r\n");
 
                 mimeType = "text/csv";
-                filename = "historialUrlAfiliado.csv";
+                filename = "historialUrlAmazon.csv";
                 break;
 
             case "txt":
@@ -311,7 +421,7 @@ export default function HistoryPage() {
         <>
             <MagicParticles />
             {/* === ESTILOS DE ANIMACIÓN === */}
-            <style jsx>{`
+            <style>{`
                 @keyframes fadeInUp {
                     from { opacity: 0; transform: translateY(20px); }
                     to { opacity: 1; transform: translateY(0); }
@@ -405,7 +515,7 @@ export default function HistoryPage() {
                 </div>
             )}
 
-            <div className="min-h-screen bg-gradient-to-b pt-16">
+            <div className="min-h-screen bg-gradient-to-b pt-16 max-w-[682px]">
                 <div className="containerHistory mx-auto px-4 max-w-3xl space-y-4">
 
                     {/* Stats */}
@@ -506,7 +616,7 @@ export default function HistoryPage() {
                                                     setShowExportMenu(false);
                                                 }}
                                                 className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 transition contenedorCosas
-            ${opt.format === "csv"
+                                                ${opt.format === "csv"
                                                         ? "text-green-700 hover:bg-green-50 hover:text-green-800"
                                                         : "text-slate-700 hover:bg-violet-50 hover:text-violet-700"
                                                     }`}

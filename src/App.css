@@ -44,6 +44,13 @@ h1 {
 html, body {
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+::-webkit-scrollbar {
+  width: 0px;
+  height: 0px;
 }
 
 #root {
@@ -214,10 +221,6 @@ html, body {
   background: linear-gradient(to right, #6d28d9, #4338ca); /* from-violet-700 to-indigo-700 */
   transform: translateY(-1px);
   box-shadow: 0 12px 20px -3px rgba(139, 92, 246, 0.35);
-}
-
-.contenedor-sombra {
-  /* box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2); */
 }
 
 .amazon-morado {
