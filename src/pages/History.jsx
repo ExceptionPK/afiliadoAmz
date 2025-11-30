@@ -424,13 +424,45 @@ export default function HistoryPage() {
 
     const filtered = useMemo(() => {
         if (!search.trim()) return history;
-        const lower = search.toLowerCase();
-        return history.filter(
-            (item) =>
-                item.asin.toLowerCase().includes(lower) ||
-                item.originalUrl.toLowerCase().includes(lower) ||
-                item.domain.toLowerCase().includes(lower)
-        );
+
+        const normalize = (str) =>
+            str
+                .toLowerCase()
+                .normalize("NFD") // separa tildes
+                .replace(/[\u0300-\u036f]/g, "") // elimina tildes
+                .replace(/[^a-z0-9\s]/g, "") // quita símbolos raros
+                .trim();
+
+        const searchLower = normalize(search);
+
+        // Mapeo de errores comunes (puedes añadir más)
+        const commonReplacements = {
+            xiomi: "xiaomi",
+            xioami: "xiaomi",
+            xaomi: "xiaomi",
+            huawey: "huawei",
+            huwei: "huawei",
+            huaewi: "huawei",
+            samsumg: "samsung",
+            samgsung: "samsung",
+        };
+
+        const enhancedSearch = commonReplacements[searchLower] || searchLower;
+
+        return history.filter((item) => {
+            const titleNorm = normalize(item.productTitle || "");
+            const asinNorm = item.asin.toLowerCase();
+            const domainNorm = item.domain.toLowerCase();
+            const urlNorm = item.originalUrl.toLowerCase();
+
+            return (
+                asinNorm.includes(searchLower) ||
+                domainNorm.includes(searchLower) ||
+                urlNorm.includes(searchLower) ||
+                titleNorm.includes(enhancedSearch) ||
+                titleNorm.includes(searchLower) // por si acaso el replacement no cubre todo
+            );
+        });
     }, [history, search]);
 
     const stats = useMemo(() => {
@@ -796,13 +828,13 @@ export default function HistoryPage() {
                                     className={`
       bg-white border border-slate-200 contenedorCosas noResultado p-8 text-center text-slate-500
       transition-all duration-700
-      ${history.length === 0 && !isLoading
+      ${history.length === 0 || !isLoading
                                             ? 'opacity-100 translate-y-0'
                                             : 'opacity-0 translate-y-8'
                                         }
     `}
                                     style={{
-                                        animation: history.length === 0 && !isLoading
+                                        animation: history.length === 0 || !isLoading
                                             ? 'fadeInUp 0.7s ease-out forwards'
                                             : 'none'
                                     }}
