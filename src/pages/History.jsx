@@ -22,7 +22,15 @@ import {
     importHistory,
 } from "../utils/storage";
 
-const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
+const HistoryItem = ({
+    item: propItem,
+    onDelete,
+    setHistory,
+    index,
+    moveItem,
+    isDragging,
+    isDragOver
+}) => {
     const [copied, setCopied] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [editTitle, setEditTitle] = useState("");
@@ -150,8 +158,78 @@ const HistoryItem = ({ item: propItem, onDelete, setHistory }) => {
         window.open(urls[platform], "_blank");
     };
 
+    const handleDragStart = (e) => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', index.toString()); // Guardamos el índice
+        e.currentTarget.classList.add('dragging');
+    };
+
+    const handleDragEnd = (e) => {
+        e.currentTarget.classList.remove('dragging', 'drag-over');
+        // Limpiar todas las clases drag-over de otros elementos
+        document.querySelectorAll('.history-item').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault(); // Necesario para permitir drop
+        e.currentTarget.classList.add('drag-over');
+    };
+
+    const handleDragEnter = (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.add('drag-over');
+    };
+
+    const handleDragLeave = (e) => {
+        // Solo remover si no hay otro elemento drag-over anidado
+        if (!e.currentTarget.contains(e.relatedTarget)) {
+            e.currentTarget.classList.remove('drag-over');
+        }
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove('drag-over');
+
+        const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
+        const toIndex = index;
+
+        if (fromIndex !== toIndex) {
+            moveItem(fromIndex, toIndex);
+        }
+    };
+
     return (
-        <div className="bg-white border border-slate-200 contenedorCosas p-4 hover:shadow-md transition">
+        <div
+            className={`
+        history-item bg-white border border-slate-200 contenedorCosas p-4 
+        hover:shadow-md transition relative
+        ${isDragging ? 'dragging drag-ghost' : ''}
+        ${isDragOver ? 'drag-over' : ''}
+        ${editingId === propItem.id || editingPriceId === propItem.id
+                    ? 'editing-mode'
+                    : ''
+                }
+    `}
+            draggable={editingId !== propItem.id && editingPriceId !== propItem.id}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            // ← Este es el truco maestro para móvil:
+            onTouchStart={(e) => {
+                // Si estamos editando título o precio → NO permitir drag
+                if (editingId === propItem.id || editingPriceId === propItem.id) {
+                    e.stopPropagation();
+                    return;
+                }
+                // Si no, permitimos el comportamiento normal (long-press → drag)
+            }}
+        >
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-1 text-xs text-slate-500 mb-2">
@@ -432,6 +510,21 @@ export default function HistoryPage() {
         toast.success(`Exportado como ${format.toUpperCase()}`);
     };
 
+    const moveItem = (fromIndex, toIndex) => {
+        const historyCopy = [...history];
+        const [movedItem] = historyCopy.splice(fromIndex, 1);
+        historyCopy.splice(toIndex, 0, movedItem);
+
+        // Guardar en localStorage
+        localStorage.setItem('amazon-affiliate-history', JSON.stringify(historyCopy));
+
+        // Actualizar estado
+        setHistory(historyCopy);
+
+        toast.success("Orden cambiado");
+    };
+
+
     return (
         <>
             <MagicParticles />
@@ -677,6 +770,10 @@ export default function HistoryPage() {
                                             item={item}
                                             onDelete={handleDelete}
                                             setHistory={setHistory}
+                                            index={index}           // ← NUEVO
+                                            moveItem={moveItem}      // ← NUEVO
+                                            isDragging={false}       // ← NUEVO (puedes mejorar esto con refs)
+                                            isDragOver={false}       // ← NUEVO
                                         />
                                     </div>
                                 ))
