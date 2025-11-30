@@ -358,12 +358,24 @@ export default function HistoryPage() {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showExportMenu, setShowExportMenu] = useState(false);
     const exportButtonRef = useRef(null);
+    const isInitialLoad = useRef(true);
+    const [isLoading, setIsLoading] = useState(true);
+    const [animatedItems, setAnimatedItems] = useState(new Set());
+
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            isInitialLoad.current = false;
+        }, 50);
+
+        return () => clearTimeout(timer);
+    }, []);
 
     // === ACTUALIZACIÓN EN TIEMPO REAL DEL HISTORIAL ===
     useEffect(() => {
-        // Cargar historial inicial
         const loadHistory = () => {
-            setHistory(getHistory());
+            const data = getHistory();
+            setHistory(data);
+            setIsLoading(false);
         };
 
         loadHistory();
@@ -389,6 +401,10 @@ export default function HistoryPage() {
             window.removeEventListener('amazon-history-updated', handleCustomUpdate);
         };
     }, []);
+
+    const markAsAnimated = (id) => {
+        setAnimatedItems(prev => new Set(prev).add(id));
+    };
 
     // Cerrar menú al hacer clic fuera
     const handleClickOutside = (e) => {
@@ -438,6 +454,7 @@ export default function HistoryPage() {
     const confirmClear = () => {
         clearHistory();
         setHistory([]);
+        setAnimatedItems(new Set());
         setShowConfirmModal(false);
         toast.success("Historial borrado");
     };
@@ -452,6 +469,7 @@ export default function HistoryPage() {
         importHistory(file, (success) => {
             if (success) {
                 setHistory(getHistory());
+                setAnimatedItems(new Set());
                 toast.success("Historial importado");
             } else {
                 toast.error("Archivo inválido");
@@ -623,27 +641,27 @@ export default function HistoryPage() {
                 </div>
             )}
 
-            <div className="min-h-screen bg-gradient-to-b separacionArriba max-w-[682px]">
+            <div className="min-h-screen bg-gradient-to-b separacionArriba max-w-[658px]">
                 <div className="containerHistory mx-auto px-0 max-w-3xl space-y-3">
 
                     {/* Stats */}
                     <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
+                        <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
                             <div className="text-2xl font-bold text-violet-600">{stats.total}</div>
                             <div className="text-xs text-slate-600">Total</div>
                         </div>
-                        <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
+                        <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
                             <div className="text-2xl font-bold text-indigo-600">{stats.domains}</div>
                             <div className="text-xs text-slate-600">Dominios</div>
                         </div>
-                        <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.4s" }}>
+                        <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
                             <div className="text-2xl font-bold text-green-600">{stats.last7days}</div>
                             <div className="text-xs text-slate-600">Últimos 7 días</div>
                         </div>
                     </div>
 
                     {/* Search + Actions */}
-                    <div className="bg-white contenedorCosas shadow-sm p-4 mb-6 flex flex-col md:flex-row gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.5s" }}>
+                    <div className="bg-white contenedorCosas shadow-sm p-4 mb-6 flex flex-col md:flex-row gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
                         <div className="flex-1 relative min-w-0">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                             <input
@@ -746,8 +764,8 @@ export default function HistoryPage() {
                                 onClick={handleClear}
                                 disabled={history.length === 0}
                                 className={`borrarTodo w-full flex items-center justify-center gap-2 transition-all ${history.length === 0
-                                        ? 'opacity-60 cursor-not-allowed'
-                                        : 'hover:bg-[#fecaca]'
+                                    ? 'opacity-60 cursor-not-allowed'
+                                    : 'hover:bg-[#fecaca]'
                                     }`}
                                 title={history.length === 0 ? "No hay enlaces para borrar" : "Borrar todo el historial"}
                             >
@@ -760,25 +778,70 @@ export default function HistoryPage() {
                     {/* List */}
                     <div className="w-full">
                         <div className="space-y-3">
-                            {filtered.length === 0 ? (
-                                <div className="bg-white border border-slate-200 contenedorCosas noResultado p-5 text-center text-slate-500 opacity-0 animate-fade-in" style={{ animationDelay: "0.5s" }}>
-                                    {search ? "No se encontraron resultados" : "Aún no hay enlaces en el historial"}
+                            {isLoading ? (
+                                // Puedes poner un skeleton o simplemente nada
+                                <div className="space-y-3">
+                                    {[...Array(5)].map((_, i) => (
+                                        <div
+                                            key={i}
+                                            className="bg-white border border-slate-200 contenedorCosas p-6 animate-pulse"
+                                        >
+                                            <div className="h-4 bg-slate-200 rounded w-3/4 mb-3"></div>
+                                            <div className="h-3 bg-slate-200 rounded w-1/2"></div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ) : filtered.length === 0 ? (
+                                <div
+                                    className={`
+      bg-white border border-slate-200 contenedorCosas noResultado p-8 text-center text-slate-500
+      transition-all duration-700
+      ${history.length === 0 && !isLoading
+                                            ? 'opacity-100 translate-y-0'
+                                            : 'opacity-0 translate-y-8'
+                                        }
+    `}
+                                    style={{
+                                        animation: history.length === 0 && !isLoading
+                                            ? 'fadeInUp 0.7s ease-out forwards'
+                                            : 'none'
+                                    }}
+                                >
+                                    <div className="max-w-sm mx-auto space-y-4">
+                                        <div className="mx-auto w-16 h-16 bg-slate-100 contenedorCosas flex items-center justify-center">
+                                            <Package className="w-8 h-8 text-slate-400" />
+                                        </div>
+                                        <p className="text-lg font-medium text-slate-600">
+                                            {search ? "No se encontraron resultados" : "Aún no hay enlaces en el historial"}
+                                        </p>
+                                    </div>
                                 </div>
                             ) : (
                                 filtered.map((item, index) => (
                                     <div
                                         key={item.id}
-                                        className="opacity-0 animate-fade-in-up"
-                                        style={{ animationDelay: `${0.5 + index * 0.1}s` }}
+                                        className={`transition-all duration-500 ${!animatedItems.has(item.id)
+                                            ? "opacity-0 translate-y-4"
+                                            : "opacity-100 translate-y-0"
+                                            }`}
+                                        // Forzamos la animación con un pequeño truco de reflow
+                                        ref={(el) => {
+                                            if (el && !animatedItems.has(item.id)) {
+                                                // Forzar reflow para que la transición ocurra
+                                                el.getBoundingClientRect();
+                                                markAsAnimated(item.id);
+                                            }
+                                        }}
+                                        style={{
+                                            transitionDelay: `${0.5 + index * 0.1}s`, // Suave escalonado
+                                        }}
                                     >
                                         <HistoryItem
                                             item={item}
                                             onDelete={handleDelete}
                                             setHistory={setHistory}
-                                            index={index}           // ← NUEVO
-                                            moveItem={moveItem}      // ← NUEVO
-                                            isDragging={false}       // ← NUEVO (puedes mejorar esto con refs)
-                                            isDragOver={false}       // ← NUEVO
+                                            index={index}
+                                            moveItem={moveItem}
                                         />
                                     </div>
                                 ))
