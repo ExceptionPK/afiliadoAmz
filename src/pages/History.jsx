@@ -623,11 +623,11 @@ export default function HistoryPage() {
                 </div>
             )}
 
-            <div className="min-h-screen bg-gradient-to-b pt-16 max-w-[682px]">
-                <div className="containerHistory mx-auto px-4 max-w-3xl space-y-4">
+            <div className="min-h-screen bg-gradient-to-b separacionArriba max-w-[682px]">
+                <div className="containerHistory mx-auto px-0 max-w-3xl space-y-3">
 
                     {/* Stats */}
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-3 gap-3">
                         <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
                             <div className="text-2xl font-bold text-violet-600">{stats.total}</div>
                             <div className="text-xs text-slate-600">Total</div>
@@ -662,15 +662,19 @@ export default function HistoryPage() {
                                 </button>
                             )}
                         </div>
-                        <div className="flex gap-1.5 sm:gap-2 md:gap-2 lg:gap-2 xl:gap-2">
-                            <button
-                                type="button"
-                                onClick={() => document.getElementById('file-input').click()}
-                                className="botonesImportarExportar"
-                            >
+                        <div className="grid grid-cols-3 gap-3 w-full md:w-auto md:flex md:gap-3">
+                            {/* Importar */}
+                            <label className="botonesImportarExportar cursor-pointer">
                                 <Upload className="w-4 h-4" />
                                 Importar
-                            </button>
+                                <input
+                                    id="file-input"
+                                    type="file"
+                                    accept=".json,.csv,text/csv,application/json"
+                                    onChange={handleImport}
+                                    className="hidden"
+                                />
+                            </label>
                             <input
                                 id="file-input"
                                 type="file"
@@ -679,12 +683,12 @@ export default function HistoryPage() {
                                 className="hidden"
                             />
 
-                            {/* === BOTÓN EXPORTAR CON PORTAL === */}
+                            {/* Exportar */}
                             <div className="relative">
                                 <button
                                     onClick={() => history.length > 0 && setShowExportMenu(!showExportMenu)}
                                     disabled={history.length === 0}
-                                    className={`botonesImportarExportar flex items-center gap-2 transition-all ${history.length === 0
+                                    className={`botonesImportarExportar w-full flex items-center justify-center gap-2 transition-all ${history.length === 0
                                         ? 'opacity-60 cursor-not-allowed'
                                         : 'hover:bg-[#8575da]'
                                         }`}
@@ -737,12 +741,13 @@ export default function HistoryPage() {
                             )}
 
                             {/* === BOTÓN BORRAR TODO === */}
+                            {/* Vaciar */}
                             <button
                                 onClick={handleClear}
                                 disabled={history.length === 0}
-                                className={`borrarTodo flex items-center gap-2 transition-all ${history.length === 0
-                                    ? 'opacity-60 cursor-not-allowed'
-                                    : 'hover:bg-[#fecaca]'
+                                className={`borrarTodo w-full flex items-center justify-center gap-2 transition-all ${history.length === 0
+                                        ? 'opacity-60 cursor-not-allowed'
+                                        : 'hover:bg-[#fecaca]'
                                     }`}
                                 title={history.length === 0 ? "No hay enlaces para borrar" : "Borrar todo el historial"}
                             >

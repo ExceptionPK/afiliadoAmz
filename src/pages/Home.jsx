@@ -29,7 +29,7 @@ const Input = ({ className = "", ...props }) => (
 
 const Card = ({ className = "", children }) => (
     <div
-        className={`md:min-w-[680px] w-full bg-white p-8 shadow-2xl shadow-slate-900/10 backdrop-blur-sm border border-slate-200/70 contenedorCosas transition-all duration-500 rounded-2xl ${className}`}
+        className={`md:min-w-[680px] min-w-[375px] w-full bg-white md:p-8 p-5 shadow-2xl shadow-slate-900/10 backdrop-blur-sm border border-slate-200/70 contenedorCosas transition-all duration-500 ${className}`}
     >
         {children}
     </div>
@@ -492,7 +492,7 @@ export default function AmazonAffiliate() {
                                                 </div>
 
                                                 <div className="text-xs text-slate-500 pt-2 text-center">
-                                                    ID de afiliado: <code className="bg-slate-100 rounded px-2 py-1 text-violet-600 font-mono">{AFFILIATE_ID}</code>
+                                                    ID de afiliado: <code className="bg-slate-100 contenedorCosas px-2 py-1 text-violet-600 font-mono">{AFFILIATE_ID}</code>
                                                 </div>
                                             </div>
                                         </div>
