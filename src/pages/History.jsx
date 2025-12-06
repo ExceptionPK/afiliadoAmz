@@ -244,22 +244,68 @@ const HistoryItem = ({
 
                     <div className="min-h-6 relative">
                         {editingId === propItem.id ? (
-                            <input
-                                ref={inputRef}
-                                type="text"
-                                value={editTitle}
-                                onChange={(e) => setEditTitle(e.target.value)}
-                                onBlur={saveTitle}
-                                onKeyDown={handleKeyDown}
-                                className="input-edit w-full px-2 py-0.5 text-sm font-medium text-slate-900 bg-violet-50 border border-violet-400 contenedorCosas focus:outline-none focus:ring-violet-500 transition"
-                                style={{ animation: 'fadeInScale 0.15s ease-out forwards' }}
-                            />
+                            window.innerWidth < 768 ? (
+                                // VERSIÓN MÓVIL
+                                <div
+                                    contentEditable
+                                    suppressContentEditableWarning
+                                    onBlur={(e) => {
+                                        const newText = e.currentTarget.textContent.trim().slice(0, 120);
+                                        setEditTitle(newText);
+                                        // Guardar como antes
+                                        if (newText && newText !== localTitle) {
+                                            const history = getHistory();
+                                            const updated = history.map(h =>
+                                                h.id === propItem.id ? { ...h, productTitle: newText } : h
+                                            );
+                                            localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
+                                            setHistory(updated);
+                                            try {
+                                                const cache = getTitleCache();
+                                                cache[propItem.asin] = newText;
+                                                saveTitleCache(cache);
+                                            } catch (err) {
+                                                console.warn("Error actualizando caché", err);
+                                            }
+                                        }
+                                        setEditingId(null);
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            e.currentTarget.blur();
+                                        }
+                                        if (e.key === 'Escape') {
+                                            e.currentTarget.textContent = localTitle;
+                                            e.currentTarget.blur();
+                                        }
+                                    }}
+                                    className="input-edit w-full px-2 py-0.5 text-sm font-medium text-slate-900 bg-violet-50 border border-violet-400 rounded focus:outline-none focus:ring-violet-500 transition"
+                                    style={{
+                                        WebkitOverflowScrolling: 'touch',
+                                        scrollBehavior: 'smooth',
+                                    }}
+                                    dangerouslySetInnerHTML={{ __html: editTitle }}
+                                    ref={(el) => el && el.focus()}
+                                />
+                            ) : (
+                                // VERSIÓN ESCRITORIO
+                                <input
+                                    ref={inputRef}
+                                    type="text"
+                                    value={editTitle}
+                                    onChange={(e) => setEditTitle(e.target.value)}
+                                    onBlur={saveTitle}
+                                    onKeyDown={handleKeyDown}
+                                    className="input-edit w-full px-2 py-0.5 text-sm font-medium text-slate-900 bg-violet-50 border border-violet-400 rounded focus:outline-none focus:ring-violet-500 transition"
+                                    style={{ animation: 'fadeInScale 0.15s ease-out forwards' }}
+                                />
+                            )
                         ) : (
                             <p
                                 onClick={startEditing}
                                 className="title-normal text-sm font-medium text-slate-900 truncate cursor-pointer hover:text-violet-700 transition select-none"
                                 title="Clic para renombrar"
-                                style={{ animation: 'fadeIn 0.15s ease-out forwards' }}
                             >
                                 {localTitle}
                             </p>

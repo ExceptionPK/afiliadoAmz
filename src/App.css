@@ -487,3 +487,27 @@ html, body {
   white-space: nowrap;
 }
 }
+
+/* ==== SCROLL HORIZONTAL PERFECTO EN MÓVIL (contenteditable) ==== */
+@media (max-width: 767px) {
+    [contenteditable="true"],
+    [contenteditable=""] {
+        -webkit-user-select: text !important;
+        user-select: text !important;
+        caret-color: #8b5cf6;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        white-space: nowrap !important;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+        -webkit-overflow-scrolling: touch;
+    }
+    [contenteditable="true"]::-webkit-scrollbar,
+    [contenteditable=""]::-webkit-scrollbar {
+        display: none !important;
+    }
+    [contenteditable="true"]:focus,
+    [contenteditable=""]:focus {
+        outline: none !important;
+    }
+}
