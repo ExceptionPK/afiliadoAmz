@@ -304,7 +304,7 @@ const HistoryItem = ({
                         ) : (
                             <p
                                 onClick={startEditing}
-                                className="title-normal text-sm font-medium text-slate-900 truncate cursor-pointer hover:text-violet-700 transition select-none"
+                                className="title-normal text-left text-sm font-medium text-slate-900 truncate cursor-pointer hover:text-violet-700 transition select-none block w-full"
                                 title="Clic para renombrar"
                             >
                                 {localTitle}
