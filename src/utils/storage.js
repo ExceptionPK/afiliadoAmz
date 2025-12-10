@@ -218,6 +218,42 @@ export const addToHistory = (entry) => {
                 saveTitleCache(cache);
             }
         }
+
+        let recommended = [];
+
+        // 1. Carrusel "Productos patrocinados" (el más fiable y siempre tiene ASIN)
+        const sponsored = html.matchAll(/data-asin=["']([A-Z0-9]{10})["'].*?title=["']([^"']{10,200})[^"']*["']/gi);
+        for (const m of sponsored) {
+            const asin = m[1];
+            const titleRaw = m[2].replace(/&quot;|&#039;|\s+/g, ' ').trim();
+            if (asin && titleRaw && !recommended.some(r => r.asin === asin)) {
+                recommended.push({ asin, title: titleRaw.slice(0, 100) });
+            }
+        }
+
+        // 2. Backup: "Los clientes también compraron" / "Productos relacionados"
+        if (recommended.length < 3) {
+            const related = html.matchAll(/\/dp\/([A-Z0-9]{10}).*?alt=["']([^"']{10,200})[^"']*["']/gi);
+            for (const m of related) {
+                const asin = m[1];
+                const titleRaw = m[2].replace(/&quot;|&#039;|\s+/g, ' ').trim();
+                if (asin && titleRaw && asin !== entry.asin && !recommended.some(r => r.asin === asin)) {
+                    recommended.push({ asin, title: titleRaw.slice(0, 100) });
+                    if (recommended.length >= 6) break;
+                }
+            }
+        }
+
+        // Guardar recomendaciones en la entrada
+        if (recommended.length > 0) {
+            const updatedHistory = getHistory().map(h =>
+                h.asin === entry.asin && h.domain === entry.domain
+                    ? { ...h, recommended: recommended.slice(0, 8) }
+                    : h
+            );
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+            window.dispatchEvent(new Event('amazon-history-updated'));
+        }
     };
 
     // Ejecutar en segundo plano

@@ -624,62 +624,6 @@ export default function HistoryPage() {
     return (
         <>
             <MagicParticles />
-            {/* === ESTILOS DE ANIMACIÓN === */}
-            <style>{`
-                @keyframes fadeInUp {
-                    from { opacity: 0; transform: translateY(20px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                @keyframes fadeInDown {
-                    from { opacity: 0; transform: translateY(-20px); }
-                    to { opacity: 1; transform: translateY(0); }
-                }
-                @keyframes fadeIn {
-                    from { opacity: 0; }
-                    to { opacity: 1; }
-                }
-                .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
-                .animate-fade-in-down { animation: fadeInDown 0.5s ease-out forwards; }
-                .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
-                .opacity-0 { opacity: 0; }
-                
-                .input-edit {
-                    animation: fadeInScale 0.15s ease-out forwards;
-                }
-                .title-normal {
-                    animation: fadeIn 0.15s ease-out forwards;
-                }
-                
-                @keyframes fadeInScale {
-                    from { opacity: 0; transform: scale(0.95); }
-                    to { opacity: 1; transform: scale(1); }
-                }
-
-                @keyframes modalIn {
-                    from {
-                        opacity: 0;
-                        transform: scale(0.9) translateY(-10px);
-                    }
-                    to {
-                        opacity: 1;
-                        transform: scale(1) translateY(0);
-                    }
-                }
-
-                .animate-in {
-                    animation-fill-mode: both;
-                }
-
-                .fade-in {
-                    animation: fadeIn 0.3s ease-out;
-                }
-
-                .zoom-in-95 {
-                    animation: modalIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-                }
-
-                .opacity-0 { opacity: 0; }
-            `}</style>
 
             {/* === MODAL DE CONFIRMACIÓN === */}
             {showConfirmModal && (
@@ -722,24 +666,8 @@ export default function HistoryPage() {
             <div className="min-h-screen bg-gradient-to-b separacionArriba max-w-[658px]">
                 <div className="containerHistory mx-auto px-0 max-w-3xl space-y-3">
 
-                    {/* Stats */}
-                    <div className="grid grid-cols-3 gap-3">
-                        <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
-                            <div className="text-2xl font-bold text-violet-600">{stats.total}</div>
-                            <div className="text-xs text-slate-600">Total</div>
-                        </div>
-                        <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.2s" }}>
-                            <div className="text-2xl font-bold text-indigo-600">{stats.domains}</div>
-                            <div className="text-xs text-slate-600">Dominios</div>
-                        </div>
-                        <div className="bg-white contenedorCosas p-4 text-center shadow-sm opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
-                            <div className="text-2xl font-bold text-green-600">{stats.last7days}</div>
-                            <div className="text-xs text-slate-600">Últimos 7 días</div>
-                        </div>
-                    </div>
-
                     {/* Search + Actions */}
-                    <div className="bg-white contenedorCosas shadow-sm p-4 mb-6 flex flex-col md:flex-row gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
+                    <div className=" bg-white contenedorCosas shadow-sm p-4 mb-3 flex flex-col md:flex-row gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
                         <div className="flex-1 relative min-w-0">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                             <input

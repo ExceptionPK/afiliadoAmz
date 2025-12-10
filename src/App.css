@@ -151,6 +151,14 @@ html, body {
   white-space: nowrap;
 }
 
+.botonesAniadirHome{
+  background-color: #9f8ff0;
+}
+
+.botonesAniadirHome:hover{
+  background-color: #8575da;
+}
+
 .botonesImportarExportar:hover{
   background-color: #8575da;
 }
@@ -394,6 +402,60 @@ html, body {
 .history-item:not(.editing-mode):active {
     cursor: grabbing;
 }
+
+@keyframes fadeInUp {
+                    from { opacity: 0; transform: translateY(20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes fadeInDown {
+                    from { opacity: 0; transform: translateY(-20px); }
+                    to { opacity: 1; transform: translateY(0); }
+                }
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                .animate-fade-in-up { animation: fadeInUp 0.5s ease-out forwards; }
+                .animate-fade-in-down { animation: fadeInDown 0.5s ease-out forwards; }
+                .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+                .opacity-0 { opacity: 0; }
+                
+                .input-edit {
+                    animation: fadeInScale 0.15s ease-out forwards;
+                }
+                .title-normal {
+                    animation: fadeIn 0.15s ease-out forwards;
+                }
+                
+                @keyframes fadeInScale {
+                    from { opacity: 0; transform: scale(0.95); }
+                    to { opacity: 1; transform: scale(1); }
+                }
+
+                @keyframes modalIn {
+                    from {
+                        opacity: 0;
+                        transform: scale(0.9) translateY(-10px);
+                    }
+                    to {
+                        opacity: 1;
+                        transform: scale(1) translateY(0);
+                    }
+                }
+
+                .animate-in {
+                    animation-fill-mode: both;
+                }
+
+                .fade-in {
+                    animation: fadeIn 0.3s ease-out;
+                }
+
+                .zoom-in-95 {
+                    animation: modalIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+                }
+
+                .opacity-0 { opacity: 0; }
 
 
 /* ============================================= */
