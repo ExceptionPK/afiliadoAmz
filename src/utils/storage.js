@@ -208,8 +208,6 @@ export const addToHistory = (entry) => {
 
             localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
 
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
-
             window.dispatchEvent(new Event('amazon-history-updated'));
 
             if (realTitle.length > 5) {

@@ -188,10 +188,10 @@ html, body {
   background-color: #39355b !important;
 }
 
-/* Active (clic o estado .active) */
+/* Active */
 .boton:active,
 .boton.active {
-  background-color: #16a34a; /* Verde (green-600) */
+  background-color: #16a34a;
   transform: scale(0.97);
 }
 

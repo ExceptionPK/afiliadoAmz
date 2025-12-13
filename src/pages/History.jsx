@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useRef } from "react";
 import MagicParticles from "../components/MagicParticles";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
+
 import {
     Search,
     Copy,
@@ -699,13 +700,6 @@ export default function HistoryPage() {
                                     className="hidden"
                                 />
                             </label>
-                            <input
-                                id="file-input"
-                                type="file"
-                                accept=".json,.csv,text/csv,application/json"
-                                onChange={handleImport}
-                                className="hidden"
-                            />
 
                             {/* Exportar */}
                             <div className="relative">
