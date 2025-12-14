@@ -320,8 +320,6 @@ export default function AmazonAffiliate() {
                                     </div>
                                 </div>
 
-                                
-
                                 {/* PRODUCTOS RECOMENDADOS DENTRO DE LA TARJETA */}
                                 <div className={`overflow-hidden transition-all duration-700 ${showResult ? "max-h-screen opacity-100" : "max-h-0 opacity-0"}`}>
                                     <div className="mt-0 pt-3">

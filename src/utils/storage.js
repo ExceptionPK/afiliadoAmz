@@ -288,6 +288,8 @@ export const importHistory = (file, callback) => {
         const content = e.target.result.trim();
 
         try {
+            let importedItems = [];
+
             // -------------------------------------------------
             // 1. INTENTAR COMO JSON (sin cambios)
             // -------------------------------------------------
@@ -300,139 +302,167 @@ export const importHistory = (file, callback) => {
                 const data = JSON.parse(content);
 
                 if (Array.isArray(data)) {
-                    const normalized = data.map(item => ({
+                    importedItems = data.map(item => ({
                         ...item,
                         id: item.id || Date.now() + Math.random(),
                         timestamp: item.timestamp || new Date().toISOString(),
                         productTitle: item.productTitle || `Producto ${item.asin || "sin ASIN"}`,
                         price: item.price || null,
                     }));
-
-                    localStorage.setItem(STORAGE_KEY, JSON.stringify(normalized));
-                    callback(true);
-                    return;
                 }
             }
 
             // -------------------------------------------------
             // 2. CSV CON FECHAS ESPAÑOLAS + HORA (CORREGIDO)
             // -------------------------------------------------
-            const lines = content.split(/\r\n|\n|\r/).map(l => l.trim()).filter(Boolean);
-            if (lines.length === 0) throw new Error("Archivo vacío");
+            if (importedItems.length === 0) {
+                const lines = content.split(/\r\n|\n|\r/).map(l => l.trim()).filter(Boolean);
+                if (lines.length === 0) throw new Error("Archivo vacío");
 
-            // Detectar separador: ; o ,
-            const sampleLine = lines[0];
-            const delimiter = sampleLine.includes(";") ? ";" : ",";
+                const sampleLine = lines[0];
+                const delimiter = sampleLine.includes(";") ? ";" : ",";
 
-            // Detectar si tiene cabecera
-            const hasHeader = /fecha|título|precio|dominio|url|asin/i.test(lines[0]);
-            const startIndex = hasHeader ? 1 : 0;
+                const hasHeader = /fecha|título|precio|dominio|url|asin/i.test(lines[0]);
+                const startIndex = hasHeader ? 1 : 0;
 
-            // 🔥 FUNCIÓN PARA PARSEAR FECHAS ESPAÑOLAS CON HORA
-            const parseSpanishDate = (dateStr) => {
-                if (!dateStr || typeof dateStr !== 'string') return null;
-
-                const trimmed = dateStr.trim();
-
-                // Caso 1: "dd/mm/yyyy, HH:MM:SS" → convertir coma a espacio
-                let clean = trimmed.replace(/,\s*/, ' ');  // "23/11/2025, 18:51:06" → "23/11/2025 18:51:06"
-
-                // Extraer fecha y hora por separado
-                const dateTimeParts = clean.split(' ');
-                if (dateTimeParts.length < 1) return null;
-
-                const datePart = dateTimeParts[0];
-
-                // Validar formato dd/mm/yyyy
-                const match = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-                if (!match) return null;
-
-                const [, day, month, year] = match;
-                const dayPadded = day.padStart(2, '0');
-                const monthPadded = month.padStart(2, '0');
-
-                // Construir fecha ISO completa
-                let isoDateStr;
-                if (dateTimeParts.length >= 2) {
-                    // Con hora: "2025-11-23 18:51:06"
-                    isoDateStr = `${year}-${monthPadded}-${dayPadded} ${dateTimeParts[1]}`;
-                } else {
-                    // Solo fecha: "2025-11-23 00:00:00"
-                    isoDateStr = `${year}-${monthPadded}-${dayPadded} 00:00:00`;
-                }
-
-                const date = new Date(isoDateStr);
-                return !isNaN(date.getTime()) ? date : null;
-            };
-
-            const imported = [];
-
-            for (let i = startIndex; i < lines.length; i++) {
-                const line = lines[i];
-                if (!line.trim()) continue;
-
-                const rawCols = line.split(delimiter);
-                const cols = rawCols.map(col =>
-                    col.replace(/^"|"$/g, "").replace(/""/g, '"').trim()
-                );
-
-                // ORDEN CORRECTO: [Fecha, Título, Precio, Dominio, URL, ASIN]
-                let fechaStr = "", titulo = "", precio = "", dominio = "", urlAfiliado = "", asin = "";
-
-                if (cols.length >= 6) {
-                    [fechaStr, titulo, precio, dominio, urlAfiliado, asin] = cols;
-                } else if (cols.length >= 5) {
-                    [fechaStr, titulo, dominio, urlAfiliado, asin] = cols;
-                    precio = "";
-                } else if (cols.length === 1 && cols[0].includes("amazon")) {
-                    urlAfiliado = cols[0];
-                    asin = urlAfiliado.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || "UNKNOWN";
-                    dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
-                    titulo = `Producto ${asin}`;
-                    fechaStr = new Date().toLocaleString("es-ES");
-                    precio = "";
-                } else {
-                    continue;
-                }
-
-                // Extraer ASIN si no viene explícito
-                if (!asin && urlAfiliado) {
-                    asin = urlAfiliado.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || "UNKNOWN";
-                }
-
-                // Extraer dominio si falta
-                if (!dominio && urlAfiliado) {
-                    try {
-                        dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
-                    } catch { }
-                }
-
-                const item = {
-                    // ID único que mantiene orden del CSV
-                    id: `csv-import-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
-
-                    // 🔥 TIMESTAMP CON FECHAS ESPAÑOLAS + HORA CORRECTAS
-                    timestamp: (() => {
-                        const parsed = parseSpanishDate(fechaStr);
-                        return parsed ? parsed.toISOString() : new Date().toISOString();
-                    })(),
-
-                    productTitle: (titulo || `Producto ${asin}`).slice(0, 120),
-                    price: precio && precio.trim() ? precio.trim() : null,
-                    domain: dominio || "amazon",
-                    affiliateUrl: urlAfiliado || "",
-                    asin: asin || "UNKNOWN",
-                    originalUrl: urlAfiliado || "",
+                const parseSpanishDate = (dateStr) => {
+                    if (!dateStr || typeof dateStr !== 'string') return null;
+                    let clean = dateStr.trim().replace(/,\s*/, ' ');
+                    const dateTimeParts = clean.split(' ');
+                    const datePart = dateTimeParts[0];
+                    const match = datePart.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+                    if (!match) return null;
+                    const [, day, month, year] = match;
+                    const dayPadded = day.padStart(2, '0');
+                    const monthPadded = month.padStart(2, '0');
+                    const isoDateStr = dateTimeParts.length >= 2
+                        ? `${year}-${monthPadded}-${dayPadded} ${dateTimeParts[1]}`
+                        : `${year}-${monthPadded}-${dayPadded} 00:00:00`;
+                    const date = new Date(isoDateStr);
+                    return !isNaN(date.getTime()) ? date : null;
                 };
 
-                imported.push(item);
+                const imported = [];
+
+                for (let i = startIndex; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (!line.trim()) continue;
+
+                    const rawCols = line.split(delimiter);
+                    const cols = rawCols.map(col =>
+                        col.replace(/^"|"$/g, "").replace(/""/g, '"').trim()
+                    );
+
+                    let fechaStr = "", titulo = "", precio = "", dominio = "", urlAfiliado = "", asin = "";
+
+                    if (cols.length >= 6) {
+                        [fechaStr, titulo, precio, dominio, urlAfiliado, asin] = cols;
+                    } else if (cols.length >= 5) {
+                        [fechaStr, titulo, dominio, urlAfiliado, asin] = cols;
+                        precio = "";
+                    } else if (cols.length === 1 && cols[0].includes("amazon")) {
+                        urlAfiliado = cols[0];
+                        asin = urlAfiliado.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || "UNKNOWN";
+                        dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
+                        titulo = `Producto ${asin}`;
+                        fechaStr = new Date().toLocaleString("es-ES");
+                        precio = "";
+                    } else {
+                        continue;
+                    }
+
+                    if (!asin && urlAfiliado) {
+                        asin = urlAfiliado.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || "UNKNOWN";
+                    }
+                    if (!dominio && urlAfiliado) {
+                        try {
+                            dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
+                        } catch { }
+                    }
+
+                    const item = {
+                        id: `csv-import-${Date.now()}-${i}-${Math.random().toString(36).slice(2, 6)}`,
+                        timestamp: (() => {
+                            const parsed = parseSpanishDate(fechaStr);
+                            return parsed ? parsed.toISOString() : new Date().toISOString();
+                        })(),
+                        productTitle: (titulo || `Producto ${asin}`).slice(0, 120),
+                        price: precio && precio.trim() ? precio.trim() : null,
+                        domain: dominio || "amazon",
+                        affiliateUrl: urlAfiliado || "",
+                        asin: asin || "UNKNOWN",
+                        originalUrl: urlAfiliado || "",
+                    };
+
+                    imported.push(item);
+                }
+
+                importedItems = imported;
             }
 
-            if (imported.length === 0) throw new Error("No se encontraron enlaces válidos");
+            if (importedItems.length === 0) throw new Error("No se encontraron enlaces válidos");
 
-            // 🔥 GUARDAR MANTENIENDO ORDEN EXACTO DEL ARCHIVO
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(imported));
-            callback(true);
+            // ==================== MERGE INTELIGENTE CON ORDEN RESPETADO ====================
+            const currentHistory = getHistory();
+            const historyMap = new Map();
+            currentHistory.forEach(item => {
+                historyMap.set(`${item.asin}-${item.domain}`, item);
+            });
+
+            let addedCount = 0;
+            const mergedHistory = [...currentHistory]; // Copia del historial actual
+            const newItemsToAdd = []; // Acumulamos aquí los nuevos en orden original
+
+            importedItems.forEach(newItem => {
+                const key = `${newItem.asin}-${newItem.domain}`;
+
+                if (historyMap.has(key)) {
+                    // Ya existe → actualizamos solo si el importado tiene fecha más reciente
+                    const existingIndex = mergedHistory.findIndex(h => `${h.asin}-${h.domain}` === key);
+                    const existing = mergedHistory[existingIndex];
+                    if (new Date(newItem.timestamp) > new Date(existing.timestamp)) {
+                        mergedHistory[existingIndex] = {
+                            ...existing,
+                            ...newItem,
+                            id: existing.id // Mantenemos ID original
+                        };
+                    }
+                } else {
+                    // Nuevo → lo guardamos en orden de aparición en el archivo
+                    newItemsToAdd.push({
+                        ...newItem,
+                        id: Date.now() + Math.random()
+                    });
+                    addedCount++;
+                    historyMap.set(key, newItem); // Lo añadimos al mapa para evitar futuros duplicados
+                }
+            });
+
+            // Añadimos todos los nuevos de golpe al principio → mantiene el orden del archivo
+            if (newItemsToAdd.length > 0) {
+                mergedHistory.unshift(...newItemsToAdd);
+            }
+
+            // Guardamos el resultado final
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedHistory));
+
+            // Feedback según el estado previo
+            let toastMessage;
+            let useInfoToast = false;
+
+            if (currentHistory.length === 0) {
+                toastMessage = "Historial importado";
+            } else if (addedCount === 0) {
+                toastMessage = "No hay elementos nuevos";
+                useInfoToast = true;
+            } else {
+                toastMessage = `+${addedCount} elementos añadidos`;
+            }
+
+            callback(true, toastMessage, useInfoToast);
+
+            // Notificamos a la UI
+            window.dispatchEvent(new Event('amazon-history-updated'));
 
         } catch (err) {
             console.error("Error importando archivo:", err);

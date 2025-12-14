@@ -405,6 +405,7 @@ export default function HistoryPage() {
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showExportMenu, setShowExportMenu] = useState(false);
     const exportButtonRef = useRef(null);
+    const fileInputRef = useRef(null);
     const isInitialLoad = useRef(true);
     const [isLoading, setIsLoading] = useState(true);
     const [animatedItems, setAnimatedItems] = useState(new Set());
@@ -545,13 +546,27 @@ export default function HistoryPage() {
     const handleImport = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        importHistory(file, (success) => {
+
+        importHistory(file, (success, message, useInfoToast = false) => {
             if (success) {
                 setHistory(getHistory());
                 setAnimatedItems(new Set());
-                toast.success("Historial importado");
+
+                if (useInfoToast) {
+                    toast.info(message);
+                } else {
+                    toast.success(message);
+                }
+
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = null;
+                }
             } else {
-                toast.error("Archivo inválido");
+                toast.error(message || "Archivo inválido");
+
+                if (fileInputRef.current) {
+                    fileInputRef.current.value = null;
+                }
             }
         });
     };
@@ -698,6 +713,7 @@ export default function HistoryPage() {
                                     accept=".json,.csv,text/csv,application/json"
                                     onChange={handleImport}
                                     className="hidden"
+                                    ref={fileInputRef}
                                 />
                             </label>
 
