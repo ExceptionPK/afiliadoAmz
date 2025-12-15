@@ -89,14 +89,19 @@ const HistoryItem = ({
 
         let priceToEdit = (propItem.price || '').replace(' €', '');
 
-        // Si termina en ,00 → mostrar solo el entero para editar
         if (priceToEdit.endsWith(',00')) {
             priceToEdit = priceToEdit.replace(',00', '');
         }
 
         setEditPrice(priceToEdit);
         setEditingPriceId(propItem.id);
-        setTimeout(() => priceInputRef.current?.focus(), 50);
+
+        setTimeout(() => {
+            if (priceInputRef.current) {
+                priceInputRef.current.focus();
+                priceInputRef.current.select();
+            }
+        }, 50);
     };
 
     const savePrice = () => {
@@ -799,43 +804,54 @@ export default function HistoryPage() {
         <>
             <MagicParticles />
 
-            {/* === MODAL DE CONFIRMACIÓN === */}
-            {showConfirmModal && (
+            {/* === MODAL DE CONFIRMACIÓN DE VACIAR HISTORIAL === */}
+            {showConfirmModal && createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div
                         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
                         onClick={cancelClear}
                     />
-                    <div className="relative bg-white contenedorCosas shadow-xl max-w-sm w-full p-6 space-y-6 
-                        animate-in fade-in zoom-in-95 duration-300"
-                        style={{ animation: 'modalIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards' }}>
-                        <div className="flex flex-col items-center gap-3">
-                            <div className="p-2 bg-red-100 contenedorCosas">
-                                <Trash2 className="w-6 h-6 text-red-600" />
+
+                    {/* Contenedor del modal */}
+                    <div className="relative w-full max-w-sm bg-white contenedorCosas shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+                        {/* Cabecera con icono */}
+                        <div className="py-2 border-b border-slate-200 bg-slate-50">
+                            <div className="flex justify-center">
+                                <div className="p-2 bg-red-600 contenedorCosas shadow-lg">
+                                    <Trash2 className="w-7 h-7 text-white" strokeWidth={2.5} />
+                                </div>
                             </div>
+                        </div>
+
+                        {/* Contenido */}
+                        <div className="p-6 space-y-4 text-center">
                             <h3 className="text-lg font-semibold text-slate-900">
                                 ¿Borrar todo el historial?
                             </h3>
+                            <p className="text-sm text-slate-600 max-w-xs mx-auto">
+                                Esta acción no se puede deshacer. Se eliminarán todos los enlaces generados.
+                            </p>
                         </div>
-                        <p className="text-sm text-slate-600 max-w-xs mx-auto">
-                            Esta acción no se puede deshacer. Se eliminarán todos los enlaces generados.
-                        </p>
-                        <div className="flex justify-between gap-3">
+
+                        {/* Botones de acción */}
+                        <div className="flex gap-3 p-3 border-t border-slate-200 bg-slate-50">
                             <button
                                 onClick={cancelClear}
-                                className="flex-1 px-4 py-2 text-sm font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 contenedorCosas transition"
+                                className="flex-1 px-5 py-3 text-sm font-medium text-slate-700 bg-white border border-slate-300 contenedorCosas hover:bg-slate-100 transition"
                             >
                                 Cancelar
                             </button>
                             <button
                                 onClick={confirmClear}
-                                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 contenedorCosas transition"
+                                className="flex-1 px-5 py-3 text-sm font-semibold text-white bg-red-600 contenedorCosas hover:bg-red-700 transition flex items-center justify-center gap-2 shadow-lg"
                             >
-                                Sí, borrar todo
+                                <Trash2 className="w-5 h-5" strokeWidth={2.5} />
+                                Vaciar
                             </button>
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
 
             <div className="min-h-screen bg-gradient-to-b separacionArriba max-w-[658px]">

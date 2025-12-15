@@ -120,13 +120,13 @@ export default function AmazonAffiliate() {
             }
 
             if (!isAmazonUrl(inputUrl)) {
-                setError("La URL introducida no es válida. Debe ser un enlace de Amazon.");
+                setError("La URL no es válida. Debe ser un enlace de Amazon.");
                 return;
             }
 
             const asin = extractASIN(inputUrl);
             if (!asin) {
-                setError("No se pudo encontrar el código ASIN del producto. Verifica la URL.");
+                setError("No se pudo encontrar el ASIN del producto.");
                 return;
             }
 
@@ -143,11 +143,11 @@ export default function AmazonAffiliate() {
                 domain,
             });
 
-            toast.success("Enlace de afiliado generado", { duration: 1500 });
+            toast.success("Enlace generado", { duration: 1500 });
 
         } catch (err) {
             console.error("Error inesperado al generar enlace:", err);
-            setError("Ocurrió un error al procesar la URL. Intenta con otro enlace.");
+            setError("Ocurrió un error al procesar la URL.");
             toast.error("Error al generar el enlace");
         }
     };
@@ -165,7 +165,7 @@ export default function AmazonAffiliate() {
                 setTimeout(() => setCopied(false), 2000);
                 return;
             } catch (err) {
-                console.log("Clipboard API falló (normal en móvil):", err);
+                console.log("Clipboard API falló", err);
             }
         }
 
@@ -241,15 +241,7 @@ export default function AmazonAffiliate() {
     return (
         <>
             <MagicParticles />
-            <style>{`
-                @keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-                @keyframes fadeInDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
-                @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-                .animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
-                .animate-fade-in-down { animation: fadeInDown 0.6s ease-out forwards; }
-                .animate-fade-in { animation: fadeIn 0.6s ease-out forwards; }
-            `}</style>
-
+            
             <div className="min-h-screen">
                 <div className="relative z-10 container mx-auto px-0 py-[200px] md:py-40">
 
