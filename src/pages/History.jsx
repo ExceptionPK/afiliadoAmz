@@ -44,10 +44,39 @@ const HistoryItem = ({
     const [showShareModal, setShowShareModal] = useState(false);
     const [customMessage, setCustomMessage] = useState("");
     const [selectedOption, setSelectedOption] = useState("none"); // "none", "quick", "custom"
+    const [showQuickDropdown, setShowQuickDropdown] = useState(false);
 
     useEffect(() => {
         setLocalTitle(propItem.productTitle);
     }, [propItem.productTitle]);
+
+    useEffect(() => {
+        if (showShareModal) {
+            const scrollY = window.scrollY;
+
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.width = '100%';
+            document.body.style.overflowY = 'scroll';
+
+            // También bloqueamos html por si acaso
+            document.documentElement.style.overflow = 'hidden';
+        } else {
+            // Restauramos el scroll
+            const scrollY = document.body.style.top;
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflowY = '';
+
+            document.documentElement.style.overflow = '';
+
+            // Volvemos a la posición anterior
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0') * -1);
+            }
+        }
+    }, [showShareModal]);
 
     const startEditing = (e) => {
         e.stopPropagation();
@@ -215,7 +244,7 @@ const HistoryItem = ({
         let message = "";
 
         if (selectedOption === "quick") {
-            message = "Mira este producto en Amazon:";
+            message = customMessage || "Mira este producto en Amazon:"; // fallback por si no eligió
         } else if (selectedOption === "custom") {
             message = customMessage.trim();
         }
@@ -228,6 +257,10 @@ const HistoryItem = ({
         window.open(whatsappUrl, "_blank");
 
         setShowShareModal(false);
+        // Opcional: resetear al cerrar
+        setSelectedOption("none");
+        setCustomMessage("");
+        setShowQuickDropdown(false);
     };
 
     return (
@@ -432,7 +465,7 @@ const HistoryItem = ({
                     />
 
                     {/* Contenedor del modal */}
-                    <div className="relative w-full max-w-sm bg-white contenedorCosas shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+                    <div className="relative w-full max-w-sm bg-white contenedorCosas shadow-2xl animate-in fade-in zoom-in-95 duration-300">
                         <div className="py-2 border-b border-slate-200 bg-slate-50">
                             <div className="flex justify-center">
                                 <div className="p-2 bg-[#25D366] contenedorCosas shadow-lg">
@@ -446,22 +479,18 @@ const HistoryItem = ({
                         {/* Opciones */}
                         <div className="p-3 space-y-2">
                             {/* Sin mensaje */}
-                            <label
-                                className={`flex items-center gap-4 px-5 py-4 transition-all duration-200 cursor-pointer contenedorCosas rounded-lg ${selectedOption === "none"
+                            <div
+                                className={`flex items-center gap-4 px-5 py-4 transition-all duration-200 cursor-pointer contenedorCosas ${selectedOption === "none"
                                     ? "bg-violet-100/70 border border-violet-300 shadow-sm"
                                     : "hover:bg-violet-50/60 border border-transparent"
                                     }`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedOption("none");
+                                    setCustomMessage("");
+                                    setShowQuickDropdown(false); // Cierra dropdown si estaba abierto
+                                }}
                             >
-                                {/* Input radio oculto completamente (solo para funcionalidad, no se ve nada) */}
-                                <input
-                                    type="radio"
-                                    name="share-option"
-                                    value="none"
-                                    checked={selectedOption === "none"}
-                                    onChange={(e) => setSelectedOption(e.target.value)}
-                                    className="sr-only"
-                                />
-
                                 <div className="flex-1">
                                     <div className={`font-semibold ${selectedOption === "none" ? "text-violet-900" : "text-slate-800"}`}>
                                         Sin mensaje
@@ -470,49 +499,92 @@ const HistoryItem = ({
                                         Solo se enviará el enlace del producto.
                                     </div>
                                 </div>
-                            </label>
+                            </div>
 
-                            {/* Mensaje rápido */}
-                            <label
-                                className={`flex items-center gap-4 px-5 py-4 transition-all duration-200 cursor-pointer contenedorCosas rounded-lg ${selectedOption === "quick"
-                                    ? "bg-violet-100/70 border border-violet-300 shadow-sm"
-                                    : "hover:bg-violet-50/60 border border-transparent"
-                                    }`}
-                            >
-                                <input
-                                    type="radio"
-                                    name="share-option"
-                                    value="quick"
-                                    checked={selectedOption === "quick"}
-                                    onChange={(e) => setSelectedOption(e.target.value)}
-                                    className="sr-only"
-                                />
-                                <div className="flex-1">
-                                    <div className={`font-semibold ${selectedOption === "quick" ? "text-violet-900" : "text-slate-800"}`}>
-                                        Mensaje rápido
-                                    </div>
-                                    <div className="text-sm text-slate-500 italic">
-                                        Mira este producto en Amazon:
-                                    </div>
-                                </div>
-                            </label>
-
-                            {/* Mensaje personalizado */}
-                            <div className="space-y-2.5">
-                                <label
-                                    className={`flex items-center gap-4 px-5 py-4 transition-all duration-200 cursor-pointer contenedorCosas rounded-lg ${selectedOption === "custom"
+                            {/* Mensaje rápido - con dropdown flotante toggle */}
+                            <div className="relative">
+                                <div
+                                    className={`flex items-center gap-4 px-5 py-4 transition-all duration-200 cursor-pointer contenedorCosas ${selectedOption === "quick"
                                         ? "bg-violet-100/70 border border-violet-300 shadow-sm"
                                         : "hover:bg-violet-50/60 border border-transparent"
                                         }`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedOption("quick");
+                                        setShowQuickDropdown(prev => !prev); // Toggle
+                                    }}
                                 >
-                                    <input
-                                        type="radio"
-                                        name="share-option"
-                                        value="custom"
-                                        checked={selectedOption === "custom"}
-                                        onChange={(e) => setSelectedOption(e.target.value)}  // Solo cambia la opción, no pre-rellena
-                                        className="sr-only"
-                                    />
+                                    <div className="flex-1">
+                                        <div className={`font-semibold ${selectedOption === "quick" ? "text-violet-900" : "text-slate-800"}`}>
+                                            Mensaje rápido
+                                        </div>
+                                        <div className="text-sm text-slate-500">
+                                            {selectedOption === "quick" && customMessage ? customMessage : "Elige uno de los mensajes directos"}
+                                        </div>
+                                    </div>
+                                    <div className={`transition-transform duration-200 ${showQuickDropdown && selectedOption === "quick" ? "rotate-180" : ""}`}>
+                                        <svg className="w-5 h-5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                        </svg>
+                                    </div>
+                                </div>
+
+                                {/* Dropdown flotante */}
+                                {showQuickDropdown && selectedOption === "quick" && (
+                                    <div className="absolute top-full mt-2 z-10 animate-in fade-in slide-in-from-top-2 duration-200">
+                                        <div
+                                            className="bg-white border contenedorCosas shadow-lg overflow-hidden max-h-56 overflow-y-auto"
+                                            // Esto es clave: evita que el scroll burbujee al body
+                                            onTouchMove={(e) => e.stopPropagation()}
+                                            onWheel={(e) => e.stopPropagation()}
+                                        >
+                                            {[
+                                                "Mira este producto en Amazon",
+                                                "¡Oferta interesante en Amazon!",
+                                                "Te puede interesar este artículo",
+                                                "Echa un vistazo a esto en Amazon",
+                                                "Recomendado en Amazon",
+                                                "Buena opción en Amazon:",
+                                                "Lo vi y pensé en ti",
+                                                "¿Qué te parece este producto?",
+                                                "Genial hallazgo en Amazon",
+                                                "¡Mira qué chollo he encontrado!"
+                                            ].map((msg, idx) => (
+                                                <button
+                                                    key={idx}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setCustomMessage(msg);
+                                                        setShowQuickDropdown(false);
+                                                    }}
+                                                    className={`w-full px-4 py-3 text-left text-sm transition-all ${customMessage === msg
+                                                        ? "bg-violet-100 text-violet-900 font-medium"
+                                                        : "text-slate-700 hover:bg-violet-50"
+                                                        } ${idx !== 0 ? "border-t border-slate-100" : ""}`}
+                                                >
+                                                    <span className="block truncate">{msg}</span>
+                                                    
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Mensaje personalizado */}
+                            <div className="space-y-2.5">
+                                <div
+                                    className={`flex items-center gap-4 px-5 py-4 transition-all duration-200 cursor-pointer contenedorCosas ${selectedOption === "custom"
+                                        ? "bg-violet-100/70 border border-violet-300 shadow-sm"
+                                        : "hover:bg-violet-50/60 border border-transparent"
+                                        }`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedOption("custom");
+                                        setCustomMessage("");
+                                        setShowQuickDropdown(false); // Cierra dropdown
+                                    }}
+                                >
                                     <div className="flex-1">
                                         <div className={`font-semibold ${selectedOption === "custom" ? "text-violet-900" : "text-slate-800"}`}>
                                             Mensaje personalizado
@@ -521,22 +593,23 @@ const HistoryItem = ({
                                             Escribe lo que quieras acompañando el enlace
                                         </div>
                                     </div>
-                                </label>
+                                </div>
 
                                 {selectedOption === "custom" && (
-                                    <div>
+                                    <div className="px-0 animate-in fade-in slide-in-from-top-2 duration-300">
                                         <textarea
                                             value={customMessage}
                                             onChange={(e) => setCustomMessage(e.target.value)}
-                                            placeholder="Escribe tu mensaje aquí..."  // Placeholder claro
+                                            placeholder="Escribe tu mensaje aquí..."
                                             rows="4"
                                             autoFocus
-                                            className="w-full px-4 py-3 text-sm text-slate-800 bg-slate-50/50 border border-violet-300 contenedorCosas resize-none focus:outline-none focus:ring-slate-300 focus:border-slate-300 transition shadow-sm"
+                                            className="w-full px-4 py-3 text-sm text-slate-800 bg-slate-50/50 border border-violet-300 contenedorCosas resize-none focus:outline-none transition shadow-sm"
                                         />
                                     </div>
                                 )}
                             </div>
                         </div>
+
 
                         {/* Botones de acción */}
                         <div className="flex gap-3 -mt-2 p-3 border-t border-slate-200 bg-slate-50">
@@ -612,6 +685,34 @@ export default function HistoryPage() {
             window.removeEventListener('amazon-history-updated', handleCustomUpdate);
         };
     }, []);
+
+    useEffect(() => {
+        if (showConfirmModal) {
+            const scrollY = window.scrollY;
+
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.width = '100%';
+            document.body.style.overflowY = 'scroll';
+
+            // También bloqueamos html por si acaso
+            document.documentElement.style.overflow = 'hidden';
+        } else {
+            // Restauramos el scroll
+            const scrollY = document.body.style.top;
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflowY = '';
+
+            document.documentElement.style.overflow = '';
+
+            // Volvemos a la posición anterior
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0') * -1);
+            }
+        }
+    }, [showConfirmModal]);
 
     const markAsAnimated = (id) => {
         setAnimatedItems(prev => new Set(prev).add(id));

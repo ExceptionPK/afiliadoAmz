@@ -514,7 +514,6 @@ html, body {
 }
 
 
-
 @keyframes star-float {
   0%   { transform: translateY(0); opacity: 0; }
   15%  { opacity: 1; }
