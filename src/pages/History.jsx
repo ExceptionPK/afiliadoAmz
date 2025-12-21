@@ -416,7 +416,7 @@ const HistoryItem = ({
                                     {propItem.originalPrice && propItem.price && propItem.originalPrice !== propItem.price ? (
                                         <>
                                             <span className="text-slate-500 mr-1">
-                                                {propItem.originalPrice} →
+                                                {propItem.originalPrice}
                                             </span>
                                             {(() => {
                                                 const originalNum = parseFloat(propItem.originalPrice.replace(/[^0-9,.]/g, '').replace(',', '.'));
