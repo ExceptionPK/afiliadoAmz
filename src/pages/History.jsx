@@ -415,10 +415,9 @@ const HistoryItem = ({
                                 >
                                     {propItem.originalPrice && propItem.price && propItem.originalPrice !== propItem.price ? (
                                         <>
-                                            <span className="text-slate-500 line-through mr-1">
-                                                {propItem.originalPrice}
+                                            <span className="text-slate-500 mr-1">
+                                                {propItem.originalPrice} →
                                             </span>
-                                            {/* Comparación inteligente: verde si baja, rojo si sube */}
                                             {(() => {
                                                 const originalNum = parseFloat(propItem.originalPrice.replace(/[^0-9,.]/g, '').replace(',', '.'));
                                                 const currentNum = parseFloat(propItem.price.replace(/[^0-9,.]/g, '').replace(',', '.'));
@@ -441,12 +440,10 @@ const HistoryItem = ({
                                                         </span>
                                                     );
                                                 }
-                                                // Si son iguales (raro), mostrar normal
                                                 return <span className="text-emerald-600 font-bold">{propItem.price}</span>;
                                             })()}
                                         </>
                                     ) : propItem.price ? (
-                                        // Caso normal: hay precio pero NO hay originalPrice → verde como siempre
                                         <span className="text-emerald-600 font-bold">
                                             {propItem.price}
                                         </span>
@@ -500,7 +497,7 @@ const HistoryItem = ({
                     />
 
                     {/* Contenedor del modal */}
-                    <div className="relative w-full max-w-sm bg-white contenedorCosas shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+                    <div className="relative w-full overflow-hidden max-w-sm bg-white contenedorCosas shadow-2xl animate-in fade-in zoom-in-95 duration-300">
                         <div className="py-2 border-b border-slate-200 bg-slate-50">
                             <div className="flex justify-center">
                                 <div className="p-2 bg-[#25D366] contenedorCosas shadow-lg">
@@ -513,29 +510,6 @@ const HistoryItem = ({
 
                         {/* Opciones */}
                         <div className="p-3 space-y-2">
-                            {/* Sin mensaje */}
-                            <div
-                                className={`flex items-center gap-4 px-5 py-4 transition-all duration-200 cursor-pointer contenedorCosas ${selectedOption === "none"
-                                    ? "bg-violet-100/70 border border-violet-300 shadow-sm"
-                                    : "hover:bg-violet-50/60 border border-transparent"
-                                    }`}
-                                onClick={(e) => {
-                                    e.stopPropagation();
-                                    setSelectedOption("none");
-                                    setCustomMessage("");
-                                    setShowQuickDropdown(false); // Cierra dropdown si estaba abierto
-                                }}
-                            >
-                                <div className="flex-1">
-                                    <div className={`font-semibold ${selectedOption === "none" ? "text-violet-900" : "text-slate-800"}`}>
-                                        Sin mensaje
-                                    </div>
-                                    <div className="text-sm text-slate-500">
-                                        Solo se enviará el enlace del producto.
-                                    </div>
-                                </div>
-                            </div>
-
                             {/* Mensaje rápido - con dropdown flotante toggle */}
                             <div className="relative">
                                 <div
@@ -566,10 +540,9 @@ const HistoryItem = ({
 
                                 {/* Dropdown flotante */}
                                 {showQuickDropdown && selectedOption === "quick" && (
-                                    <div className="absolute top-full mt-2 z-10 animate-in fade-in slide-in-from-top-2 duration-200">
+                                    <div className="absolute top-full mt-2.5 z-10 animate-in fade-in slide-in-from-top-2 duration-200">
                                         <div
                                             className="bg-white border contenedorCosas shadow-lg overflow-hidden max-h-56 overflow-y-auto"
-                                            // Esto es clave: evita que el scroll burbujee al body
                                             onTouchMove={(e) => e.stopPropagation()}
                                             onWheel={(e) => e.stopPropagation()}
                                         >
@@ -604,6 +577,29 @@ const HistoryItem = ({
                                         </div>
                                     </div>
                                 )}
+                            </div>
+
+                            {/* Sin mensaje */}
+                            <div
+                                className={`flex items-center gap-4 px-5 py-4 transition-all duration-200 cursor-pointer contenedorCosas ${selectedOption === "none"
+                                    ? "bg-violet-100/70 border border-violet-300 shadow-sm"
+                                    : "hover:bg-violet-50/60 border border-transparent"
+                                    }`}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSelectedOption("none");
+                                    setCustomMessage("");
+                                    setShowQuickDropdown(false); // Cierra dropdown si estaba abierto
+                                }}
+                            >
+                                <div className="flex-1">
+                                    <div className={`font-semibold ${selectedOption === "none" ? "text-violet-900" : "text-slate-800"}`}>
+                                        Sin mensaje
+                                    </div>
+                                    <div className="text-sm text-slate-500">
+                                        Solo se enviará el enlace del producto.
+                                    </div>
+                                </div>
                             </div>
 
                             {/* Mensaje personalizado */}
@@ -678,9 +674,13 @@ export default function HistoryPage() {
     const exportButtonRef = useRef(null);
     const fileInputRef = useRef(null);
     const isInitialLoad = useRef(true);
+    const exportInputRef = useRef(null);
     const [isLoading, setIsLoading] = useState(true);
     const [animatedItems, setAnimatedItems] = useState(new Set());
     const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportFormat, setExportFormat] = useState(null); // "json" o "csv"
+    const [exportFilename, setExportFilename] = useState("");
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -689,6 +689,16 @@ export default function HistoryPage() {
 
         return () => clearTimeout(timer);
     }, []);
+
+    useEffect(() => {
+        if (showExportModal && exportInputRef.current) {
+            // Pequeño timeout para asegurar que el input está renderizado y enfocado
+            setTimeout(() => {
+                exportInputRef.current.focus();
+                exportInputRef.current.select(); // ← Esto selecciona todo el texto
+            }, 100);
+        }
+    }, [showExportModal]);
 
     // === ACTUALIZACIÓN EN TIEMPO REAL DEL HISTORIAL ===
     useEffect(() => {
@@ -802,6 +812,31 @@ export default function HistoryPage() {
             }
         }
     }, [showConfirmModal]);
+
+    useEffect(() => {
+        if (showExportModal) {
+            const scrollY = window.scrollY;
+
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.width = '100%';
+            document.body.style.overflowY = 'scroll';
+
+            document.documentElement.style.overflow = 'hidden';
+        } else {
+            const scrollY = document.body.style.top;
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflowY = '';
+
+            document.documentElement.style.overflow = '';
+
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0') * -1);
+            }
+        }
+    }, [showExportModal]);
 
     const markAsAnimated = (id) => {
         setAnimatedItems(prev => new Set(prev).add(id));
@@ -926,43 +961,68 @@ export default function HistoryPage() {
 
     // === NUEVA FUNCIÓN: EXPORTAR EN VARIOS FORMATOS ===
     const handleExportFormat = (format) => {
+        const defaultName = format === "csv"
+            ? "historialUrlAmazon"
+            : "amazon-affiliate-history";
+
+        const suggestedName = `${defaultName}_${new Date().toISOString().split('T')[0]}`;
+
+        setExportFormat(format);
+        setExportFilename(suggestedName);
+        setShowExportModal(true);
+        setShowExportMenu(false); // Cerramos el menú de exportar
+    };
+
+    const performExport = () => {
         const data = getHistory();
-        if (!data.length) return;
+        if (!data.length || !exportFormat) return;
 
         let content = "";
-        let filename = `amazon-affiliate-history.${format}`;
         let mimeType = "text/plain";
+        let extension = exportFormat;
 
-        switch (format) {
+        switch (exportFormat) {
             case "json":
                 content = JSON.stringify(data, null, 2);
                 mimeType = "application/json";
                 break;
 
             case "csv":
-                const headers = ["Fecha", "Título", "Precio", "Dominio", "URL Afiliado", "ASIN"];
+                const headers = [
+                    "Fecha",
+                    "Título",
+                    "Precio Original",
+                    "Precio Actual",
+                    "Dominio",
+                    "URL Afiliado",
+                    "ASIN"
+                ];
+
                 const rows = data.map(item => [
                     new Date(item.timestamp).toLocaleString("es-ES"),
                     `"${(item.productTitle || "").replace(/"/g, '""')}"`,
-                    item.price ? `"${item.price.replace(/"/g, '""')}"` : '""', // con comillas por si tiene € o comas
+                    item.originalPrice ? `"${item.originalPrice.replace(/"/g, '""')}"` : '""',
+                    item.price ? `"${item.price.replace(/"/g, '""')}"` : '""',
                     item.domain || "",
                     item.affiliateUrl || "",
                     item.asin || ""
                 ]);
 
-                // BOM para que Excel entienda UTF-8 y tildes correctamente
                 const BOM = "\uFEFF";
                 content = BOM + [headers, ...rows]
                     .map(row => row.join(";"))
                     .join("\r\n");
 
                 mimeType = "text/csv";
-                filename = "historialUrlAmazon.csv";
                 break;
 
             default:
                 return;
         }
+
+        const filename = exportFilename.trim()
+            ? `${exportFilename.trim()}.${extension}`
+            : `historial.${extension}`;
 
         const blob = new Blob([content], { type: mimeType + ";charset=utf-8" });
         const url = URL.createObjectURL(blob);
@@ -972,8 +1032,12 @@ export default function HistoryPage() {
         a.click();
         URL.revokeObjectURL(url);
 
-        toast.success(`Exportado como ${format.toUpperCase()}`);
+        toast.success(`Exportado como ${filename}`);
+        setShowExportModal(false);
+        setExportFilename("");
+        setExportFormat(null);
     };
+
 
     const moveItem = (fromIndex, toIndex) => {
         const historyCopy = [...history];
@@ -1037,6 +1101,81 @@ export default function HistoryPage() {
                             >
                                 <Trash2 className="w-5 h-5" strokeWidth={2.5} />
                                 Vaciar
+                            </button>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
+            {/* === MODAL PARA NOMBRAR ARCHIVO DE EXPORTACIÓN === */}
+            {showExportModal && createPortal(
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
+                    <div
+                        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+                        onClick={() => {
+                            setShowExportModal(false);
+                            setExportFilename("");
+                            setExportFormat(null);
+                        }}
+                    />
+
+                    <div className="relative w-full max-w-sm bg-white contenedorCosas shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
+                        <div className="py-2 border-b border-slate-200 bg-slate-50">
+                            <div className="flex justify-center">
+                                <div className="p-2.5 bg-violet-600 contenedorCosas shadow-lg">
+                                    <Download className="w-8 h-8 text-white" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="p-4 space-y-3">
+                            <h3 className="text-lg font-semibold text-center text-slate-900">
+                                Archivo
+                            </h3>
+
+                            <div className="space-y-4">
+                                <input
+                                    type="text"
+                                    value={exportFilename}
+                                    onChange={(e) => setExportFilename(e.target.value)}
+                                    onKeyDown={(e) => {
+                                        if (e.key === "Enter") {
+                                            e.preventDefault();
+                                            performExport();
+                                        } else if (e.key === "Escape") {
+                                            setShowExportModal(false);
+                                            setExportFilename("");
+                                            setExportFormat(null);
+                                        }
+                                    }}
+                                    ref={exportInputRef}
+                                    className="w-full bg-white text-slate-900 px-4 py-3 text-sm border border-slate-300 contenedorCosas focus:outline-none focus:ring-1 focus:ring-violet-500 focus:border-transparent transition"
+                                    placeholder="Ej: Mis compras"
+                                />
+                                <p className="text-xs text-center text-slate-500">
+                                    Se guardará como: <strong>{exportFilename || "historial"}.{exportFormat}</strong>
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex gap-3 p-3 border-t border-slate-200 bg-slate-50">
+                            <button
+                                onClick={() => {
+                                    setShowExportModal(false);
+                                    setExportFilename("");
+                                    setExportFormat(null);
+                                }}
+                                className="flex-1 px-5 py-3 text-sm font-medium text-slate-700 bg-white border border-slate-300 contenedorCosas hover:bg-slate-100 transition"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                onClick={performExport}
+                                className="flex-1 px-5 py-3 text-sm font-semibold text-white bg-violet-600 contenedorCosas hover:bg-violet-700 transition flex items-center justify-center gap-2 shadow-lg"
+                            >
+                                <Download className="w-5 h-5" />
+                                Exportar
                             </button>
                         </div>
                     </div>

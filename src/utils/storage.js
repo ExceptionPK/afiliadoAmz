@@ -369,20 +369,25 @@ export const importHistory = (file, callback) => {
                         col.replace(/^"|"$/g, "").replace(/""/g, '"').trim()
                     );
 
-                    let fechaStr = "", titulo = "", precio = "", dominio = "", urlAfiliado = "", asin = "";
+                    let fechaStr = "", titulo = "", precioOriginal = "", precioActual = "", dominio = "", urlAfiliado = "", asin = "";
 
-                    if (cols.length >= 6) {
-                        [fechaStr, titulo, precio, dominio, urlAfiliado, asin] = cols;
+                    if (cols.length >= 7) {
+                        [fechaStr, titulo, precioOriginal, precioActual, dominio, urlAfiliado, asin] = cols;
+                    } else if (cols.length >= 6) {
+                        [fechaStr, titulo, precioActual, dominio, urlAfiliado, asin] = cols;
+                        precioOriginal = "";
                     } else if (cols.length >= 5) {
                         [fechaStr, titulo, dominio, urlAfiliado, asin] = cols;
-                        precio = "";
+                        precioActual = "";
+                        precioOriginal = "";
                     } else if (cols.length === 1 && cols[0].includes("amazon")) {
                         urlAfiliado = cols[0];
                         asin = urlAfiliado.match(/\/dp\/([A-Z0-9]{10})/i)?.[1] || "UNKNOWN";
                         dominio = new URL(urlAfiliado).hostname.replace("www.", "").split(".")[0] || "amazon";
                         titulo = `Producto ${asin}`;
                         fechaStr = new Date().toLocaleString("es-ES");
-                        precio = "";
+                        precioActual = "";
+                        precioOriginal = "";
                     } else {
                         continue;
                     }
@@ -403,23 +408,25 @@ export const importHistory = (file, callback) => {
                             return parsed ? parsed.toISOString() : new Date().toISOString();
                         })(),
                         productTitle: (titulo || `Producto ${asin}`).slice(0, 120),
-                        price: precio && precio.trim() ? precio.trim() : null,
-                        originalPrice: precio && precio.trim() ? precio.trim() : null,  // ← Nuevo: fijamos original como el del CSV
-                        prices: precio && precio.trim()
+                        price: precioActual && precioActual.trim() ? precioActual.trim() : null,
+                        originalPrice: precioOriginal && precioOriginal.trim()
+                            ? precioOriginal.trim()
+                            : (precioActual && precioActual.trim() ? precioActual.trim() : null),
+                        prices: (precioActual && precioActual.trim())
                             ? [{
                                 timestamp: (() => {
                                     const parsed = parseSpanishDate(fechaStr);
                                     return parsed ? parsed.toISOString() : new Date().toISOString();
                                 })(),
-                                price: precio.trim()
+                                price: precioActual.trim()
                             }]
-                            : [],  // ← Nuevo: reconstruimos historial básico
-                        lastUpdate: precio && precio.trim()
+                            : [],
+                        lastUpdate: precioActual && precioActual.trim()
                             ? (() => {
                                 const parsed = parseSpanishDate(fechaStr);
                                 return parsed ? parsed.toISOString() : new Date().toISOString();
                             })()
-                            : null,  // ← Nuevo: simulamos que ya se actualizó en esa fecha
+                            : null,
                         domain: dominio || "amazon.es",
                         affiliateUrl: urlAfiliado || "",
                         originalUrl: urlAfiliado || "",
