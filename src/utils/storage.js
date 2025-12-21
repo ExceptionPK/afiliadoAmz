@@ -46,216 +46,222 @@ export const addToHistory = (entry) => {
 
     const newEntry = {
         ...entry,
-        id: Date.now() + Math.random(),
+        id: Date.now() + '-' + Math.random().toString(36).substring(2, 9),
         timestamp: new Date().toISOString(),
         productTitle: productTitle.slice(0, 120),
-        price: null,
+        price: null,            // Último precio conocido (se actualiza con el tiempo)
+        originalPrice: null,    // Precio inicial (nunca cambia)
+        prices: [],             // Array de { timestamp: string, price: string }
+        lastUpdate: null,       // Fecha de la última vez que se intentó actualizar
     };
 
     history.unshift(newEntry);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
 
-    // === FETCHREALDATA 100% FIABLE - NOVIEMBRE 2025 (versión definitiva) ===
-    const fetchRealData = async () => {
-        const proxies = [
-            'https://corsproxy.io/?',
-            'https://proxy.cors.sh/',
-            'https://api.allorigins.win/raw?url=',
-        ];
+    // === FETCH REAL DATA EN SEGUNDO PLANO ===
+    setTimeout(() => fetchRealData(newEntry), 500);
+};
 
-        let html = null;
-        for (const proxy of proxies) {
-            try {
-                const controller = new AbortController();
-                const timeoutId = setTimeout(() => controller.abort(), 14000);
+// FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS
+export const fetchRealData = async (entry) => {
+    const proxies = [
+        'https://corsproxy.io/?',                  // Primero: más estable ahora
+        'https://api.codetabs.com/v1/proxy?quest=', // Segundo: muy fiable
+        'https://api.allorigins.win/raw?url=',     // Tercero: si sigue vivo
+        'https://cors.lol/',                       // Cuarto: por si acaso
+    ];
 
-                const res = await fetch(proxy + encodeURIComponent(entry.originalUrl), {
-                    signal: controller.signal,
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                        ...(proxy.includes('cors.sh') && { 'x-cors-api-key': 'temp_anonymous' })
-                    }
-                });
+    let html = null;
+    for (const proxy of proxies) {
+        try {
+            let proxyUrl = proxy + encodeURIComponent(entry.originalUrl);
 
-                clearTimeout(timeoutId);
-                if (!res.ok) continue;
+            // Especial para codetabs (no necesita encode completo)
+            if (proxy.includes('codetabs')) {
+                proxyUrl = proxy + entry.originalUrl;
+            }
 
-                html = proxy.includes('allorigins')
-                    ? (await res.json()).contents || ''
-                    : await res.text();
+            // Especial para cors.lol (solo añade al final)
+            if (proxy.includes('cors.lol')) {
+                proxyUrl = proxy + entry.originalUrl.replace(/^https?:\/\//, '');
+            }
 
-                if (html && html.length > 2000 && /amazon/i.test(html)) break;
-            } catch (e) { }
-        }
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 14000);
 
-        if (!html) return;
-
-        // ==================== TÍTULO LIMPIO ====================
-        let realTitle = productTitle;
-        const titleMatch = html.match(/<title[^>]*>([^<]{10,})<\/title>/i);
-        if (titleMatch?.[1]) {
-            realTitle = titleMatch[1]
-                .split(/ - Amazon\.| : | \| | – /)[0]
-                .replace(/\s*\([^)]*(oferta|descuento|prime|ahorro|cupón|envío|[0-9]+ ?€|envio)[^)]*\)/gi, '')
-                .replace(/\s*\[.*?\]/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-        }
-
-        // ==================== PRECIO REAL (EL QUE PAGAS HOY) ====================
-        let price = null;
-
-        const toNumber = (str) => parseFloat(String(str).replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
-
-        // PRIORIDAD 1 → Precio visible grande (a-price-whole + fraction) → NUNCA falla
-        const symbol = html.match(/class=["']a-price-symbol["'][^>]*>([^<]*)</i)?.[1]?.trim() || '€';
-        const whole = html.match(/class=["']a-price-whole["'][^>]*>([^<]*)</i)?.[1]?.replace(/\.\s*/g, '') || '';
-        const fraction = (html.match(/class=["']a-price-fraction["'][^>]*>([^<]*)</i)?.[1] || '00').padEnd(2, '0').slice(0, 2);
-
-        if (whole && toNumber(whole) > 10) { // evita precios absurdos como envío de 5,99
-            price = `${symbol}${whole},${fraction}`;
-            console.log("Precio detectado (método 1 - más fiable):", price);
-        }
-
-        // PRIORIDAD 2 → Datos JSON incrustados (priceAmount, displayPrice, etc.)
-        if (!price) {
-            const jsonMatch = html.match(/"priceAmount"\s*:\s*"([^"]+)"|"(?:displayPrice|landingPrice|priceToPay)Amount"\s*:\s*"([^"]+)"/i);
-            if (jsonMatch) {
-                const candidate = jsonMatch[1] || jsonMatch[2];
-                if (candidate && toNumber(candidate) > 10) {
-                    price = candidate.trim();
-                    console.log("Precio detectado (JSON):", price);
+            const res = await fetch(proxyUrl, {
+                signal: controller.signal,
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
                 }
+            });
+
+            clearTimeout(timeoutId);
+            if (!res.ok) continue;
+
+            html = await res.text();
+
+            if (html && html.length > 2000 && /amazon/i.test(html)) break;
+        } catch (e) {
+            console.warn(`Proxy falló: ${proxy}`, e);
+        }
+    }
+
+    if (!html) return;
+
+    // ==================== TÍTULO LIMPIO ====================
+    let realTitle = entry.productTitle;
+    const titleMatch = html.match(/<title[^>]*>([^<]{10,})<\/title>/i);
+    if (titleMatch?.[1]) {
+        realTitle = titleMatch[1]
+            .split(/ - Amazon\.| : | \| | – /)[0]
+            .replace(/\s*\([^)]*(oferta|descuento|prime|ahorro|cupón|envío|[0-9]+ ?€|envio)[^)]*\)/gi, '')
+            .replace(/\s*\[.*?\]/g, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+    }
+
+    // ==================== PRECIO REAL ====================
+    let price = null;
+
+    const toNumber = (str) => parseFloat(String(str).replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
+
+    const symbol = html.match(/class=["']a-price-symbol["'][^>]*>([^<]*)</i)?.[1]?.trim() || '€';
+    const whole = html.match(/class=["']a-price-whole["'][^>]*>([^<]*)</i)?.[1]?.replace(/\.\s*/g, '') || '';
+    const fraction = (html.match(/class=["']a-price-fraction["'][^>]*>([^<]*)</i)?.[1] || '00').padEnd(2, '0').slice(0, 2);
+
+    if (whole && toNumber(whole) > 10) {
+        price = `${symbol}${whole},${fraction}`;
+    }
+
+    if (!price) {
+        const jsonMatch = html.match(/"priceAmount"\s*:\s*"([^"]+)"|"(?:displayPrice|landingPrice|priceToPay)Amount"\s*:\s*"([^"]+)"/i);
+        if (jsonMatch) {
+            const candidate = jsonMatch[1] || jsonMatch[2];
+            if (candidate && toNumber(candidate) > 10) {
+                price = candidate.trim();
             }
         }
+    }
 
-        // PRIORIDAD 3 → Solo si los anteriores fallan: buscar en a-offscreen pero filtrar basura
-        if (!price) {
-            const offscreenPrices = [...html.matchAll(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)</gi)]
-                .map(m => m[1].trim())
-                .filter(txt => {
-                    const val = toNumber(txt);
-                    const text = txt.toLowerCase();
-                    // Filtrar ahorro, envío, cupones pequeños, etc.
-                    return val > 15 && // precios reales suelen ser >15€
-                        !text.includes('ahorro') &&
-                        !text.includes('cupón') &&
-                        !text.includes('descuento') &&
-                        !text.includes('envío') &&
-                        !text.includes('gastos de envío') &&
-                        !text.includes('prime') &&
-                        !text.includes('suscríbete y ahorra');
-                });
+    if (!price) {
+        const offscreenPrices = [...html.matchAll(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)</gi)]
+            .map(m => m[1].trim())
+            .filter(txt => {
+                const val = toNumber(txt);
+                const text = txt.toLowerCase();
+                // NUEVO: solo aceptar si contiene € (euro)
+                return txt.includes('€') &&
+                    val > 15 &&
+                    !text.includes('ahorro') &&
+                    !text.includes('cupón') &&
+                    !text.includes('descuento') &&
+                    !text.includes('envío') &&
+                    !text.includes('gastos de envío') &&
+                    !text.includes('prime') &&
+                    !text.includes('suscríbete y ahorra');
+            });
 
-            if (offscreenPrices.length > 0) {
-                // Coger el más bajo de los que pasan el filtro (suele ser el real)
-                const validNums = offscreenPrices.map(toNumber).filter(n => n > 0);
-                const lowest = Math.min(...validNums);
-                const txt = offscreenPrices.find(t => toNumber(t) === lowest);
-                if (lowest > 15) {
-                    price = txt;
-                    console.log("Precio detectado (a-offscreen filtrado):", price);
-                }
+        if (offscreenPrices.length > 0) {
+            // Ordenar por valor numérico y coger el menor
+            const sorted = offscreenPrices.sort((a, b) => toNumber(a) - toNumber(b));
+            const lowestTxt = sorted[0];
+            const lowestVal = toNumber(lowestTxt);
+            if (lowestVal > 15) {
+                price = lowestTxt;
             }
         }
+    }
 
-        // Formatear bonito → formato español correcto: 85,69 €
-        if (price) {
-            // Quitar espacios y símbolos temporales
-            let cleaned = price.replace(/\s+/g, '').trim();
+    // Formatear precio bonito (español)
+    if (price) {
+        let cleaned = price.replace(/\s+/g, '').trim();
+        cleaned = cleaned.replace(/\.(?=\d{3})/g, '');
+        cleaned = cleaned.replace('.', ',');
 
-            // Quitar puntos de miles
-            cleaned = cleaned.replace(/\.(?=\d{3})/g, '');
+        const hasEuroAtStart = cleaned.startsWith('€');
+        const hasEuroAtEnd = cleaned.endsWith('€');
 
-            // Asegurar que la coma sea decimal
-            cleaned = cleaned.replace('.', ',');
-
-            // Extraer número y símbolo
-            const hasEuroAtStart = cleaned.startsWith('€');
-            const hasEuroAtEnd = cleaned.endsWith('€');
-
-            if (hasEuroAtStart) {
-                // Caso: €85,69 → 85,69 €
-                cleaned = cleaned.replace(/^€/, '') + ' €';
-            } else if (hasEuroAtEnd) {
-                // Caso: 85,69€ → 85,69 €
-                cleaned = cleaned.replace(/€$/, ' €');
-            } else if (!cleaned.includes('€')) {
-                // Caso: 85,69 → 85,69 €
-                cleaned = cleaned + ' €';
-            } else {
-                // Caso raro: €85,69€ → 85,69 €
-                cleaned = cleaned.replace(/€/g, '') + ' €';
-            }
-
-            price = cleaned.trim();
+        if (hasEuroAtStart) {
+            cleaned = cleaned.replace(/^€/, '') + ' €';
+        } else if (hasEuroAtEnd) {
+            cleaned = cleaned.replace(/€$/, ' €');
+        } else if (!cleaned.includes('€')) {
+            cleaned = cleaned + ' €';
+        } else {
+            cleaned = cleaned.replace(/€/g, '') + ' €';
         }
 
-        console.log("Título final →", realTitle.slice(0, 80) + (realTitle.length > 80 ? '...' : ''));
-        console.log("Precio FINAL →", price || "No detectado");
+        price = cleaned.trim();
+    }
 
-        // ==================== GUARDAR ====================
-        if (realTitle.length > 5 || price) {
-            const updatedHistory = getHistory().map(h =>
-                h.asin === entry.asin && h.domain === entry.domain
-                    ? {
-                        ...h,
-                        productTitle: realTitle.length > 5 ? realTitle.slice(0, 120) : h.productTitle,
-                        price: price || h.price,
-                    }
-                    : h
-            );
+    // ==================== ACTUALIZAR HISTORIAL ====================
+    const now = new Date().toISOString();
+    const history = getHistory();
 
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+    const updatedHistory = history.map(h => {
+        if (h.asin === entry.asin && h.domain === entry.domain) {
+            let newPrices = [...(h.prices || [])];
 
-            window.dispatchEvent(new Event('amazon-history-updated'));
-
-            if (realTitle.length > 5) {
-                const cache = getTitleCache();
-                cache[entry.asin] = realTitle.slice(0, 120);
-                saveTitleCache(cache);
+            // Si encontramos precio y es diferente al último conocido
+            if (price && (!newPrices.length || newPrices[newPrices.length - 1].price !== price)) {
+                newPrices.push({ timestamp: now, price });
             }
+
+            return {
+                ...h,
+                price: price || h.price, // Último precio
+                originalPrice: h.originalPrice || price, // Fijamos el original la primera vez
+                prices: newPrices,
+                lastUpdate: now, // Siempre actualizamos esta fecha (incluso si no hay precio nuevo)
+            };
         }
+        return h;
+    });
 
-        let recommended = [];
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+    window.dispatchEvent(new Event('amazon-history-updated'));
 
-        // 1. Carrusel "Productos patrocinados" (el más fiable y siempre tiene ASIN)
-        const sponsored = html.matchAll(/data-asin=["']([A-Z0-9]{10})["'].*?title=["']([^"']{10,200})[^"']*["']/gi);
-        for (const m of sponsored) {
+    // Guardar título en caché
+    if (realTitle.length > 5) {
+        const cache = getTitleCache();
+        cache[entry.asin] = realTitle.slice(0, 120);
+        saveTitleCache(cache);
+    }
+
+    // ==================== RECOMENDACIONES ====================
+    let recommended = [];
+
+    const sponsored = html.matchAll(/data-asin=["']([A-Z0-9]{10})["'].*?title=["']([^"']{10,200})[^"']*["']/gi);
+    for (const m of sponsored) {
+        const asin = m[1];
+        const titleRaw = m[2].replace(/&quot;|&#039;|\s+/g, ' ').trim();
+        if (asin && titleRaw && !recommended.some(r => r.asin === asin)) {
+            recommended.push({ asin, title: titleRaw.slice(0, 100) });
+        }
+    }
+
+    if (recommended.length < 3) {
+        const related = html.matchAll(/\/dp\/([A-Z0-9]{10}).*?alt=["']([^"']{10,200})[^"']*["']/gi);
+        for (const m of related) {
             const asin = m[1];
             const titleRaw = m[2].replace(/&quot;|&#039;|\s+/g, ' ').trim();
-            if (asin && titleRaw && !recommended.some(r => r.asin === asin)) {
+            if (asin && titleRaw && asin !== entry.asin && !recommended.some(r => r.asin === asin)) {
                 recommended.push({ asin, title: titleRaw.slice(0, 100) });
+                if (recommended.length >= 6) break;
             }
         }
+    }
 
-        // 2. Backup: "Los clientes también compraron" / "Productos relacionados"
-        if (recommended.length < 3) {
-            const related = html.matchAll(/\/dp\/([A-Z0-9]{10}).*?alt=["']([^"']{10,200})[^"']*["']/gi);
-            for (const m of related) {
-                const asin = m[1];
-                const titleRaw = m[2].replace(/&quot;|&#039;|\s+/g, ' ').trim();
-                if (asin && titleRaw && asin !== entry.asin && !recommended.some(r => r.asin === asin)) {
-                    recommended.push({ asin, title: titleRaw.slice(0, 100) });
-                    if (recommended.length >= 6) break;
-                }
-            }
-        }
-
-        // Guardar recomendaciones en la entrada
-        if (recommended.length > 0) {
-            const updatedHistory = getHistory().map(h =>
-                h.asin === entry.asin && h.domain === entry.domain
-                    ? { ...h, recommended: recommended.slice(0, 8) }
-                    : h
-            );
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
-            window.dispatchEvent(new Event('amazon-history-updated'));
-        }
-    };
-
-    // Ejecutar en segundo plano
-    setTimeout(fetchRealData, 500);
+    if (recommended.length > 0) {
+        const finalHistory = getHistory().map(h =>
+            h.asin === entry.asin && h.domain === entry.domain
+                ? { ...h, recommended: recommended.slice(0, 8) }
+                : h
+        );
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(finalHistory));
+        window.dispatchEvent(new Event('amazon-history-updated'));
+    }
 };
 
 export const removeFromHistory = (id) => {
@@ -308,6 +314,16 @@ export const importHistory = (file, callback) => {
                         timestamp: item.timestamp || new Date().toISOString(),
                         productTitle: item.productTitle || `Producto ${item.asin || "sin ASIN"}`,
                         price: item.price || null,
+                        // === NUEVOS CAMPOS: compatibilidad hacia atrás ===
+                        originalPrice: item.originalPrice || item.price || null,
+                        prices: Array.isArray(item.prices) ? item.prices : (
+                            item.price ? [{ timestamp: item.timestamp || new Date().toISOString(), price: item.price }] : []
+                        ),
+                        lastUpdate: item.lastUpdate || (item.price ? item.timestamp || new Date().toISOString() : null),
+                        domain: item.domain || "amazon.es",
+                        affiliateUrl: item.affiliateUrl || "",
+                        originalUrl: item.originalUrl || item.affiliateUrl || "",
+                        asin: item.asin || "UNKNOWN",
                     }));
                 }
             }
@@ -388,10 +404,26 @@ export const importHistory = (file, callback) => {
                         })(),
                         productTitle: (titulo || `Producto ${asin}`).slice(0, 120),
                         price: precio && precio.trim() ? precio.trim() : null,
-                        domain: dominio || "amazon",
+                        originalPrice: precio && precio.trim() ? precio.trim() : null,  // ← Nuevo: fijamos original como el del CSV
+                        prices: precio && precio.trim()
+                            ? [{
+                                timestamp: (() => {
+                                    const parsed = parseSpanishDate(fechaStr);
+                                    return parsed ? parsed.toISOString() : new Date().toISOString();
+                                })(),
+                                price: precio.trim()
+                            }]
+                            : [],  // ← Nuevo: reconstruimos historial básico
+                        lastUpdate: precio && precio.trim()
+                            ? (() => {
+                                const parsed = parseSpanishDate(fechaStr);
+                                return parsed ? parsed.toISOString() : new Date().toISOString();
+                            })()
+                            : null,  // ← Nuevo: simulamos que ya se actualizó en esa fecha
+                        domain: dominio || "amazon.es",
                         affiliateUrl: urlAfiliado || "",
-                        asin: asin || "UNKNOWN",
                         originalUrl: urlAfiliado || "",
+                        asin: asin || "UNKNOWN",
                     };
 
                     imported.push(item);
@@ -417,24 +449,37 @@ export const importHistory = (file, callback) => {
                 const key = `${newItem.asin}-${newItem.domain}`;
 
                 if (historyMap.has(key)) {
-                    // Ya existe → actualizamos solo si el importado tiene fecha más reciente
                     const existingIndex = mergedHistory.findIndex(h => `${h.asin}-${h.domain}` === key);
                     const existing = mergedHistory[existingIndex];
-                    if (new Date(newItem.timestamp) > new Date(existing.timestamp)) {
+
+                    // Comparar timestamps: usar el más reciente como base
+                    const existingTime = new Date(existing.timestamp).getTime();
+                    const newTime = new Date(newItem.timestamp).getTime();
+
+                    if (newTime > existingTime) {
+                        // El importado es más nuevo → sobrescribir, pero mantener datos avanzados del existente
                         mergedHistory[existingIndex] = {
-                            ...existing,
-                            ...newItem,
-                            id: existing.id // Mantenemos ID original
+                            ...existing,              // Mantenemos originalPrice, prices, lastUpdate, etc.
+                            ...newItem,               // Actualizamos título, precio básico, timestamp
+                            timestamp: newItem.timestamp,  // Prioridad al más nuevo
+                            id: existing.id
                         };
+                    } else {
+                        // El existente es más nuevo o igual → NO sobrescribir nada
+                        // Simplemente ignoramos el duplicado
                     }
                 } else {
-                    // Nuevo → lo guardamos en orden de aparición en el archivo
+                    // Nuevo producto → añadir al principio
                     newItemsToAdd.push({
                         ...newItem,
-                        id: Date.now() + Math.random()
+                        id: Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+                        // Inicializamos campos nuevos si no vienen
+                        originalPrice: newItem.originalPrice || newItem.price || null,
+                        prices: newItem.prices || (newItem.price ? [{ timestamp: newItem.timestamp, price: newItem.price }] : []),
+                        lastUpdate: newItem.lastUpdate || newItem.timestamp,
                     });
                     addedCount++;
-                    historyMap.set(key, newItem); // Lo añadimos al mapa para evitar futuros duplicados
+                    historyMap.set(key, newItem);
                 }
             });
 

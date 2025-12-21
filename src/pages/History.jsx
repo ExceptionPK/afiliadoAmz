@@ -22,6 +22,7 @@ import {
     removeFromHistory,
     clearHistory,
     importHistory,
+    fetchRealData
 } from "../utils/storage";
 
 const HistoryItem = ({
@@ -401,25 +402,59 @@ const HistoryItem = ({
                                 }}
                                 onBlur={savePrice}
                                 onKeyDown={handlePriceKeyDown}
-                                className="w-20 px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-400 contenedorCosas focus:outline-none focus:ring-0.5 focus:ring-emerald-500 transition"
-                                placeholder=""
+                                className="w-24 px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-400 contenedorCosas focus:outline-none focus:ring-0.5 focus:ring-emerald-500 transition"
+                                placeholder="0,00"
                                 style={{ animation: 'fadeInScale 0.15s ease-out forwards' }}
                             />
                         ) : (
-                            <button
-                                onClick={startEditingPrice}
-                                className="inline-flex items-center justify-center min-w-[20px] text-xs font-bold text-emerald-500 contenedorCosas transition cursor-pointer whitespace-nowrap"
-                                title="Clic para editar precio"
-                            >
-                                {propItem.price ? (
-                                    <>
-                                        {propItem.price.replace(' €', '').replace(/\B(?=(\d{3})+(?!\d))/g, '.')}
-                                        <span className="text-emerald-500 ml-0.5">€</span>
-                                    </>
-                                ) : (
-                                    "Sin precio"
-                                )}
-                            </button>
+                            <span className="flex flex-col">  {/* ← CAMBIO: span en lugar de div */}
+                                <button
+                                    onClick={startEditingPrice}
+                                    className="text-left text-xs font-bold text-emerald-600 contenedorCosas transition hover:text-emerald-700 cursor-pointer whitespace-nowrap"
+                                    title="Editar precio"
+                                >
+                                    {propItem.originalPrice && propItem.price && propItem.originalPrice !== propItem.price ? (
+                                        <>
+                                            <span className="text-slate-500 line-through mr-1">
+                                                {propItem.originalPrice}
+                                            </span>
+                                            {/* Comparación inteligente: verde si baja, rojo si sube */}
+                                            {(() => {
+                                                const originalNum = parseFloat(propItem.originalPrice.replace(/[^0-9,.]/g, '').replace(',', '.'));
+                                                const currentNum = parseFloat(propItem.price.replace(/[^0-9,.]/g, '').replace(',', '.'));
+
+                                                const isLower = currentNum < originalNum;
+                                                const isHigher = currentNum > originalNum;
+
+                                                if (isLower) {
+                                                    return (
+                                                        <span className="text-emerald-600 font-bold">
+                                                            {propItem.price}
+                                                            <span className="text-xs text-emerald-500 ml-1">↓</span>
+                                                        </span>
+                                                    );
+                                                } else if (isHigher) {
+                                                    return (
+                                                        <span className="text-red-600 font-bold">
+                                                            {propItem.price}
+                                                            <span className="text-xs text-red-500 ml-1">↑</span>
+                                                        </span>
+                                                    );
+                                                }
+                                                // Si son iguales (raro), mostrar normal
+                                                return <span className="text-emerald-600 font-bold">{propItem.price}</span>;
+                                            })()}
+                                        </>
+                                    ) : propItem.price ? (
+                                        // Caso normal: hay precio pero NO hay originalPrice → verde como siempre
+                                        <span className="text-emerald-600 font-bold">
+                                            {propItem.price}
+                                        </span>
+                                    ) : (
+                                        <span className="text-slate-400 italic">Sin precio</span>
+                                    )}
+                                </button>
+                            </span>
                         )}
                     </p>
                 </div>
@@ -563,7 +598,7 @@ const HistoryItem = ({
                                                         } ${idx !== 0 ? "border-t border-slate-100" : ""}`}
                                                 >
                                                     <span className="block truncate">{msg}</span>
-                                                    
+
                                                 </button>
                                             ))}
                                         </div>
@@ -645,6 +680,7 @@ export default function HistoryPage() {
     const isInitialLoad = useRef(true);
     const [isLoading, setIsLoading] = useState(true);
     const [animatedItems, setAnimatedItems] = useState(new Set());
+    const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -664,27 +700,80 @@ export default function HistoryPage() {
 
         loadHistory();
 
-        // Escuchar cambios en localStorage (incluso desde otras pestañas o background)
+        // Solo recargamos cuando cambie el storage desde OTRA pestaña
         const handleStorageChange = (e) => {
-            if (e.key === STORAGE_KEY || e.key === null) {  // null = cualquier cambio
+            if (e.key === STORAGE_KEY || e.key === null) {
                 loadHistory();
             }
         };
 
-        // También escuchar nuestro propio evento personalizado (más rápido)
-        const handleCustomUpdate = () => {
+        // Para cambios locales (nuestra propia pestaña), solo actualizamos el estado directamente
+        const handleLocalUpdate = () => {
             loadHistory();
         };
 
         window.addEventListener('storage', handleStorageChange);
-        window.addEventListener('amazon-history-updated', handleCustomUpdate);
+        window.addEventListener('amazon-history-updated', handleLocalUpdate);
 
-        // Limpieza
+        // === ACTUALIZACIÓN DE PRECIOS EN BACKGROUND ===
+        const updatePricesIfNeeded = async () => {
+            const data = getHistory();
+            const twelveHoursInMs = 12 * 60 * 60 * 1000;
+            const now = Date.now();
+
+            const itemsToUpdate = data.filter(item => {
+                const lastUpdateTime = item.lastUpdate ? new Date(item.lastUpdate).getTime() : 0;
+                return !item.lastUpdate || now - lastUpdateTime > twelveHoursInMs;
+            });
+
+            if (itemsToUpdate.length === 0) return;
+
+            setIsUpdatingPrices(true);
+
+            // Toast inicial con progreso
+            toast.loading(`Actualizando ${itemsToUpdate.length} precio${itemsToUpdate.length > 1 ? 's' : ''}... (0/${itemsToUpdate.length})`, {
+                id: "updating-prices-toast",
+                duration: Infinity,
+            });
+
+            let updatedCount = 0;
+
+            for (const item of itemsToUpdate) {
+                await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5s entre requests
+
+                try {
+                    await fetchRealData(item);
+                    updatedCount++;
+
+                    // Actualizamos el progreso en el mismo toast
+                    toast.loading(
+                        `Actualizando ${itemsToUpdate.length} precio${itemsToUpdate.length > 1 ? 's' : ''}... (${updatedCount}/${itemsToUpdate.length})`,
+                        { id: "updating-prices-toast", duration: Infinity }
+                    );
+                } catch (err) {
+                    console.warn(`Error actualizando ASIN ${item.asin}:`, err);
+                    updatedCount++;
+                    toast.loading(
+                        `Actualizando... (${updatedCount}/${itemsToUpdate.length})`,
+                        { id: "updating-prices-toast", duration: Infinity }
+                    );
+                }
+            }
+
+            // === SOLO CERRAMOS EL TOAST, SIN MENSAJE DE ÉXITO ===
+            toast.dismiss("updating-prices-toast");
+
+            setIsUpdatingPrices(false);
+            loadHistory(); // recargamos el historial para reflejar cambios
+        };
+
+        updatePricesIfNeeded();
+
         return () => {
             window.removeEventListener('storage', handleStorageChange);
-            window.removeEventListener('amazon-history-updated', handleCustomUpdate);
+            window.removeEventListener('amazon-history-updated', handleLocalUpdate);
         };
-    }, []);
+    }, []); // ← Mantiene [] porque solo se ejecuta una vez al montar
 
     useEffect(() => {
         if (showConfirmModal) {
