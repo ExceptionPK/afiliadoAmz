@@ -65,49 +65,68 @@ export const addToHistory = (entry) => {
 // FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS
 export const fetchRealData = async (entry) => {
     const proxies = [
-        'https://corsproxy.io/?',                  // Primero: más estable ahora
-        'https://api.codetabs.com/v1/proxy?quest=', // Segundo: muy fiable
-        'https://api.allorigins.win/raw?url=',     // Tercero: si sigue vivo
-        'https://cors.lol/',                       // Cuarto: por si acaso
+        'https://corsproxy.io/?',
+        'https://test.cors.workers.dev/?',
+        'https://api.codetabs.com/v1/proxy?quest=',
+        'https://proxy.cors.sh/',
+        'https://cors.lol/',
+        'https://cors.x2u.in/',
+        'https://api.allorigins.win/raw?url=',
+        'https://www.thebugging.com/apis/cors-proxy/?url=',
     ];
 
+    // Randomizamos el orden para distribuir la carga y evitar bloqueos rápidos
+    const shuffledProxies = [...proxies].sort(() => 0.5 - Math.random());
+
     let html = null;
-    for (const proxy of proxies) {
+
+    for (const proxy of shuffledProxies) {
         try {
             let proxyUrl = proxy + encodeURIComponent(entry.originalUrl);
 
-            // Especial para codetabs (no necesita encode completo)
-            if (proxy.includes('codetabs')) {
-                proxyUrl = proxy + entry.originalUrl;
-            }
-
-            // Especial para cors.lol (solo añade al final)
-            if (proxy.includes('cors.lol')) {
-                proxyUrl = proxy + entry.originalUrl.replace(/^https?:\/\//, '');
-            }
-
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 14000);
+            const timeoutId = setTimeout(() => controller.abort(), 14000); // 14 segundos máximo
 
             const res = await fetch(proxyUrl, {
                 signal: controller.signal,
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
-                }
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36', // Ayuda a pasar algunos filtros
+                },
             });
 
             clearTimeout(timeoutId);
+
             if (!res.ok) continue;
 
             html = await res.text();
 
-            if (html && html.length > 2000 && /amazon/i.test(html)) break;
+            // Filtramos si es página de bloqueo de Amazon
+            if (
+                html.includes('Captcha') ||
+                html.includes('sorry') ||
+                html.includes('robot') ||
+                html.includes('unusual traffic') ||
+                html.includes('api-services-support@amazon.com') ||
+                html.length < 5000 // Demasiado corto → probablemente bloqueo o error
+            ) {
+                console.warn(`Proxy ${proxy} devolvió página bloqueada o inválida`);
+                continue;
+            }
+
+            // Si llegamos aquí y tiene contenido de Amazon, salimos del loop
+            if (html && html.length > 2000 && /amazon/i.test(html)) {
+                break;
+            }
         } catch (e) {
-            console.warn(`Proxy falló: ${proxy}`, e);
+            console.warn(`Proxy falló: ${proxy}`, e.message);
         }
     }
 
-    if (!html) return;
+    if (!html) {
+        console.warn('Todos los proxies fallaron para:', entry.originalUrl);
+        return; // No hay datos → salimos
+    }
 
     // ==================== TÍTULO LIMPIO ====================
     let realTitle = entry.productTitle;
@@ -123,9 +142,9 @@ export const fetchRealData = async (entry) => {
 
     // ==================== PRECIO REAL ====================
     let price = null;
-
     const toNumber = (str) => parseFloat(String(str).replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
 
+    // Intento 1: Selectores clásicos
     const symbol = html.match(/class=["']a-price-symbol["'][^>]*>([^<]*)</i)?.[1]?.trim() || '€';
     const whole = html.match(/class=["']a-price-whole["'][^>]*>([^<]*)</i)?.[1]?.replace(/\.\s*/g, '') || '';
     const fraction = (html.match(/class=["']a-price-fraction["'][^>]*>([^<]*)</i)?.[1] || '00').padEnd(2, '0').slice(0, 2);
@@ -134,6 +153,7 @@ export const fetchRealData = async (entry) => {
         price = `${symbol}${whole},${fraction}`;
     }
 
+    // Intento 2: JSON embebido (muy fiable cuando existe)
     if (!price) {
         const jsonMatch = html.match(/"priceAmount"\s*:\s*"([^"]+)"|"(?:displayPrice|landingPrice|priceToPay)Amount"\s*:\s*"([^"]+)"/i);
         if (jsonMatch) {
@@ -144,14 +164,15 @@ export const fetchRealData = async (entry) => {
         }
     }
 
+    // Intento 3: Offscreen prices (último recurso)
     if (!price) {
         const offscreenPrices = [...html.matchAll(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)</gi)]
             .map(m => m[1].trim())
             .filter(txt => {
                 const val = toNumber(txt);
                 const text = txt.toLowerCase();
-                // NUEVO: solo aceptar si contiene € (euro)
-                return txt.includes('€') &&
+                return (
+                    txt.includes('€') &&
                     val > 15 &&
                     !text.includes('ahorro') &&
                     !text.includes('cupón') &&
@@ -159,11 +180,11 @@ export const fetchRealData = async (entry) => {
                     !text.includes('envío') &&
                     !text.includes('gastos de envío') &&
                     !text.includes('prime') &&
-                    !text.includes('suscríbete y ahorra');
+                    !text.includes('suscríbete y ahorra')
+                );
             });
 
         if (offscreenPrices.length > 0) {
-            // Ordenar por valor numérico y coger el menor
             const sorted = offscreenPrices.sort((a, b) => toNumber(a) - toNumber(b));
             const lowestTxt = sorted[0];
             const lowestVal = toNumber(lowestTxt);
@@ -173,29 +194,38 @@ export const fetchRealData = async (entry) => {
         }
     }
 
-    // Formatear precio bonito (español)
+    // Formateo bonito del precio (español)
     if (price) {
-        let cleaned = price.replace(/\s+/g, '').trim();
-        cleaned = cleaned.replace(/\.(?=\d{3})/g, '');
-        cleaned = cleaned.replace('.', ',');
+        // 1. Extraer solo los números y símbolos decimales (, o .)
+        let numericPart = price
+            .replace(/[^0-9,.]/g, '')  // Quita TODOS los símbolos de moneda, letras, etc.
+            .trim();
 
-        const hasEuroAtStart = cleaned.startsWith('€');
-        const hasEuroAtEnd = cleaned.endsWith('€');
-
-        if (hasEuroAtStart) {
-            cleaned = cleaned.replace(/^€/, '') + ' €';
-        } else if (hasEuroAtEnd) {
-            cleaned = cleaned.replace(/€$/, ' €');
-        } else if (!cleaned.includes('€')) {
-            cleaned = cleaned + ' €';
-        } else {
-            cleaned = cleaned.replace(/€/g, '') + ' €';
+        // 2. Normalizar decimales: convertir punto a coma si hay coma ya presente (evitar 1.234,56)
+        if (numericPart.includes(',') && numericPart.includes('.')) {
+            // Probablemente usa punto como separador de miles → quitarlo
+            numericPart = numericPart.replace(/\./g, '');
+        } else if (numericPart.includes('.')) {
+            // Solo punto → asumir que es decimal
+            numericPart = numericPart.replace('.', ',');
         }
 
-        price = cleaned.trim();
+        // 3. Si está vacío después de limpiar → invalidamos el precio
+        if (!numericPart || parseFloat(numericPart.replace(',', '.')) < 1) {
+            price = null;
+        } else {
+            // 4. Formatear número con separadores de miles españoles (opcional, bonito)
+            const [whole, decimal = ''] = numericPart.split(',');
+            const formattedWhole = parseInt(whole || '0').toLocaleString('es-ES');
+            const formattedDecimal = decimal.padEnd(2, '0').slice(0, 2);
+
+            price = `${formattedWhole},${formattedDecimal} €`;
+        }
+    } else {
+        price = null;
     }
 
-    // ==================== ACTUALIZAR HISTORIAL ====================
+    // ==================== ACTUALIZAR HISTORIAL (precio y título) ====================
     const now = new Date().toISOString();
     const history = getHistory();
 
@@ -203,17 +233,27 @@ export const fetchRealData = async (entry) => {
         if (h.asin === entry.asin && h.domain === entry.domain) {
             let newPrices = [...(h.prices || [])];
 
-            // Si encontramos precio y es diferente al último conocido
             if (price && (!newPrices.length || newPrices[newPrices.length - 1].price !== price)) {
                 newPrices.push({ timestamp: now, price });
             }
 
+            let finalTitle = h.productTitle;
+
+            const isDefaultTitle = h.productTitle.startsWith("Producto ") || h.productTitle.length < 10;
+            const isGoodNewTitle = realTitle && realTitle.length > 10 && realTitle.length <= 120;
+
+            if (isDefaultTitle && isGoodNewTitle) {
+                finalTitle = realTitle;
+            }
+            // Si no, mantenemos el título actual (ya sea editado por usuario o bueno desde el principio)
+
             return {
                 ...h,
-                price: price || h.price, // Último precio
-                originalPrice: h.originalPrice || price, // Fijamos el original la primera vez
+                productTitle: finalTitle,
+                price: price || h.price,
+                originalPrice: h.originalPrice || price,
                 prices: newPrices,
-                lastUpdate: now, // Siempre actualizamos esta fecha (incluso si no hay precio nuevo)
+                lastUpdate: now,
             };
         }
         return h;
@@ -232,15 +272,17 @@ export const fetchRealData = async (entry) => {
     // ==================== RECOMENDACIONES ====================
     let recommended = [];
 
+    // Patrocinados / sponsored
     const sponsored = html.matchAll(/data-asin=["']([A-Z0-9]{10})["'].*?title=["']([^"']{10,200})[^"']*["']/gi);
     for (const m of sponsored) {
         const asin = m[1];
         const titleRaw = m[2].replace(/&quot;|&#039;|\s+/g, ' ').trim();
-        if (asin && titleRaw && !recommended.some(r => r.asin === asin)) {
+        if (asin && titleRaw && asin !== entry.asin && !recommended.some(r => r.asin === asin)) {
             recommended.push({ asin, title: titleRaw.slice(0, 100) });
         }
     }
 
+    // Productos relacionados (si no hay suficientes patrocinados)
     if (recommended.length < 3) {
         const related = html.matchAll(/\/dp\/([A-Z0-9]{10}).*?alt=["']([^"']{10,200})[^"']*["']/gi);
         for (const m of related) {
@@ -253,6 +295,7 @@ export const fetchRealData = async (entry) => {
         }
     }
 
+    // Guardamos recomendaciones si hay
     if (recommended.length > 0) {
         const finalHistory = getHistory().map(h =>
             h.asin === entry.asin && h.domain === entry.domain
@@ -524,4 +567,112 @@ export const importHistory = (file, callback) => {
 
     reader.onerror = () => callback(false);
     reader.readAsText(file, "UTF-8");
+};
+
+// === FUNCIÓN PARA ACTUALIZACIÓN MANUAL DE PRECIOS (CON DETECCIÓN DE PROXY MUERTO) ===
+// === FUNCIÓN PARA ACTUALIZACIÓN MANUAL DE PRECIOS (SOLO CUENTA ÉXITOS CON PRECIO NUEVO) ===
+export const updateOutdatedPricesManually = async () => {
+    const history = getHistory();
+    if (history.length === 0) {
+        return { status: "empty", message: "No hay productos en el historial" };
+    }
+
+    const twentyFourHours = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    const outdated = history.filter(item => {
+        const last = item.lastUpdate ? new Date(item.lastUpdate).getTime() : 0;
+        return now - last > twentyFourHours;
+    });
+
+    if (outdated.length === 0) {
+        return { status: "up_to_date", message: "Todos los precios están al día" };
+    }
+
+    const toUpdate = outdated.slice(0, 10);
+
+    let realSuccessCount = 0;        // ← Solo cuenta si realmente sacó/cambió precio
+    let attemptedCount = 0;          // ← Cuántos intentó (para feedback)
+    let consecutiveFailures = 0;
+    const MAX_CONSECUTIVE_FAILURES = 3;
+
+    for (const item of toUpdate) {
+        attemptedCount++;
+
+        // Pausa entre requests
+        if (attemptedCount > 1) {
+            await new Promise(resolve => setTimeout(resolve, 1800));
+        }
+
+        // Guardamos el precio ANTES de intentar actualizar
+        const previousPrice = item.price;
+
+        let hadNetworkError = false;
+
+        try {
+            await fetchRealData(item);
+            consecutiveFailures = 0; // Reset por intento exitoso (sin error de fetch)
+        } catch (err) {
+            console.warn(`Error actualizando ${item.asin}:`, err);
+
+            const isNetworkError =
+                err.name === 'TypeError' && err.message.includes('Failed to fetch') ||
+                err.message.includes('net::ERR') ||
+                err.message.includes('CORS') ||
+                err.name === 'AbortError';
+
+            if (isNetworkError) {
+                hadNetworkError = true;
+                consecutiveFailures++;
+            }
+
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                console.warn("Cancelando actualización: múltiples fallos de proxy/red consecutivos");
+                window.dispatchEvent(new Event('amazon-history-updated'));
+
+                return {
+                    status: "proxy_failed",
+                    updated: realSuccessCount,
+                    attempted: attemptedCount,
+                    message: "Actualización cancelada por problemas graves con los proxies"
+                };
+            }
+        }
+
+        // Después del intento, comprobamos si realmente hay un precio nuevo o cambiado
+        const currentHistory = getHistory();
+        const updatedItem = currentHistory.find(
+            h => h.asin === item.asin && h.domain === item.domain
+        );
+
+        if (updatedItem) {
+            const newPrice = updatedItem.price;
+
+            // Éxito real si:
+            // - Ahora tiene precio y antes no
+            // - O el precio cambió
+            if (
+                (newPrice && !previousPrice) ||
+                (newPrice && previousPrice && newPrice !== previousPrice)
+            ) {
+                realSuccessCount++;
+            }
+            // Si no hubo precio nuevo, no cuenta como éxito real
+        }
+    }
+
+    window.dispatchEvent(new Event('amazon-history-updated'));
+
+    return {
+        status: "completed",
+        updated: realSuccessCount,
+        attempted: attemptedCount,
+        total: toUpdate.length,
+        hadAnySuccess: realSuccessCount > 0,
+        message: realSuccessCount === 0
+            ? "No se obtuvo precio nuevo en ningún producto"
+            : realSuccessCount === toUpdate.length
+                ? "¡Todos los precios actualizados correctamente!"
+                : `Precios actualizados en ${realSuccessCount} de ${toUpdate.length} productos`
+    };
 };

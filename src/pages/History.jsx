@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { Send } from "lucide-react";
 
+
 import {
     Search,
     Copy,
@@ -16,13 +17,15 @@ import {
     Globe,
     Package,
     X,
+    RefreshCw
 } from "lucide-react";
 import {
     getHistory,
     removeFromHistory,
     clearHistory,
     importHistory,
-    fetchRealData
+    fetchRealData,
+    updateOutdatedPricesManually
 } from "../utils/storage";
 
 const HistoryItem = ({
@@ -40,6 +43,8 @@ const HistoryItem = ({
     const [localTitle, setLocalTitle] = useState(propItem.productTitle);
     const [editingPriceId, setEditingPriceId] = useState(null);
     const [editPrice, setEditPrice] = useState("");
+    const [editOriginalPrice, setEditOriginalPrice] = useState("");
+    const [editFocus, setEditFocus] = useState("current"); // 'original' o 'current'
     const priceInputRef = useRef(null);
     const inputRef = useRef(null);
     const [showShareModal, setShowShareModal] = useState(false);
@@ -264,6 +269,73 @@ const HistoryItem = ({
         setShowQuickDropdown(false);
     };
 
+    const formatPrice = (raw) => {
+        if (!raw || !raw.trim()) return null;
+
+        let cleaned = raw.trim().replace(' €', '').replace(/\s/g, '');
+
+        let decimalSeparator = ',';
+        let thousandsSeparator = '.';
+
+        // Detectar separadores
+        if (cleaned.includes('.') && cleaned.includes(',')) {
+            if (cleaned.lastIndexOf('.') > cleaned.lastIndexOf(',')) {
+                decimalSeparator = '.';
+                thousandsSeparator = ',';
+            } else {
+                decimalSeparator = ',';
+                thousandsSeparator = '.';
+            }
+        } else if (cleaned.includes('.')) {
+            const parts = cleaned.split('.');
+            const afterDot = parts[1] ? parts[1].length : 0;
+            if (afterDot === 1 || afterDot === 2) {
+                decimalSeparator = '.';
+                thousandsSeparator = null;
+            } else {
+                decimalSeparator = ',';
+                thousandsSeparator = '.';
+            }
+        } else if (cleaned.includes(',')) {
+            decimalSeparator = ',';
+            thousandsSeparator = null;
+        }
+        // Sin separadores → entero
+
+        // Quitar miles
+        if (thousandsSeparator) {
+            cleaned = cleaned.replace(new RegExp('\\' + thousandsSeparator, 'g'), '');
+        }
+
+        // Cambiar decimal a punto
+        if (decimalSeparator && decimalSeparator !== '.') {
+            cleaned = cleaned.replace(decimalSeparator, '.');
+        }
+
+        let num = parseFloat(cleaned);
+        if (isNaN(num)) return null;
+
+        // === FORMATEO MANUAL FORZADO (es-ES) ===
+        // Asegurar 2 decimales
+        let parts = num.toFixed(2).split('.');
+        let integerPart = parts[0];
+        let decimalPart = parts[1];
+
+        // Añadir puntos de miles a la parte entera
+        integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+        return integerPart + ',' + decimalPart + ' €';
+    };
+
+    const updatePriceField = (field, newValue) => {
+        const history = getHistory();
+        const updated = history.map(h =>
+            h.id === propItem.id ? { ...h, [field]: newValue || null } : h
+        );
+        localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
+        setHistory(updated);
+    };
+
     return (
         <div
             className={`
@@ -383,75 +455,200 @@ const HistoryItem = ({
                                 })}
                             </span>
                         </span>
-
                         <span className="text-slate-400">|</span>
 
+                        {/* === EDICIÓN DE PRECIOS: DOS INPUTS === */}
                         {editingPriceId === propItem.id ? (
-                            <input
-                                ref={priceInputRef}
-                                type="text"
-                                value={editPrice}
-                                onChange={(e) => {
-                                    let value = e.target.value;
-                                    value = value.replace(/[^0-9,.]/g, '');
-                                    value = value.replace(/[,.]/g, match => match === ',' ? ',' : ',');
-                                    value = value.replace(/,/g, (match, offset) =>
-                                        value.indexOf(',') === offset ? match : ''
-                                    );
-                                    setEditPrice(value);
+                            <div
+                                className="flex items-center gap-3"
+                                onBlur={(e) => {
+                                    if (!e.currentTarget.contains(e.relatedTarget)) {
+                                        // Guardar precio actual
+                                        const formattedCurrent = formatPrice(editPrice);
+                                        updatePriceField('price', formattedCurrent || null);
+
+                                        // Guardar precio original (independiente)
+                                        const formattedOriginal = formatPrice(editOriginalPrice);
+                                        updatePriceField('originalPrice', formattedOriginal || null);
+
+                                        setEditingPriceId(null);
+                                    }
                                 }}
-                                onBlur={savePrice}
-                                onKeyDown={handlePriceKeyDown}
-                                className="w-24 px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-400 contenedorCosas focus:outline-none focus:ring-0.5 focus:ring-emerald-500 transition"
-                                placeholder="0,00"
-                                style={{ animation: 'fadeInScale 0.15s ease-out forwards' }}
-                            />
+                            >
+                                {/* Precio Original */}
+                                <div className="flex items-center gap-1">
+                                    <span className="text-xs text-slate-500">Original:</span>
+                                    <input
+                                        type="text"
+                                        value={editOriginalPrice}
+                                        onChange={(e) => setEditOriginalPrice(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === '.') {
+                                                e.preventDefault();
+                                                const newValue = editOriginalPrice + ',';
+                                                setEditOriginalPrice(newValue);
+                                                setTimeout(() => {
+                                                    const input = e.target;
+                                                    input.selectionStart = newValue.length;
+                                                    input.selectionEnd = newValue.length;
+                                                }, 0);
+                                            }
+
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                const formatted = formatPrice(editOriginalPrice);
+                                                updatePriceField('originalPrice', formatted || null);
+                                                setEditingPriceId(null);
+                                            }
+
+                                            if (e.key === 'Escape') {
+                                                setEditingPriceId(null);
+                                            }
+                                        }}
+                                        onBlur={() => {
+                                            const formatted = formatPrice(editPrice);
+                                            if (formatted) {
+                                                setEditPrice(formatted);
+                                            } else {
+                                                setEditPrice("");
+                                            }
+                                        }}
+                                        onFocus={(e) => e.target.select()}
+                                        className="w-16 px-2 py-1 text-xs font-medium text-slate-700 bg-slate-50 border border-slate-300 contenedorCosas focus:outline-none focus:ring-1 focus:ring-violet-500"
+                                        placeholder="0,00 €"
+                                        autoFocus={editFocus === 'original'}
+                                    />
+                                </div>
+
+                                {/* Precio Actual */}
+                                <div className="flex items-center gap-1">
+                                    <span className="text-xs text-slate-500">Actual:</span>
+                                    <input
+                                        type="text"
+                                        value={editPrice}
+                                        onChange={(e) => setEditPrice(e.target.value)}
+                                        onKeyDown={(e) => {
+                                            if (e.key === '.') {
+                                                e.preventDefault();
+                                                const newValue = editPrice + ',';
+                                                setEditPrice(newValue);
+                                                setTimeout(() => {
+                                                    if (priceInputRef.current) {
+                                                        priceInputRef.current.selectionStart = newValue.length;
+                                                        priceInputRef.current.selectionEnd = newValue.length;
+                                                    }
+                                                }, 0);
+                                            }
+                                            if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                const formatted = formatPrice(editPrice);
+                                                updatePriceField('price', formatted || null); // null si vacío
+                                                setEditingPriceId(null);
+                                            }
+                                            if (e.key === 'Escape') {
+                                                setEditingPriceId(null);
+                                            }
+                                        }}
+                                        onBlur={() => {
+                                            const formatted = formatPrice(editPrice);
+                                            if (formatted) {
+                                                setEditPrice(formatted);
+                                            } else {
+                                                setEditPrice("");
+                                            }
+                                        }}
+                                        onFocus={(e) => e.target.select()}
+                                        className="w-16 px-2 py-1 text-xs font-bold bg-emerald-50 border border-emerald-400 contenedorCosas focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                                        placeholder="0,00 €"
+                                        autoFocus={editFocus === 'current'}
+                                        ref={priceInputRef}
+                                    />
+                                </div>
+                            </div>
                         ) : (
-                            <span className="flex flex-col">  {/* ← CAMBIO: span en lugar de div */}
-                                <button
-                                    onClick={startEditingPrice}
-                                    className="text-left text-xs font-bold text-emerald-600 contenedorCosas transition hover:text-emerald-700 cursor-pointer whitespace-nowrap"
-                                    title="Editar precio"
-                                >
-                                    {propItem.originalPrice && propItem.price && propItem.originalPrice !== propItem.price ? (
-                                        <>
-                                            <span className="text-slate-500 mr-1">
-                                                {propItem.originalPrice}
-                                            </span>
-                                            {(() => {
-                                                const originalNum = parseFloat(propItem.originalPrice.replace(/[^0-9,.]/g, '').replace(',', '.'));
-                                                const currentNum = parseFloat(propItem.price.replace(/[^0-9,.]/g, '').replace(',', '.'));
+                            <button
+                                onClick={(e) => {
+                                    e.stopPropagation();
 
-                                                const isLower = currentNum < originalNum;
-                                                const isHigher = currentNum > originalNum;
+                                    let cleanOriginal = propItem.originalPrice
+                                        ? propItem.originalPrice.replace(' €', '').trim()
+                                        : '';
+                                    let cleanCurrent = propItem.price
+                                        ? propItem.price.replace(' €', '').trim()
+                                        : '';
 
-                                                if (isLower) {
-                                                    return (
-                                                        <span className="text-emerald-600 font-bold">
-                                                            {propItem.price}
-                                                            <span className="text-xs text-emerald-500 ml-1">↓</span>
-                                                        </span>
-                                                    );
-                                                } else if (isHigher) {
-                                                    return (
-                                                        <span className="text-red-600 font-bold">
-                                                            {propItem.price}
-                                                            <span className="text-xs text-red-500 ml-1">↑</span>
-                                                        </span>
-                                                    );
-                                                }
-                                                return <span className="text-emerald-600 font-bold">{propItem.price}</span>;
-                                            })()}
-                                        </>
-                                    ) : propItem.price ? (
-                                        <span className="text-emerald-600 font-bold">
-                                            {propItem.price}
-                                        </span>
-                                    ) : (
-                                        <span className="text-slate-400 italic">Sin precio</span>
-                                    )}
-                                </button>
-                            </span>
+                                    if (propItem.originalPrice && propItem.price) {
+                                        const originalNum = parseFloat(propItem.originalPrice.replace(/[^0-9,]/g, '').replace(',', '.'));
+                                        const currentNum = parseFloat(propItem.price.replace(/[^0-9,]/g, '').replace(',', '.'));
+
+                                        if (originalNum === currentNum) {
+                                            cleanCurrent = '';
+                                        }
+                                    }
+
+                                    setEditOriginalPrice(cleanOriginal);
+                                    setEditPrice(cleanCurrent);
+                                    setEditFocus('current');
+                                    setEditingPriceId(propItem.id);
+                                }}
+                                className="text-left text-xs font-bold contenedorCosas transition hover:text-violet-700 cursor-pointer whitespace-nowrap"
+                                title="Editar precios"
+                            >
+
+                                {(() => {
+                                    const hasOriginal = !!propItem.originalPrice;
+                                    const hasCurrent = !!propItem.price;
+
+                                    if (!hasOriginal && !hasCurrent) {
+                                        return <span className="text-black italic">Sin precio</span>;
+                                    }
+
+                                    if (hasOriginal && hasCurrent) {
+                                        const originalNum = parseFloat(propItem.originalPrice.replace(/[^0-9,]/g, '').replace(',', '.'));
+                                        const currentNum = parseFloat(propItem.price.replace(/[^0-9,]/g, '').replace(',', '.'));
+
+                                        if (originalNum === currentNum) {
+                                            // Precios iguales → solo mostramos el original en negro
+                                            return <span className="text-black">{propItem.originalPrice}</span>;
+                                        }
+
+                                        const isLower = currentNum < originalNum;
+                                        const isHigher = currentNum > originalNum;
+
+                                        return (
+                                            <>
+                                                <span className="text-black mr-2">
+                                                    {propItem.originalPrice}
+                                                </span>
+                                                <span className={`
+                    font-bold
+                    ${isLower ? 'text-emerald-600' : isHigher ? 'text-red-600' : 'text-emerald-600'}
+                `}>
+                                                    {propItem.price}
+                                                    {isLower && <span className="text-xs text-emerald-500 ml-1">↓</span>}
+                                                    {isHigher && <span className="text-xs text-red-500 ml-1">↑</span>}
+                                                </span>
+                                            </>
+                                        );
+                                    }
+
+                                    if (hasCurrent) {
+                                        return (
+                                            <>
+                                                <span className="text-black italic mr-2">
+                                                    Sin precio
+                                                </span>
+                                                <span className="font-bold text-emerald-600">
+                                                    {propItem.price}
+                                                </span>
+                                            </>
+                                        );
+                                    }
+
+                                    // Solo precio original → solo el original en negro
+                                    return <span className="text-black">{propItem.originalPrice}</span>;
+                                })()}
+                            </button>
                         )}
                     </p>
                 </div>
@@ -725,65 +922,11 @@ export default function HistoryPage() {
         window.addEventListener('storage', handleStorageChange);
         window.addEventListener('amazon-history-updated', handleLocalUpdate);
 
-        // === ACTUALIZACIÓN DE PRECIOS EN BACKGROUND ===
-        const updatePricesIfNeeded = async () => {
-            const data = getHistory();
-            const twelveHoursInMs = 12 * 60 * 60 * 1000;
-            const now = Date.now();
-
-            const itemsToUpdate = data.filter(item => {
-                const lastUpdateTime = item.lastUpdate ? new Date(item.lastUpdate).getTime() : 0;
-                return !item.lastUpdate || now - lastUpdateTime > twelveHoursInMs;
-            });
-
-            if (itemsToUpdate.length === 0) return;
-
-            setIsUpdatingPrices(true);
-
-            // Toast inicial con progreso
-            toast.loading(`Actualizando ${itemsToUpdate.length} precio${itemsToUpdate.length > 1 ? 's' : ''}... (0/${itemsToUpdate.length})`, {
-                id: "updating-prices-toast",
-                duration: Infinity,
-            });
-
-            let updatedCount = 0;
-
-            for (const item of itemsToUpdate) {
-                await new Promise(resolve => setTimeout(resolve, 1500)); // 1.5s entre requests
-
-                try {
-                    await fetchRealData(item);
-                    updatedCount++;
-
-                    // Actualizamos el progreso en el mismo toast
-                    toast.loading(
-                        `Actualizando ${itemsToUpdate.length} precio${itemsToUpdate.length > 1 ? 's' : ''}... (${updatedCount}/${itemsToUpdate.length})`,
-                        { id: "updating-prices-toast", duration: Infinity }
-                    );
-                } catch (err) {
-                    console.warn(`Error actualizando ASIN ${item.asin}:`, err);
-                    updatedCount++;
-                    toast.loading(
-                        `Actualizando... (${updatedCount}/${itemsToUpdate.length})`,
-                        { id: "updating-prices-toast", duration: Infinity }
-                    );
-                }
-            }
-
-            // === SOLO CERRAMOS EL TOAST, SIN MENSAJE DE ÉXITO ===
-            toast.dismiss("updating-prices-toast");
-
-            setIsUpdatingPrices(false);
-            loadHistory(); // recargamos el historial para reflejar cambios
-        };
-
-        updatePricesIfNeeded();
-
         return () => {
             window.removeEventListener('storage', handleStorageChange);
             window.removeEventListener('amazon-history-updated', handleLocalUpdate);
         };
-    }, []); // ← Mantiene [] porque solo se ejecuta una vez al montar
+    }, []);
 
     useEffect(() => {
         if (showConfirmModal) {
@@ -1367,6 +1510,96 @@ export default function HistoryPage() {
                     </div>
                 </div>
             </div>
+            {(() => {
+                const [isMounted, setIsMounted] = useState(false);
+
+                useEffect(() => {
+                    // Pequeño retraso para forzar la animación incluso al navegar entre páginas
+                    const timer = setTimeout(() => setIsMounted(true), 100);
+                    return () => clearTimeout(timer);
+                }, []);
+
+                return (
+                    <div
+                        className={`
+                fixed bottom-6 right-6 z-40
+                transition-all duration-700 ease-out
+                ${isMounted && history.length > 0
+                                ? 'translate-y-0 opacity-100'
+                                : 'translate-y-12 opacity-0 pointer-events-none'
+                            }
+            `}
+                    >
+                        <button
+                            onClick={async () => {
+                                if (isUpdatingPrices || history.length === 0) return;
+                                setIsUpdatingPrices(true);
+
+                                let hasShownEarlyWarning = false;
+
+                                const earlyWarningTimer = setTimeout(() => {
+                                    toast.error("Problemas con proxies...", {
+                                        duration: 8000
+                                    });
+                                    hasShownEarlyWarning = true;
+                                }, 15000);
+
+                                const result = await updateOutdatedPricesManually();
+
+                                clearTimeout(earlyWarningTimer);
+
+                                if (result.status === "empty") {
+                                    toast.info("No hay enlaces en el historial");
+                                } else if (result.status === "up_to_date") {
+                                    toast.success("Todos los precios están al día");
+                                } else if (result.status === "proxy_failed") {
+                                    toast.error("Actualización cancelada: proxies no funcionan", { duration: 4000 });
+                                } else if (result.status === "completed") {
+                                    if (result.updated === 0) {
+                                        toast.warning(
+                                            hasShownEarlyWarning
+                                                ? "No se obtuvo ningún precio nuevo (problemas con proxies)"
+                                                : "Se intentó actualizar pero no se obtuvo ningún precio nuevo",
+                                            { duration: 4000 }
+                                        );
+                                    } else {
+                                        toast.success(
+                                            `¡Precios actualizados en ${result.updated} producto${result.updated > 1 ? 's' : ''}!`,
+                                            { duration: 4000 }
+                                        );
+                                    }
+                                }
+
+                                setIsUpdatingPrices(false);
+                                setHistory(getHistory());
+                            }}
+                            disabled={isUpdatingPrices || history.length === 0}
+                            className={`
+    w-14 h-14 rounded-full
+    bg-violet-600 text-white
+    shadow-lg flex items-center justify-center
+    transition-all duration-300
+    hover:bg-violet-700 hover:scale-110 active:scale-95
+    ${isUpdatingPrices
+                                    ? 'animate-pulse'
+                                    : 'shadow-violet-500/50 hover:shadow-xl hover:shadow-violet-600/60'
+                                }
+    ${history.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}
+`}
+                            title={history.length === 0
+                                ? "No hay productos para actualizar"
+                                : isUpdatingPrices
+                                    ? "Actualizando precios..."
+                                    : "Actualizar todos los precios"}
+                            aria-label="Actualizar precios"
+                        >
+                            <RefreshCw
+                                className={`w-6 h-6 ${isUpdatingPrices ? 'animate-spin' : ''}`}
+                            />
+                        </button>
+                    </div>
+                );
+            })()}
         </>
     );
 }

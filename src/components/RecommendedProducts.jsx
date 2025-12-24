@@ -64,7 +64,7 @@ const RecommendedProducts = ({
         const handler = () => check();
         window.addEventListener('amazon-history-updated', handler);
 
-        // Timeout de seguridad: 20 segundos
+        // Timeout de seguridad: 10 segundos
         timeoutId = setTimeout(() => {
             if (loading && recs.length === 0) {
                 setLoading(false);
