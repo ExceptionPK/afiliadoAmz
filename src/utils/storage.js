@@ -562,8 +562,6 @@ export const importHistory = (file, callback) => {
     reader.readAsText(file, "UTF-8");
 };
 
-
-
 // === FUNCIÓN PARA ACTUALIZACIÓN MANUAL DE PRECIOS (SOLO CUENTA ÉXITOS CON PRECIO NUEVO) ===
 export const updateOutdatedPricesManually = async () => {
     const history = getHistory();
@@ -585,27 +583,25 @@ export const updateOutdatedPricesManually = async () => {
 
     const toUpdate = outdated.slice(0, 10);
 
-    let realSuccessCount = 0;        // ← Solo cuenta si realmente sacó/cambió precio
-    let attemptedCount = 0;          // ← Cuántos intentó (para feedback)
+    let realSuccessCount = 0;
+    let attemptedCount = 0;
     let consecutiveFailures = 0;
     const MAX_CONSECUTIVE_FAILURES = 3;
 
     for (const item of toUpdate) {
         attemptedCount++;
 
-        // Pausa entre requests
         if (attemptedCount > 1) {
             await new Promise(resolve => setTimeout(resolve, 1800));
         }
 
-        // Guardamos el precio ANTES de intentar actualizar
         const previousPrice = item.price;
 
         let hadNetworkError = false;
 
         try {
             await fetchRealData(item);
-            consecutiveFailures = 0; // Reset por intento exitoso (sin error de fetch)
+            consecutiveFailures = 0;
         } catch (err) {
             console.warn(`Error actualizando ${item.asin}:`, err);
 
@@ -633,7 +629,6 @@ export const updateOutdatedPricesManually = async () => {
             }
         }
 
-        // Después del intento, comprobamos si realmente hay un precio nuevo o cambiado
         const currentHistory = getHistory();
         const updatedItem = currentHistory.find(
             h => h.asin === item.asin && h.domain === item.domain
@@ -642,16 +637,12 @@ export const updateOutdatedPricesManually = async () => {
         if (updatedItem) {
             const newPrice = updatedItem.price;
 
-            // Éxito real si:
-            // - Ahora tiene precio y antes no
-            // - O el precio cambió
             if (
                 (newPrice && !previousPrice) ||
                 (newPrice && previousPrice && newPrice !== previousPrice)
             ) {
                 realSuccessCount++;
             }
-            // Si no hubo precio nuevo, no cuenta como éxito real
         }
     }
 
@@ -669,4 +660,36 @@ export const updateOutdatedPricesManually = async () => {
                 ? "¡Todos los precios actualizados correctamente!"
                 : `Precios actualizados en ${realSuccessCount} de ${toUpdate.length} productos`
     };
+};
+
+const VISITED_KEY = 'amazon-visited-asins';
+
+// Devuelve un Set con los ASIN + domain visitados
+export const getVisited = () => {
+    try {
+        const data = localStorage.getItem(VISITED_KEY);
+        return data ? new Set(JSON.parse(data)) : new Set();
+    } catch {
+        return new Set();
+    }
+};
+
+export const markAsVisited = (asin, domain = 'amazon.es') => {
+    const key = `${asin}-${domain}`;
+    const visited = getVisited();
+    if (visited.has(key)) return;
+
+    visited.add(key);
+    try {
+        localStorage.setItem(VISITED_KEY, JSON.stringify(Array.from(visited)));
+    } catch (err) {
+        console.warn("Error guardando visitado", err);
+    }
+
+    window.dispatchEvent(new Event('amazon-history-updated'));
+};
+
+export const isVisited = (asin, domain = 'amazon.es') => {
+    const key = `${asin}-${domain}`;
+    return getVisited().has(key);
 };

@@ -24,7 +24,9 @@ import {
     clearHistory,
     importHistory,
     fetchRealData,
-    updateOutdatedPricesManually
+    updateOutdatedPricesManually,
+    markAsVisited,
+    isVisited
 } from "../utils/storage";
 
 const HistoryItem = ({
@@ -578,6 +580,7 @@ const HistoryItem = ({
                         href={propItem.affiliateUrl}
                         target="_blank"
                         rel="noopener noreferrer"
+                        onClick={() => { markAsVisited(propItem.asin, propItem.domain); }}
                         className="p-2 -mt-2 contenedorCosas hover:bg-slate-100 transition"
                         title="Abrir"
                     >
@@ -778,6 +781,18 @@ const HistoryItem = ({
                     </div>
                 </div>,
                 document.body
+            )}  
+
+            {/* === AQUÍ VA EL BADGE VISITADO === */}
+            {isVisited(propItem.asin, propItem.domain) && (
+                <div className="absolute bottom-3 right-3 z-10">
+                    <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-white bg-violet-500 contenedorCosas shadow-sm">
+                        <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                        Visitado
+                    </span>
+                </div>
             )}
         </div>
     );
