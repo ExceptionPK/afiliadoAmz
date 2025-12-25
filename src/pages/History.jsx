@@ -1025,7 +1025,7 @@ export default function HistoryPage() {
         setShowExportMenu(false);
     };
 
-    const performExport = () => {
+    const performExport = async () => {
         const data = getHistory();
         if (!data.length || !exportFormat) return;
 
@@ -1077,6 +1077,30 @@ export default function HistoryPage() {
             : `historial.${extension}`;
 
         const blob = new Blob([content], { type: mimeType + ";charset=utf-8" });
+
+        // Intentar usar la API moderna (solo Chrome/Edge)
+        if ("showSaveFilePicker" in window) {
+            try {
+                const handle = await window.showSaveFilePicker({
+                    suggestedName: filename,
+                    types: [{
+                        description: exportFormat.toUpperCase() + ' File',
+                        accept: { [mimeType]: [`.${exportFormat}`] },
+                    }],
+                });
+                const writable = await handle.createWritable();
+                await writable.write(blob);
+                await writable.close();
+                toast.success(`Guardado como ${filename}`);
+                setShowExportModal(false);
+                return;
+            } catch (err) {
+                if (err.name !== 'AbortError') {
+                    console.warn("File System Access API falló, usando descarga normal", err);
+                }
+            }
+        }
+
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;

@@ -329,18 +329,22 @@ export const exportHistory = () => {
     URL.revokeObjectURL(url);
 };
 
-// utils/storage.js → FUNCIÓN importHistory CORREGIDA (VERSIÓN FINAL)
+// utils/storage.js → FUNCIÓN importHistory MEJORADA CON NOMBRE DE ARCHIVO EN TOAST
 export const importHistory = (file, callback) => {
     const reader = new FileReader();
 
     reader.onload = (e) => {
         const content = e.target.result.trim();
 
+        // Obtenemos el nombre del archivo sin extensión para mostrarlo bonito
+        const fileName = file.name.replace(/\.(json|csv)$/i, '').trim();
+        const displayName = fileName || "archivo importado";
+
         try {
             let importedItems = [];
 
             // -------------------------------------------------
-            // 1. INTENTAR COMO JSON (sin cambios)
+            // 1. INTENTAR COMO JSON
             // -------------------------------------------------
             if (
                 file.type === "application/json" ||
@@ -357,7 +361,6 @@ export const importHistory = (file, callback) => {
                         timestamp: item.timestamp || new Date().toISOString(),
                         productTitle: item.productTitle || `Producto ${item.asin || "sin ASIN"}`,
                         price: item.price || null,
-                        // === NUEVOS CAMPOS: compatibilidad hacia atrás ===
                         originalPrice: item.originalPrice || item.price || null,
                         prices: Array.isArray(item.prices) ? item.prices : (
                             item.price ? [{ timestamp: item.timestamp || new Date().toISOString(), price: item.price }] : []
@@ -372,7 +375,7 @@ export const importHistory = (file, callback) => {
             }
 
             // -------------------------------------------------
-            // 2. CSV CON FECHAS ESPAÑOLAS + HORA (CORREGIDO)
+            // 2. CSV (mismo código que tenías)
             // -------------------------------------------------
             if (importedItems.length === 0) {
                 const lines = content.split(/\r\n|\n|\r/).map(l => l.trim()).filter(Boolean);
@@ -484,7 +487,7 @@ export const importHistory = (file, callback) => {
 
             if (importedItems.length === 0) throw new Error("No se encontraron enlaces válidos");
 
-            // ==================== MERGE INTELIGENTE CON ORDEN RESPETADO ====================
+            // ==================== MERGE INTELIGENTE ====================
             const currentHistory = getHistory();
             const historyMap = new Map();
             currentHistory.forEach(item => {
@@ -492,8 +495,8 @@ export const importHistory = (file, callback) => {
             });
 
             let addedCount = 0;
-            const mergedHistory = [...currentHistory]; // Copia del historial actual
-            const newItemsToAdd = []; // Acumulamos aquí los nuevos en orden original
+            const mergedHistory = [...currentHistory];
+            const newItemsToAdd = [];
 
             importedItems.forEach(newItem => {
                 const key = `${newItem.asin}-${newItem.domain}`;
@@ -502,28 +505,21 @@ export const importHistory = (file, callback) => {
                     const existingIndex = mergedHistory.findIndex(h => `${h.asin}-${h.domain}` === key);
                     const existing = mergedHistory[existingIndex];
 
-                    // Comparar timestamps: usar el más reciente como base
                     const existingTime = new Date(existing.timestamp).getTime();
                     const newTime = new Date(newItem.timestamp).getTime();
 
                     if (newTime > existingTime) {
-                        // El importado es más nuevo → sobrescribir, pero mantener datos avanzados del existente
                         mergedHistory[existingIndex] = {
-                            ...existing,              // Mantenemos originalPrice, prices, lastUpdate, etc.
-                            ...newItem,               // Actualizamos título, precio básico, timestamp
-                            timestamp: newItem.timestamp,  // Prioridad al más nuevo
+                            ...existing,
+                            ...newItem,
+                            timestamp: newItem.timestamp,
                             id: existing.id
                         };
-                    } else {
-                        // El existente es más nuevo o igual → NO sobrescribir nada
-                        // Simplemente ignoramos el duplicado
                     }
                 } else {
-                    // Nuevo producto → añadir al principio
                     newItemsToAdd.push({
                         ...newItem,
                         id: Date.now() + '-' + Math.random().toString(36).substring(2, 9),
-                        // Inicializamos campos nuevos si no vienen
                         originalPrice: newItem.originalPrice || newItem.price || null,
                         prices: newItem.prices || (newItem.price ? [{ timestamp: newItem.timestamp, price: newItem.price }] : []),
                         lastUpdate: newItem.lastUpdate || newItem.timestamp,
@@ -533,43 +529,41 @@ export const importHistory = (file, callback) => {
                 }
             });
 
-            // Añadimos todos los nuevos de golpe al principio → mantiene el orden del archivo
             if (newItemsToAdd.length > 0) {
                 mergedHistory.unshift(...newItemsToAdd);
             }
 
-            // Guardamos el resultado final
             localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedHistory));
 
-            // Feedback según el estado previo
+            // ==================== MENSAJES PERSONALIZADOS CON NOMBRE DEL ARCHIVO ====================
             let toastMessage;
             let useInfoToast = false;
 
             if (currentHistory.length === 0) {
-                toastMessage = "Historial importado";
+                toastMessage = `"${displayName}" se ha importado`;
             } else if (addedCount === 0) {
-                toastMessage = "No hay elementos nuevos";
+                toastMessage = `Nada nuevo en "${displayName}"`;
                 useInfoToast = true;
             } else {
-                toastMessage = `+${addedCount} elementos añadidos`;
+                toastMessage = `+${addedCount} añadidos de "${displayName}"`;
             }
 
             callback(true, toastMessage, useInfoToast);
 
-            // Notificamos a la UI
             window.dispatchEvent(new Event('amazon-history-updated'));
 
         } catch (err) {
             console.error("Error importando archivo:", err);
-            callback(false);
+            callback(false, "Error al leer el archivo");
         }
     };
 
-    reader.onerror = () => callback(false);
+    reader.onerror = () => callback(false, "Error leyendo el archivo");
     reader.readAsText(file, "UTF-8");
 };
 
-// === FUNCIÓN PARA ACTUALIZACIÓN MANUAL DE PRECIOS (CON DETECCIÓN DE PROXY MUERTO) ===
+
+
 // === FUNCIÓN PARA ACTUALIZACIÓN MANUAL DE PRECIOS (SOLO CUENTA ÉXITOS CON PRECIO NUEVO) ===
 export const updateOutdatedPricesManually = async () => {
     const history = getHistory();
