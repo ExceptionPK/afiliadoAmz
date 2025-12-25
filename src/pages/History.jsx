@@ -481,7 +481,15 @@ const HistoryItem = ({
                                     <input
                                         type="text"
                                         value={editOriginalPrice}
-                                        onChange={(e) => setEditOriginalPrice(e.target.value)}
+                                        onChange={(e) => {
+                                            let value = e.target.value;
+                                            value = value.replace(/[^0-9,]/g, '');
+                                            const parts = value.split(',');
+                                            if (parts.length > 2) {
+                                                value = parts[0] + ',' + parts.slice(1).join('');
+                                            }
+                                            setEditOriginalPrice(value);
+                                        }}
                                         onKeyDown={(e) => {
                                             if (e.key === '.') {
                                                 e.preventDefault();
@@ -526,7 +534,15 @@ const HistoryItem = ({
                                     <input
                                         type="text"
                                         value={editPrice}
-                                        onChange={(e) => setEditPrice(e.target.value)}
+                                        onChange={(e) => {
+                                            let value = e.target.value;
+                                            value = value.replace(/[^0-9,]/g, '');
+                                            const parts = value.split(',');
+                                            if (parts.length > 2) {
+                                                value = parts[0] + ',' + parts.slice(1).join('');
+                                            }
+                                            setEditPrice(value);
+                                        }}
                                         onKeyDown={(e) => {
                                             if (e.key === '.') {
                                                 e.preventDefault();
