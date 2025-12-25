@@ -5,10 +5,8 @@ import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { Send } from "lucide-react";
 
-
 import {
     Search,
-    Copy,
     ExternalLink,
     Trash2,
     Download,
@@ -16,6 +14,7 @@ import {
     Calendar,
     Globe,
     Package,
+    Copy,
     X,
     RefreshCw
 } from "lucide-react";
@@ -37,19 +36,18 @@ const HistoryItem = ({
     isDragging,
     isDragOver
 }) => {
-    const [copied, setCopied] = useState(false);
     const [editingId, setEditingId] = useState(null);
     const [editTitle, setEditTitle] = useState("");
     const [localTitle, setLocalTitle] = useState(propItem.productTitle);
     const [editingPriceId, setEditingPriceId] = useState(null);
     const [editPrice, setEditPrice] = useState("");
     const [editOriginalPrice, setEditOriginalPrice] = useState("");
-    const [editFocus, setEditFocus] = useState("current"); // 'original' o 'current'
+    const [editFocus, setEditFocus] = useState("current");
     const priceInputRef = useRef(null);
     const inputRef = useRef(null);
     const [showShareModal, setShowShareModal] = useState(false);
     const [customMessage, setCustomMessage] = useState("");
-    const [selectedOption, setSelectedOption] = useState("none"); // "none", "quick", "custom"
+    const [selectedOption, setSelectedOption] = useState("none");
     const [showQuickDropdown, setShowQuickDropdown] = useState(false);
 
     useEffect(() => {
@@ -65,10 +63,8 @@ const HistoryItem = ({
             document.body.style.width = '100%';
             document.body.style.overflowY = 'scroll';
 
-            // También bloqueamos html por si acaso
             document.documentElement.style.overflow = 'hidden';
         } else {
-            // Restauramos el scroll
             const scrollY = document.body.style.top;
             document.body.style.position = '';
             document.body.style.top = '';
@@ -77,12 +73,22 @@ const HistoryItem = ({
 
             document.documentElement.style.overflow = '';
 
-            // Volvemos a la posición anterior
             if (scrollY) {
                 window.scrollTo(0, parseInt(scrollY || '0') * -1);
             }
         }
     }, [showShareModal]);
+
+    useEffect(() => {
+        if (editingPriceId === propItem.id && priceInputRef.current) {
+            const timer = setTimeout(() => {
+                priceInputRef.current.focus();
+                priceInputRef.current.select();
+            }, 10);
+
+            return () => clearTimeout(timer);
+        }
+    }, [editingPriceId, propItem.id]);
 
     const startEditing = (e) => {
         e.stopPropagation();
@@ -139,51 +145,6 @@ const HistoryItem = ({
         }, 50);
     };
 
-    const savePrice = () => {
-        let newPrice = editPrice.trim().replace(/\s/g, '');
-
-        // *** LÓGICA DE FORMATEO DE PRECIO ***
-        if (newPrice) {
-            // Si es un número entero → formatear con puntos de miles y añadir ,00
-            if (/^\d+$/.test(newPrice)) {
-                // Convertir a número para formatear miles
-                const num = parseInt(newPrice);
-                newPrice = num.toLocaleString('es-ES') + ',00';
-            }
-            // Si ya tiene decimales → mantener como está (ya formateado o no)
-        }
-
-        // Añadir símbolo € si no lo tiene
-        if (newPrice && !newPrice.includes('€')) {
-            newPrice = newPrice + ' €';
-        }
-
-        // Si no ha cambiado realmente → cerrar
-        if (newPrice === propItem.price) {
-            setEditingPriceId(null);
-            return;
-        }
-
-        // Guardar
-        const history = getHistory();
-        const updated = history.map(h =>
-            h.id === propItem.id ? { ...h, price: newPrice || null } : h
-        );
-        localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
-        setHistory(updated);
-        setEditingPriceId(null);
-    };
-
-    const handlePriceKeyDown = (e) => {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            priceInputRef.current?.blur();
-        } else if (e.key === 'Escape') {
-            setEditingPriceId(null);
-            setEditPrice("");
-        }
-    };
-
     const handleKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -194,31 +155,21 @@ const HistoryItem = ({
         }
     };
 
-    const share = (platform) => {
-        const text = encodeURIComponent(`${propItem.affiliateUrl}`);
-        const urls = {
-            whatsapp: `https://api.whatsapp.com/send?text=${text}`,
-            telegram: `https://t.me/share/url?url=${text}`,
-        };
-        window.open(urls[platform], "_blank");
-    };
-
     const handleDragStart = (e) => {
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', index.toString()); // Guardamos el índice
+        e.dataTransfer.setData('text/plain', index.toString());
         e.currentTarget.classList.add('dragging');
     };
 
     const handleDragEnd = (e) => {
         e.currentTarget.classList.remove('dragging', 'drag-over');
-        // Limpiar todas las clases drag-over de otros elementos
         document.querySelectorAll('.history-item').forEach(el => {
             el.classList.remove('drag-over');
         });
     };
 
     const handleDragOver = (e) => {
-        e.preventDefault(); // Necesario para permitir drop
+        e.preventDefault();
         e.currentTarget.classList.add('drag-over');
     };
 
@@ -228,7 +179,6 @@ const HistoryItem = ({
     };
 
     const handleDragLeave = (e) => {
-        // Solo remover si no hay otro elemento drag-over anidado
         if (!e.currentTarget.contains(e.relatedTarget)) {
             e.currentTarget.classList.remove('drag-over');
         }
@@ -250,11 +200,10 @@ const HistoryItem = ({
         let message = "";
 
         if (selectedOption === "quick") {
-            message = customMessage || "Mira este producto en Amazon:"; // fallback por si no eligió
+            message = customMessage || "Mira este producto en Amazon:";
         } else if (selectedOption === "custom") {
             message = customMessage.trim();
         }
-
         const text = encodeURIComponent(
             message ? `${message} ${propItem.affiliateUrl}` : propItem.affiliateUrl
         );
@@ -263,7 +212,6 @@ const HistoryItem = ({
         window.open(whatsappUrl, "_blank");
 
         setShowShareModal(false);
-        // Opcional: resetear al cerrar
         setSelectedOption("none");
         setCustomMessage("");
         setShowQuickDropdown(false);
@@ -277,7 +225,6 @@ const HistoryItem = ({
         let decimalSeparator = ',';
         let thousandsSeparator = '.';
 
-        // Detectar separadores
         if (cleaned.includes('.') && cleaned.includes(',')) {
             if (cleaned.lastIndexOf('.') > cleaned.lastIndexOf(',')) {
                 decimalSeparator = '.';
@@ -300,14 +247,11 @@ const HistoryItem = ({
             decimalSeparator = ',';
             thousandsSeparator = null;
         }
-        // Sin separadores → entero
 
-        // Quitar miles
         if (thousandsSeparator) {
             cleaned = cleaned.replace(new RegExp('\\' + thousandsSeparator, 'g'), '');
         }
 
-        // Cambiar decimal a punto
         if (decimalSeparator && decimalSeparator !== '.') {
             cleaned = cleaned.replace(decimalSeparator, '.');
         }
@@ -315,13 +259,10 @@ const HistoryItem = ({
         let num = parseFloat(cleaned);
         if (isNaN(num)) return null;
 
-        // === FORMATEO MANUAL FORZADO (es-ES) ===
-        // Asegurar 2 decimales
         let parts = num.toFixed(2).split('.');
         let integerPart = parts[0];
         let decimalPart = parts[1];
 
-        // Añadir puntos de miles a la parte entera
         integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
 
         return integerPart + ',' + decimalPart + ' €';
@@ -334,6 +275,18 @@ const HistoryItem = ({
         );
         localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
         setHistory(updated);
+    };
+
+    const finishPriceEditing = () => {
+        const formattedCurrent = formatPrice(editPrice);
+        const formattedOriginal = formatPrice(editOriginalPrice);
+
+        updatePriceField('price', formattedCurrent || null);
+        updatePriceField('originalPrice', formattedOriginal || null);
+
+        setEditingPriceId(null);
+        setEditPrice("");
+        setEditOriginalPrice("");
     };
 
     return (
@@ -384,7 +337,6 @@ const HistoryItem = ({
                                     onBlur={(e) => {
                                         const newText = e.currentTarget.textContent.trim().slice(0, 120);
                                         setEditTitle(newText);
-                                        // Guardar como antes
                                         if (newText && newText !== localTitle) {
                                             const history = getHistory();
                                             const updated = history.map(h =>
@@ -463,15 +415,7 @@ const HistoryItem = ({
                                 className="flex items-center gap-3"
                                 onBlur={(e) => {
                                     if (!e.currentTarget.contains(e.relatedTarget)) {
-                                        // Guardar precio actual
-                                        const formattedCurrent = formatPrice(editPrice);
-                                        updatePriceField('price', formattedCurrent || null);
-
-                                        // Guardar precio original (independiente)
-                                        const formattedOriginal = formatPrice(editOriginalPrice);
-                                        updatePriceField('originalPrice', formattedOriginal || null);
-
-                                        setEditingPriceId(null);
+                                        finishPriceEditing();
                                     }
                                 }}
                             >
@@ -485,51 +429,29 @@ const HistoryItem = ({
                                             let value = e.target.value
                                                 .replace(/[^0-9,.]/g, '')
                                                 .replace(/\./g, ',');
-
                                             const parts = value.split(',');
-                                            if (parts.length > 2) {
-                                                value = parts[0] + ',' + parts.slice(1).join('');
-                                            }
-                                            if (parts[1] && parts[1].length > 2) {
-                                                value = parts[0] + ',' + parts[1].slice(0, 2);
-                                            }
+                                            if (parts.length > 2) value = parts[0] + ',' + parts.slice(1).join('');
+                                            if (parts[1] && parts[1].length > 2) value = parts[0] + ',' + parts[1].slice(0, 2);
                                             setEditOriginalPrice(value);
                                         }}
                                         onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === 'Escape') {
+                                                e.preventDefault();
+                                                if (e.key === 'Enter') {
+                                                    // Pasar al siguiente input (opcional)
+                                                    priceInputRef.current?.focus();
+                                                } else {
+                                                    finishPriceEditing();
+                                                }
+                                            }
                                             if (e.key === '.') {
                                                 e.preventDefault();
-                                                const newValue = editOriginalPrice + ',';
-                                                setEditOriginalPrice(newValue);
-                                                setTimeout(() => {
-                                                    const input = e.target;
-                                                    input.selectionStart = newValue.length;
-                                                    input.selectionEnd = newValue.length;
-                                                }, 0);
-                                            }
-
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                const formatted = formatPrice(editOriginalPrice);
-                                                updatePriceField('originalPrice', formatted || null);
-                                                setEditingPriceId(null);
-                                            }
-
-                                            if (e.key === 'Escape') {
-                                                setEditingPriceId(null);
-                                            }
-                                        }}
-                                        onBlur={() => {
-                                            const formatted = formatPrice(editPrice);
-                                            if (formatted) {
-                                                setEditPrice(formatted);
-                                            } else {
-                                                setEditPrice("");
+                                                setEditOriginalPrice(prev => prev + ',');
                                             }
                                         }}
                                         onFocus={(e) => e.target.select()}
                                         className="w-16 px-2 py-1 text-xs font-medium text-slate-700 bg-slate-50 border border-slate-300 contenedorCosas focus:outline-none focus:ring-1 focus:ring-violet-500"
                                         placeholder="0,00 €"
-                                        autoFocus={editFocus === 'original'}
                                     />
                                 </div>
 
@@ -543,50 +465,24 @@ const HistoryItem = ({
                                             let value = e.target.value
                                                 .replace(/[^0-9,.]/g, '')
                                                 .replace(/\./g, ',');
-
                                             const parts = value.split(',');
-                                            if (parts.length > 2) {
-                                                value = parts[0] + ',' + parts.slice(1).join('');
-                                            }
-                                            if (parts[1] && parts[1].length > 2) {
-                                                value = parts[0] + ',' + parts[1].slice(0, 2);
-                                            }
+                                            if (parts.length > 2) value = parts[0] + ',' + parts.slice(1).join('');
+                                            if (parts[1] && parts[1].length > 2) value = parts[0] + ',' + parts[1].slice(0, 2);
                                             setEditPrice(value);
                                         }}
                                         onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === 'Escape') {
+                                                e.preventDefault();
+                                                finishPriceEditing();
+                                            }
                                             if (e.key === '.') {
                                                 e.preventDefault();
-                                                const newValue = editPrice + ',';
-                                                setEditPrice(newValue);
-                                                setTimeout(() => {
-                                                    if (priceInputRef.current) {
-                                                        priceInputRef.current.selectionStart = newValue.length;
-                                                        priceInputRef.current.selectionEnd = newValue.length;
-                                                    }
-                                                }, 0);
-                                            }
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                const formatted = formatPrice(editPrice);
-                                                updatePriceField('price', formatted || null); // null si vacío
-                                                setEditingPriceId(null);
-                                            }
-                                            if (e.key === 'Escape') {
-                                                setEditingPriceId(null);
-                                            }
-                                        }}
-                                        onBlur={() => {
-                                            const formatted = formatPrice(editPrice);
-                                            if (formatted) {
-                                                setEditPrice(formatted);
-                                            } else {
-                                                setEditPrice("");
+                                                setEditPrice(prev => prev + ',');
                                             }
                                         }}
                                         onFocus={(e) => e.target.select()}
                                         className="w-16 px-2 py-1 text-xs font-bold bg-emerald-50 border border-emerald-400 contenedorCosas focus:outline-none focus:ring-1 focus:ring-emerald-500"
                                         placeholder="0,00 €"
-                                        autoFocus={editFocus === 'current'}
                                         ref={priceInputRef}
                                     />
                                 </div>
@@ -634,7 +530,6 @@ const HistoryItem = ({
                                         const currentNum = parseFloat(propItem.price.replace(/[^0-9,]/g, '').replace(',', '.'));
 
                                         if (originalNum === currentNum) {
-                                            // Precios iguales → solo mostramos el original en negro
                                             return <span className="text-black">{propItem.originalPrice}</span>;
                                         }
 
@@ -671,7 +566,6 @@ const HistoryItem = ({
                                         );
                                     }
 
-                                    // Solo precio original → solo el original en negro
                                     return <span className="text-black">{propItem.originalPrice}</span>;
                                 })()}
                             </button>
@@ -812,7 +706,7 @@ const HistoryItem = ({
                                     e.stopPropagation();
                                     setSelectedOption("none");
                                     setCustomMessage("");
-                                    setShowQuickDropdown(false); // Cierra dropdown si estaba abierto
+                                    setShowQuickDropdown(false);
                                 }}
                             >
                                 <div className="flex-1">
@@ -836,7 +730,7 @@ const HistoryItem = ({
                                         e.stopPropagation();
                                         setSelectedOption("custom");
                                         setCustomMessage("");
-                                        setShowQuickDropdown(false); // Cierra dropdown
+                                        setShowQuickDropdown(false);
                                     }}
                                 >
                                     <div className="flex-1">
@@ -902,7 +796,7 @@ export default function HistoryPage() {
     const [animatedItems, setAnimatedItems] = useState(new Set());
     const [isUpdatingPrices, setIsUpdatingPrices] = useState(false);
     const [showExportModal, setShowExportModal] = useState(false);
-    const [exportFormat, setExportFormat] = useState(null); // "json" o "csv"
+    const [exportFormat, setExportFormat] = useState(null);
     const [exportFilename, setExportFilename] = useState("");
 
     useEffect(() => {
@@ -915,15 +809,13 @@ export default function HistoryPage() {
 
     useEffect(() => {
         if (showExportModal && exportInputRef.current) {
-            // Pequeño timeout para asegurar que el input está renderizado y enfocado
             setTimeout(() => {
                 exportInputRef.current.focus();
-                exportInputRef.current.select(); // ← Esto selecciona todo el texto
+                exportInputRef.current.select();
             }, 100);
         }
     }, [showExportModal]);
 
-    // === ACTUALIZACIÓN EN TIEMPO REAL DEL HISTORIAL ===
     useEffect(() => {
         const loadHistory = () => {
             const data = getHistory();
@@ -933,14 +825,12 @@ export default function HistoryPage() {
 
         loadHistory();
 
-        // Solo recargamos cuando cambie el storage desde OTRA pestaña
         const handleStorageChange = (e) => {
             if (e.key === STORAGE_KEY || e.key === null) {
                 loadHistory();
             }
         };
 
-        // Para cambios locales (nuestra propia pestaña), solo actualizamos el estado directamente
         const handleLocalUpdate = () => {
             loadHistory();
         };
@@ -963,10 +853,8 @@ export default function HistoryPage() {
             document.body.style.width = '100%';
             document.body.style.overflowY = 'scroll';
 
-            // También bloqueamos html por si acaso
             document.documentElement.style.overflow = 'hidden';
         } else {
-            // Restauramos el scroll
             const scrollY = document.body.style.top;
             document.body.style.position = '';
             document.body.style.top = '';
@@ -975,7 +863,6 @@ export default function HistoryPage() {
 
             document.documentElement.style.overflow = '';
 
-            // Volvemos a la posición anterior
             if (scrollY) {
                 window.scrollTo(0, parseInt(scrollY || '0') * -1);
             }
@@ -1011,21 +898,19 @@ export default function HistoryPage() {
         setAnimatedItems(prev => new Set(prev).add(id));
     };
 
-    // Cerrar menú al hacer clic fuera
     const handleClickOutside = (e) => {
         if (exportButtonRef.current && !exportButtonRef.current.contains(e.target)) {
             setShowExportMenu(false);
         }
     };
 
-    // Usa "click" en vez de "mousedown" (más fiable)
     useEffect(() => {
         if (!showExportMenu) return;
 
         const handler = (e) => handleClickOutside(e);
         document.addEventListener("click", handler);
         return () => document.removeEventListener("click", handler);
-    }, [showExportMenu]); // ← solo cuando se abre
+    }, [showExportMenu]);
 
     const filtered = useMemo(() => {
         if (!search.trim()) return history;
@@ -1033,14 +918,13 @@ export default function HistoryPage() {
         const normalize = (str) =>
             str
                 .toLowerCase()
-                .normalize("NFD") // separa tildes
-                .replace(/[\u0300-\u036f]/g, "") // elimina tildes
-                .replace(/[^a-z0-9\s]/g, "") // quita símbolos raros
+                .normalize("NFD")
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/[^a-z0-9\s]/g, "")
                 .trim();
 
         const searchLower = normalize(search);
 
-        // Mapeo de errores comunes (puedes añadir más)
         const commonReplacements = {
             xiomi: "xiaomi",
             xioami: "xiaomi",
@@ -1065,7 +949,7 @@ export default function HistoryPage() {
                 domainNorm.includes(searchLower) ||
                 urlNorm.includes(searchLower) ||
                 titleNorm.includes(enhancedSearch) ||
-                titleNorm.includes(searchLower) // por si acaso el replacement no cubre todo
+                titleNorm.includes(searchLower)
             );
         });
     }, [history, search]);
@@ -1128,7 +1012,6 @@ export default function HistoryPage() {
         });
     };
 
-    // === NUEVA FUNCIÓN: EXPORTAR EN VARIOS FORMATOS ===
     const handleExportFormat = (format) => {
         const defaultName = format === "csv"
             ? "historialUrlAmazon"
@@ -1139,7 +1022,7 @@ export default function HistoryPage() {
         setExportFormat(format);
         setExportFilename(suggestedName);
         setShowExportModal(true);
-        setShowExportMenu(false); // Cerramos el menú de exportar
+        setShowExportMenu(false);
     };
 
     const performExport = () => {
@@ -1213,10 +1096,7 @@ export default function HistoryPage() {
         const [movedItem] = historyCopy.splice(fromIndex, 1);
         historyCopy.splice(toIndex, 0, movedItem);
 
-        // Guardar en localStorage
         localStorage.setItem('amazon-affiliate-history', JSON.stringify(historyCopy));
-
-        // Actualizar estado
         setHistory(historyCopy);
 
         toast.success("Orden cambiado");
@@ -1237,7 +1117,6 @@ export default function HistoryPage() {
 
                     {/* Contenedor del modal */}
                     <div className="relative w-full max-w-sm bg-white contenedorCosas shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-                        {/* Cabecera con icono */}
                         <div className="py-2 border-b border-slate-200 bg-slate-50">
                             <div className="flex justify-center">
                                 <div className="p-2 bg-red-600 contenedorCosas shadow-lg">
@@ -1447,7 +1326,6 @@ export default function HistoryPage() {
                                 document.body
                             )}
 
-                            {/* === BOTÓN BORRAR TODO === */}
                             {/* Vaciar */}
                             <button
                                 onClick={handleClear}
