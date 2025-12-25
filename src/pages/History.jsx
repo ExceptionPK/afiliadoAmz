@@ -1332,18 +1332,94 @@ export default function HistoryPage() {
                                         ].map((opt) => (
                                             <button
                                                 key={opt.format}
-                                                onClick={() => {
-                                                    handleExportFormat(opt.format);
+                                                onClick={async () => {
                                                     setShowExportMenu(false);
+
+                                                    if (opt.format === "csv" && "showSaveFilePicker" in window) {
+                                                        // === EXPORTAR CSV DIRECTO CON FILE SYSTEM ACCESS API ===
+                                                        const data = getHistory();
+                                                        if (data.length === 0) {
+                                                            toast.error("No hay datos para exportar");
+                                                            return;
+                                                        }
+
+                                                        const headers = [
+                                                            "Fecha",
+                                                            "Título",
+                                                            "Precio Original",
+                                                            "Precio Actual",
+                                                            "Dominio",
+                                                            "URL Afiliado",
+                                                            "ASIN"
+                                                        ];
+                                                        const rows = data.map(item => [
+                                                            new Date(item.timestamp).toLocaleString("es-ES"),
+                                                            `"${(item.productTitle || "").replace(/"/g, '""')}"`,
+                                                            item.originalPrice ? `"${item.originalPrice.replace(/"/g, '""')}"` : '""',
+                                                            item.price ? `"${item.price.replace(/"/g, '""')}"` : '""',
+                                                            item.domain || "",
+                                                            item.affiliateUrl || "",
+                                                            item.asin || ""
+                                                        ]);
+                                                        const BOM = "\uFEFF";
+                                                        const content = BOM + [headers, ...rows]
+                                                            .map(row => row.join(";"))
+                                                            .join("\r\n");
+
+                                                        const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+
+                                                        const defaultName = `historialUrlAmazon_${new Date().toISOString().split('T')[0]}.csv`;
+
+                                                        try {
+                                                            const handle = await window.showSaveFilePicker({
+                                                                suggestedName: defaultName,
+                                                                types: [{
+                                                                    description: 'Archivo CSV',
+                                                                    accept: { 'text/csv': ['.csv'] },
+                                                                }],
+                                                            });
+
+                                                            // === OBTENEMOS EL NOMBRE REAL DEL ARCHIVO QUE EL USUARIO ELIGIÓ ===
+                                                            const fileName = handle.name;
+
+                                                            const writable = await handle.createWritable();
+                                                            await writable.write(blob);
+                                                            await writable.close();
+
+                                                            // === TOAST CON EL NOMBRE EXACTO DEL ARCHIVO ===
+                                                            toast.success(`Guardado como "${fileName}"`, {
+                                                                duration: 2000
+                                                            });
+                                                        } catch (err) {
+                                                            if (err.name !== 'AbortError') {
+                                                                console.warn("File System Access API falló", err);
+                                                                toast.error("No se pudo guardar directamente. Usa descarga normal.");
+                                                                setExportFormat("csv");
+                                                                setExportFilename(defaultName.replace('.csv', ''));
+                                                                setShowExportModal(true);
+                                                            }
+                                                        }
+                                                    } else {
+                                                        const defaultName = opt.format === "csv"
+                                                            ? "historialUrlAmazon"
+                                                            : "amazon-affiliate-history";
+                                                        const suggestedName = `${defaultName}_${new Date().toISOString().split('T')[0]}`;
+                                                        setExportFormat(opt.format);
+                                                        setExportFilename(suggestedName);
+                                                        setShowExportModal(true);
+                                                    }
                                                 }}
                                                 className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 transition contenedorCosas
-                                                ${opt.format === "csv"
+                                                        ${opt.format === "csv"
                                                         ? "text-green-700 hover:bg-green-50 hover:text-green-800"
                                                         : "text-slate-700 hover:bg-violet-50 hover:text-violet-700"
                                                     }`}
                                             >
                                                 {opt.icon}
                                                 <span>{opt.label}</span>
+                                                {opt.format === "csv" && "showSaveFilePicker" in window && (
+                                                    <span className="ml-auto text-xs text-emerald-600 font-medium">Directo</span>
+                                                )}
                                             </button>
                                         ))}
                                     </div>
