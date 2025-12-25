@@ -993,18 +993,19 @@ export default function HistoryPage() {
                 setHistory(getHistory());
                 setAnimatedItems(new Set());
 
+                const longDuration = 5000;
+
                 if (useInfoToast) {
-                    toast.info(message);
+                    toast.info(message, { duration: longDuration });
                 } else {
-                    toast.success(message);
+                    toast.success(message, { duration: longDuration });
                 }
 
                 if (fileInputRef.current) {
                     fileInputRef.current.value = null;
                 }
             } else {
-                toast.error(message || "Archivo inválido");
-
+                toast.error(message || "Archivo inválido", { duration: 6000 });
                 if (fileInputRef.current) {
                     fileInputRef.current.value = null;
                 }
