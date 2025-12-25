@@ -482,11 +482,16 @@ const HistoryItem = ({
                                         type="text"
                                         value={editOriginalPrice}
                                         onChange={(e) => {
-                                            let value = e.target.value;
-                                            value = value.replace(/[^0-9,]/g, '');
+                                            let value = e.target.value
+                                                .replace(/[^0-9,.]/g, '')
+                                                .replace(/\./g, ',');
+
                                             const parts = value.split(',');
                                             if (parts.length > 2) {
                                                 value = parts[0] + ',' + parts.slice(1).join('');
+                                            }
+                                            if (parts[1] && parts[1].length > 2) {
+                                                value = parts[0] + ',' + parts[1].slice(0, 2);
                                             }
                                             setEditOriginalPrice(value);
                                         }}
@@ -535,11 +540,16 @@ const HistoryItem = ({
                                         type="text"
                                         value={editPrice}
                                         onChange={(e) => {
-                                            let value = e.target.value;
-                                            value = value.replace(/[^0-9,]/g, '');
+                                            let value = e.target.value
+                                                .replace(/[^0-9,.]/g, '')
+                                                .replace(/\./g, ',');
+
                                             const parts = value.split(',');
                                             if (parts.length > 2) {
                                                 value = parts[0] + ',' + parts.slice(1).join('');
+                                            }
+                                            if (parts[1] && parts[1].length > 2) {
+                                                value = parts[0] + ',' + parts[1].slice(0, 2);
                                             }
                                             setEditPrice(value);
                                         }}
