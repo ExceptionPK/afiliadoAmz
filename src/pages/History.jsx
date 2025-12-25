@@ -801,6 +801,9 @@ export default function HistoryPage() {
     const [showExportModal, setShowExportModal] = useState(false);
     const [exportFormat, setExportFormat] = useState(null);
     const [exportFilename, setExportFilename] = useState("");
+    const [deletedItem, setDeletedItem] = useState(null);
+    const undoTimeoutRef = useRef(null);
+    const lastDeletedRef = useRef(null);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -966,9 +969,76 @@ export default function HistoryPage() {
     }, [history]);
 
     const handleDelete = (id) => {
+        const currentHistory = [...history];
+        const itemIndex = currentHistory.findIndex(item => item.id === id);
+        const itemToDelete = currentHistory[itemIndex];
+
+        if (!itemToDelete) return;
+
+        // Guardamos en el ref (accesible desde el toast)
+        lastDeletedRef.current = {
+            item: itemToDelete,
+            originalIndex: itemIndex,
+            originalHistoryLength: currentHistory.length
+        };
+
         removeFromHistory(id);
-        setHistory(getHistory());
-        toast.success("Enlace eliminado");
+        const updatedHistory = getHistory();
+        setHistory(updatedHistory);
+
+        toast(
+            <div className="flex items-center justify-between w-full">
+                <span className="font-medium">Enlace eliminado</span>
+                <button
+                    onClick={() => {
+                        const deleted = lastDeletedRef.current;
+                        if (!deleted) return;
+
+                        const currentFullHistory = getHistory();
+
+                        let insertAt = deleted.originalIndex;
+                        if (insertAt > currentFullHistory.length) {
+                            insertAt = currentFullHistory.length;
+                        }
+
+                        const newHistory = [
+                            ...currentFullHistory.slice(0, insertAt),
+                            deleted.item,
+                            ...currentFullHistory.slice(insertAt)
+                        ];
+
+                        localStorage.setItem('amazon-affiliate-history', JSON.stringify(newHistory));
+                        setHistory(newHistory);
+
+                        lastDeletedRef.current = null;
+                        toast.dismiss("undo-delete");
+                    }}
+                    className="px-3 py-1 text-sm font-semibold text-slate-900 bg-white hover:bg-slate-200 contenedorCosas transition shadow-md"
+                >
+                    Deshacer
+                </button>
+            </div>,
+            {
+                id: "undo-delete",
+                duration: 5000,
+                position: "bottom-center",
+                style: {
+                    background: '#0f172a',
+                    color: '#f1f5f9',
+                    borderRadius: '.3rem',
+                    padding: '12px 14px',
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+                    maxWidth: '420px',
+                },
+                className: 'font-medium',
+                onAutoClose: () => {
+                    lastDeletedRef.current = null;
+                },
+                onDismiss: () => {
+                    lastDeletedRef.current = null;
+                }
+            }
+        );
     };
 
     const handleClear = () => {
@@ -1598,7 +1668,7 @@ export default function HistoryPage() {
                             }}
                             disabled={isUpdatingPrices || history.length === 0}
                             className={`
-                                bg-violet-600 text-white
+                                bg-violet-500 text-white
                                 w-12 h-12 rounded-full
                                 transition-all duration-300
                                 shadow-lg flex items-center justify-center
@@ -1607,8 +1677,8 @@ export default function HistoryPage() {
                                     ? 'animate-pulse'
                                     : 'shadow-violet-500/50 hover:shadow-xl hover:shadow-violet-600/60'
                                 }
-    ${history.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}
-`}
+                                ${history.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}
+                                `}
                             title={history.length === 0
                                 ? "No hay productos para actualizar"
                                 : isUpdatingPrices
