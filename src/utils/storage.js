@@ -662,34 +662,3 @@ export const updateOutdatedPricesManually = async () => {
     };
 };
 
-const VISITED_KEY = 'amazon-visited-asins';
-
-// Devuelve un Set con los ASIN + domain visitados
-export const getVisited = () => {
-    try {
-        const data = localStorage.getItem(VISITED_KEY);
-        return data ? new Set(JSON.parse(data)) : new Set();
-    } catch {
-        return new Set();
-    }
-};
-
-export const markAsVisited = (asin, domain = 'amazon.es') => {
-    const key = `${asin}-${domain}`;
-    const visited = getVisited();
-    if (visited.has(key)) return;
-
-    visited.add(key);
-    try {
-        localStorage.setItem(VISITED_KEY, JSON.stringify(Array.from(visited)));
-    } catch (err) {
-        console.warn("Error guardando visitado", err);
-    }
-
-    window.dispatchEvent(new Event('amazon-history-updated'));
-};
-
-export const isVisited = (asin, domain = 'amazon.es') => {
-    const key = `${asin}-${domain}`;
-    return getVisited().has(key);
-};

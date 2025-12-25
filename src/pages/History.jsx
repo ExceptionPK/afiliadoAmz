@@ -578,7 +578,7 @@ const HistoryItem = ({
                         href={propItem.affiliateUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={() => { markAsVisited(propItem.asin, propItem.domain);}}
+                        onClick={() => { markAsVisited(propItem.asin, propItem.domain); }}
                         className="p-2 -mt-2 contenedorCosas hover:bg-slate-100 transition"
                         title="Abrir"
                     >
@@ -781,7 +781,7 @@ const HistoryItem = ({
                 document.body
             )}
 
-            
+
         </div>
     );
 };
@@ -1598,12 +1598,12 @@ export default function HistoryPage() {
                             }}
                             disabled={isUpdatingPrices || history.length === 0}
                             className={`
-    w-14 h-14 rounded-full
-    bg-violet-600 text-white
-    shadow-lg flex items-center justify-center
-    transition-all duration-300
-    hover:bg-violet-700 hover:scale-110 active:scale-95
-    ${isUpdatingPrices
+                                bg-violet-600 text-white
+                                w-12 h-12 rounded-full
+                                transition-all duration-300
+                                shadow-lg flex items-center justify-center
+                              hover:bg-violet-700 hover:scale-110 active:scale-95
+                                ${isUpdatingPrices
                                     ? 'animate-pulse'
                                     : 'shadow-violet-500/50 hover:shadow-xl hover:shadow-violet-600/60'
                                 }
@@ -1617,7 +1617,7 @@ export default function HistoryPage() {
                             aria-label="Actualizar precios"
                         >
                             <RefreshCw
-                                className={`w-6 h-6 ${isUpdatingPrices ? 'animate-spin' : ''}`}
+                                className={`w-5 h-5 ${isUpdatingPrices ? 'animate-spin' : ''}`}
                             />
                         </button>
                     </div>
