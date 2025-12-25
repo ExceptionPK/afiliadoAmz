@@ -1335,75 +1335,93 @@ export default function HistoryPage() {
                                                 onClick={async () => {
                                                     setShowExportMenu(false);
 
-                                                    if (opt.format === "csv" && "showSaveFilePicker" in window) {
-                                                        // === EXPORTAR CSV DIRECTO CON FILE SYSTEM ACCESS API ===
+                                                    // === EXPORTAR DIRECTO CON FILE SYSTEM ACCESS API (JSON o CSV) ===
+                                                    if ("showSaveFilePicker" in window) {
                                                         const data = getHistory();
                                                         if (data.length === 0) {
                                                             toast.error("No hay datos para exportar");
                                                             return;
                                                         }
 
-                                                        const headers = [
-                                                            "Fecha",
-                                                            "Título",
-                                                            "Precio Original",
-                                                            "Precio Actual",
-                                                            "Dominio",
-                                                            "URL Afiliado",
-                                                            "ASIN"
-                                                        ];
-                                                        const rows = data.map(item => [
-                                                            new Date(item.timestamp).toLocaleString("es-ES"),
-                                                            `"${(item.productTitle || "").replace(/"/g, '""')}"`,
-                                                            item.originalPrice ? `"${item.originalPrice.replace(/"/g, '""')}"` : '""',
-                                                            item.price ? `"${item.price.replace(/"/g, '""')}"` : '""',
-                                                            item.domain || "",
-                                                            item.affiliateUrl || "",
-                                                            item.asin || ""
-                                                        ]);
-                                                        const BOM = "\uFEFF";
-                                                        const content = BOM + [headers, ...rows]
-                                                            .map(row => row.join(";"))
-                                                            .join("\r\n");
+                                                        let content = "";
+                                                        let mimeType = "";
+                                                        let defaultExtension = "";
+                                                        let defaultBaseName = "";
 
-                                                        const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
+                                                        if (opt.format === "json") {
+                                                            content = JSON.stringify(data, null, 2);
+                                                            mimeType = "application/json";
+                                                            defaultExtension = ".json";
+                                                            defaultBaseName = "amazon-affiliate-history";
+                                                        } else if (opt.format === "csv") {
+                                                            const headers = [
+                                                                "Fecha",
+                                                                "Título",
+                                                                "Precio Original",
+                                                                "Precio Actual",
+                                                                "Dominio",
+                                                                "URL Afiliado",
+                                                                "ASIN"
+                                                            ];
+                                                            const rows = data.map(item => [
+                                                                new Date(item.timestamp).toLocaleString("es-ES"),
+                                                                `"${(item.productTitle || "").replace(/"/g, '""')}"`,
+                                                                item.originalPrice ? `"${item.originalPrice.replace(/"/g, '""')}"` : '""',
+                                                                item.price ? `"${item.price.replace(/"/g, '""')}"` : '""',
+                                                                item.domain || "",
+                                                                item.affiliateUrl || "",
+                                                                item.asin || ""
+                                                            ]);
+                                                            const BOM = "\uFEFF";
+                                                            content = BOM + [headers, ...rows]
+                                                                .map(row => row.join(";"))
+                                                                .join("\r\n");
+                                                            mimeType = "text/csv";
+                                                            defaultExtension = ".csv";
+                                                            defaultBaseName = "historialUrlAmazon";
+                                                        }
 
-                                                        const defaultName = `historialUrlAmazon_${new Date().toISOString().split('T')[0]}.csv`;
+                                                        const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+
+                                                        const today = new Date().toISOString().split('T')[0];
+                                                        const defaultName = `${defaultBaseName}_${today}${defaultExtension}`;
 
                                                         try {
                                                             const handle = await window.showSaveFilePicker({
                                                                 suggestedName: defaultName,
                                                                 types: [{
-                                                                    description: 'Archivo CSV',
-                                                                    accept: { 'text/csv': ['.csv'] },
+                                                                    description: opt.format === "json" ? 'Archivo JSON' : 'Archivo CSV',
+                                                                    accept: { [mimeType]: [defaultExtension] },
                                                                 }],
                                                             });
 
-                                                            // === OBTENEMOS EL NOMBRE REAL DEL ARCHIVO QUE EL USUARIO ELIGIÓ ===
+                                                            // Nombre real elegido por el usuario
                                                             const fileName = handle.name;
 
                                                             const writable = await handle.createWritable();
                                                             await writable.write(blob);
                                                             await writable.close();
 
-                                                            // === TOAST CON EL NOMBRE EXACTO DEL ARCHIVO ===
                                                             toast.success(`Guardado como "${fileName}"`, {
-                                                                duration: 2000
+                                                                duration: 5000
                                                             });
                                                         } catch (err) {
                                                             if (err.name !== 'AbortError') {
                                                                 console.warn("File System Access API falló", err);
                                                                 toast.error("No se pudo guardar directamente. Usa descarga normal.");
-                                                                setExportFormat("csv");
-                                                                setExportFilename(defaultName.replace('.csv', ''));
+
+                                                                // Fallback al modal
+                                                                const suggestedName = `${defaultBaseName}_${today}`;
+                                                                setExportFormat(opt.format);
+                                                                setExportFilename(suggestedName);
                                                                 setShowExportModal(true);
                                                             }
+                                                            // Si es AbortError → usuario canceló → no hacemos nada
                                                         }
                                                     } else {
-                                                        const defaultName = opt.format === "csv"
-                                                            ? "historialUrlAmazon"
-                                                            : "amazon-affiliate-history";
-                                                        const suggestedName = `${defaultName}_${new Date().toISOString().split('T')[0]}`;
+                                                        // === SIN SOPORTE DE API → USAR MODAL (móviles antiguos, Safari, etc.) ===
+                                                        const defaultBaseName = opt.format === "csv" ? "historialUrlAmazon" : "amazon-affiliate-history";
+                                                        const suggestedName = `${defaultBaseName}_${new Date().toISOString().split('T')[0]}`;
                                                         setExportFormat(opt.format);
                                                         setExportFilename(suggestedName);
                                                         setShowExportModal(true);
@@ -1417,9 +1435,6 @@ export default function HistoryPage() {
                                             >
                                                 {opt.icon}
                                                 <span>{opt.label}</span>
-                                                {opt.format === "csv" && "showSaveFilePicker" in window && (
-                                                    <span className="ml-auto text-xs text-emerald-600 font-medium">Directo</span>
-                                                )}
                                             </button>
                                         ))}
                                     </div>
