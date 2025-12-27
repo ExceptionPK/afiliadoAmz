@@ -5,8 +5,7 @@ import { Send, Sparkles } from "lucide-react";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
-// ¡¡¡TU API KEY AQUÍ!!!
-const GEMINI_API_KEY = ""; // ← Pega la que copiaste
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
 const Chat = () => {
     const [messages, setMessages] = useState([
@@ -42,7 +41,17 @@ const Chat = () => {
     }, [messages]);
 
     const handleSend = async () => {
-        if (!input.trim()) return;
+        if (!input.trim() || !GROQ_API_KEY || GROQ_API_KEY.includes("TU_GROQ_API_KEY_AQUI")) {
+            if (!GROQ_API_KEY || GROQ_API_KEY.includes("TU_GROQ_API_KEY_AQUI")) {
+                setMessages(prev => [...prev, {
+                    id: Date.now(),
+                    role: "assistant",
+                    content: "⚠️ Por favor, pega tu API key de Groq en el código (línea 9).",
+                    timestamp: Date.now()
+                }]);
+            }
+            return;
+        }
 
         const userMessage = {
             id: Date.now(),
@@ -56,27 +65,25 @@ const Chat = () => {
         setIsTyping(true);
 
         try {
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1/models/gemini-2.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({
-                        contents: [
-                            {
-                                role: "user",
-                                parts: [{ text: input.trim() }]
-                            }
-                        ],
-                        generationConfig: {
-                            temperature: 0.8,
-                            maxOutputTokens: 2048,
-                        }
-                    })
-                }
-            );
+            // Enviamos todo el historial para mejor contexto
+            const groqMessages = messages.concat(userMessage).map(msg => ({
+                role: msg.role === "assistant" ? "assistant" : "user",
+                content: msg.content
+            }));
+
+            const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${GROQ_API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: "llama-3.1-8b-instant",
+                    messages: groqMessages,
+                    temperature: 0.8,
+                    max_tokens: 2048
+                })
+            });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -84,7 +91,7 @@ const Chat = () => {
             }
 
             const data = await response.json();
-            const assistantText = data.candidates?.[0]?.content?.parts?.[0]?.text || "No pude generar respuesta.";
+            const assistantText = data.choices[0]?.message?.content?.trim() || "No pude generar respuesta.";
 
             const assistantMessage = {
                 id: Date.now() + 1,
@@ -95,11 +102,11 @@ const Chat = () => {
 
             setMessages(prev => [...prev, assistantMessage]);
         } catch (error) {
-            console.error("Error Gemini:", error);
+            console.error("Error Groq:", error);
             setMessages(prev => [...prev, {
                 id: Date.now() + 1,
                 role: "assistant",
-                content: `⚠️ Error: ${error.message}\n\n• Verifica que tu API key sea correcta\n• Puede que hayas alcanzado el límite diario gratuito\n• Intenta de nuevo en unas horas`,
+                content: `⚠️ Error con Groq: ${error.message}\n\n• Verifica tu API key\n• Puede ser un límite temporal (intenta en unos minutos)\n• Visita console.groq.com para más detalles`,
                 timestamp: Date.now()
             }]);
         } finally {
@@ -154,27 +161,19 @@ const Chat = () => {
                                                 <ReactMarkdown
                                                     remarkPlugins={[remarkGfm]}
                                                     components={{
-                                                        // Títulos con menos margen inferior
                                                         h1: ({ children }) => <h1 className="text-lg font-bold mb-2">{children}</h1>,
                                                         h2: ({ children }) => <h2 className="text-base font-bold mb-2">{children}</h2>,
                                                         h3: ({ children }) => <h3 className="text-sm font-bold mb-1.5">{children}</h3>,
-
-                                                        // ¡Clave! Márgenes reducidos y eliminados al final
                                                         p: ({ children }) => <p className="mb-2 last:mb-0">{children}</p>,
-                                                        hr: () => (
-                                                            <hr className="my-5 border-t border-gray-300/60" />
-                                                        ),
-
+                                                        hr: () => <hr className="my-5 border-t border-gray-300/60" />,
                                                         ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-0.5">{children}</ul>,
                                                         ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-0.5">{children}</ol>,
                                                         li: ({ children }) => <li className="mb-0.5 last:mb-0">{children}</li>,
-
                                                         blockquote: ({ children }) => (
                                                             <blockquote className="border-l-4 border-violet-500 pl-4 py-1 my-2 italic opacity-90 bg-violet-50/50 contenedorCosas">
                                                                 {children}
                                                             </blockquote>
                                                         ),
-
                                                         code: ({ inline, children }) =>
                                                             inline ? (
                                                                 <code className="px-1.5 py-0.5 bg-black/10 font-mono text-xs">
@@ -185,14 +184,12 @@ const Chat = () => {
                                                                     <code>{children}</code>
                                                                 </pre>
                                                             ),
-
                                                         a: ({ href, children }) => (
                                                             <a href={href} target="_blank" rel="noopener noreferrer" className={`underline hover:opacity-80 font-medium ${msg.role === "user" ? "text-violet-200" : "text-violet-600"
                                                                 }`}>
                                                                 {children}
                                                             </a>
                                                         ),
-
                                                         table: ({ children }) => (
                                                             <div className="overflow-x-auto my-2 -mx-4">
                                                                 <table className="min-w-full border border-slate-300 contenedorCosas text-xs">
@@ -203,7 +200,6 @@ const Chat = () => {
                                                         thead: ({ children }) => <thead className="bg-slate-100">{children}</thead>,
                                                         th: ({ children }) => <th className="px-3 py-1.5 text-left font-medium border-b border-slate-300">{children}</th>,
                                                         td: ({ children }) => <td className="px-3 py-1.5 border-b border-slate-200">{children}</td>,
-
                                                         pre: "div",
                                                     }}
                                                 >
@@ -211,12 +207,10 @@ const Chat = () => {
                                                 </ReactMarkdown>
                                             </div>
 
-                                            {/* Timestamp más pegado y discreto */}
                                             <span className="text-xs opacity-60 block text-right mt-0.5">
                                                 {formatTime(msg.timestamp)}
                                             </span>
 
-                                            {/* Cola del globo (sin cambios) */}
                                             <div className={`absolute bottom-0 w-3 h-3 ${msg.role === "user" ? "right-0 -mr-2 translate-x-1/2" : "left-0 -ml-2 -translate-x-1/2"}`}>
                                                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className={msg.role === "user" ? "rotate-90" : "-rotate-90"}>
                                                     <path

@@ -49,33 +49,38 @@ export const addToHistory = (entry) => {
         id: Date.now() + '-' + Math.random().toString(36).substring(2, 9),
         timestamp: new Date().toISOString(),
         productTitle: productTitle.slice(0, 120),
-        price: null,            // Último precio conocido (se actualiza con el tiempo)
-        originalPrice: null,    // Precio inicial (nunca cambia)
-        prices: [],             // Array de { timestamp: string, price: string }
-        lastUpdate: null,       // Fecha de la última vez que se intentó actualizar
+        price: null,
+        originalPrice: null,
+        prices: [],
+        lastUpdate: null,
     };
 
     history.unshift(newEntry);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
 
-    // === FETCH REAL DATA EN SEGUNDO PLANO ===
     setTimeout(() => fetchRealData(newEntry), 500);
 };
 
-// FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS
+
+// FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS (versión mejorada 2025)
 export const fetchRealData = async (entry) => {
     const proxies = [
-        'https://corsproxy.io/?',
-        'https://test.cors.workers.dev/?',
         'https://api.codetabs.com/v1/proxy?quest=',
-        'https://proxy.cors.sh/',
-        'https://cors.lol/',
         'https://cors.x2u.in/',
-        'https://api.allorigins.win/raw?url=',
         'https://www.thebugging.com/apis/cors-proxy/?url=',
+        'https://corsproxy.io/?',
+        'https://proxy.cors.sh/'
     ];
 
-    // Randomizamos el orden para distribuir la carga y evitar bloqueos rápidos
+    const userAgents = [
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0',
+        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
+        'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+    ];
+    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
+
     const shuffledProxies = [...proxies].sort(() => 0.5 - Math.random());
 
     let html = null;
@@ -85,13 +90,13 @@ export const fetchRealData = async (entry) => {
             let proxyUrl = proxy + encodeURIComponent(entry.originalUrl);
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 14000); // 14 segundos máximo
+            const timeoutId = setTimeout(() => controller.abort(), 14000);
 
             const res = await fetch(proxyUrl, {
                 signal: controller.signal,
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36', // Ayuda a pasar algunos filtros
+                    'User-Agent': randomUA,
                 },
             });
 
@@ -101,20 +106,21 @@ export const fetchRealData = async (entry) => {
 
             html = await res.text();
 
-            // Filtramos si es página de bloqueo de Amazon
+            // Filtramos páginas de bloqueo o error
             if (
                 html.includes('Captcha') ||
                 html.includes('sorry') ||
                 html.includes('robot') ||
                 html.includes('unusual traffic') ||
                 html.includes('api-services-support@amazon.com') ||
-                html.length < 5000 // Demasiado corto → probablemente bloqueo o error
+                html.length < 5000
             ) {
                 console.warn(`Proxy ${proxy} devolvió página bloqueada o inválida`);
+                html = null;
                 continue;
             }
 
-            // Si llegamos aquí y tiene contenido de Amazon, salimos del loop
+            // Si tiene contenido real de Amazon, salimos
             if (html && html.length > 2000 && /amazon/i.test(html)) {
                 break;
             }
@@ -125,7 +131,7 @@ export const fetchRealData = async (entry) => {
 
     if (!html) {
         console.warn('Todos los proxies fallaron para:', entry.originalUrl);
-        return; // No hay datos → salimos
+        return;
     }
 
     // ==================== TÍTULO LIMPIO ====================
@@ -153,7 +159,7 @@ export const fetchRealData = async (entry) => {
         price = `${symbol}${whole},${fraction}`;
     }
 
-    // Intento 2: JSON embebido (muy fiable cuando existe)
+    // Intento 2: JSON embebido (muy fiable)
     if (!price) {
         const jsonMatch = html.match(/"priceAmount"\s*:\s*"([^"]+)"|"(?:displayPrice|landingPrice|priceToPay)Amount"\s*:\s*"([^"]+)"/i);
         if (jsonMatch) {
@@ -196,36 +202,27 @@ export const fetchRealData = async (entry) => {
 
     // Formateo bonito del precio (español)
     if (price) {
-        // 1. Extraer solo los números y símbolos decimales (, o .)
-        let numericPart = price
-            .replace(/[^0-9,.]/g, '')  // Quita TODOS los símbolos de moneda, letras, etc.
-            .trim();
+        let numericPart = price.replace(/[^0-9,.]/g, '').trim();
 
-        // 2. Normalizar decimales: convertir punto a coma si hay coma ya presente (evitar 1.234,56)
         if (numericPart.includes(',') && numericPart.includes('.')) {
-            // Probablemente usa punto como separador de miles → quitarlo
             numericPart = numericPart.replace(/\./g, '');
         } else if (numericPart.includes('.')) {
-            // Solo punto → asumir que es decimal
             numericPart = numericPart.replace('.', ',');
         }
 
-        // 3. Si está vacío después de limpiar → invalidamos el precio
         if (!numericPart || parseFloat(numericPart.replace(',', '.')) < 1) {
             price = null;
         } else {
-            // 4. Formatear número con separadores de miles españoles (opcional, bonito)
             const [whole, decimal = ''] = numericPart.split(',');
             const formattedWhole = parseInt(whole || '0').toLocaleString('es-ES');
             const formattedDecimal = decimal.padEnd(2, '0').slice(0, 2);
-
             price = `${formattedWhole},${formattedDecimal} €`;
         }
     } else {
         price = null;
     }
 
-    // ==================== ACTUALIZAR HISTORIAL (precio y título) ====================
+    // ==================== ACTUALIZAR HISTORIAL ====================
     const now = new Date().toISOString();
     const history = getHistory();
 
@@ -238,14 +235,12 @@ export const fetchRealData = async (entry) => {
             }
 
             let finalTitle = h.productTitle;
-
             const isDefaultTitle = h.productTitle.startsWith("Producto ") || h.productTitle.length < 10;
             const isGoodNewTitle = realTitle && realTitle.length > 10 && realTitle.length <= 120;
 
             if (isDefaultTitle && isGoodNewTitle) {
                 finalTitle = realTitle;
             }
-            // Si no, mantenemos el título actual (ya sea editado por usuario o bueno desde el principio)
 
             return {
                 ...h,
@@ -272,7 +267,6 @@ export const fetchRealData = async (entry) => {
     // ==================== RECOMENDACIONES ====================
     let recommended = [];
 
-    // Patrocinados / sponsored
     const sponsored = html.matchAll(/data-asin=["']([A-Z0-9]{10})["'].*?title=["']([^"']{10,200})[^"']*["']/gi);
     for (const m of sponsored) {
         const asin = m[1];
@@ -282,7 +276,6 @@ export const fetchRealData = async (entry) => {
         }
     }
 
-    // Productos relacionados (si no hay suficientes patrocinados)
     if (recommended.length < 3) {
         const related = html.matchAll(/\/dp\/([A-Z0-9]{10}).*?alt=["']([^"']{10,200})[^"']*["']/gi);
         for (const m of related) {
@@ -295,7 +288,6 @@ export const fetchRealData = async (entry) => {
         }
     }
 
-    // Guardamos recomendaciones si hay
     if (recommended.length > 0) {
         const finalHistory = getHistory().map(h =>
             h.asin === entry.asin && h.domain === entry.domain

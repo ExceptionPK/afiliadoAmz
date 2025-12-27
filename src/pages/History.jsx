@@ -16,7 +16,9 @@ import {
     Package,
     Copy,
     X,
-    RefreshCw
+    RefreshCw,
+    Brain,
+    Bot
 } from "lucide-react";
 import {
     getHistory,
@@ -26,6 +28,8 @@ import {
     fetchRealData,
     updateOutdatedPricesManually
 } from "../utils/storage";
+
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
 const HistoryItem = ({
     item: propItem,
@@ -287,6 +291,88 @@ const HistoryItem = ({
         setEditingPriceId(null);
         setEditPrice("");
         setEditOriginalPrice("");
+    };
+
+    const generateShareMessage = async () => {
+        const title = propItem.productTitle?.trim() || "este producto";
+        const hasDiscount = propItem.originalPrice && propItem.price &&
+            parseFloat(propItem.price.replace(/[^0-9,]/g, '').replace(',', '.')) <
+            parseFloat(propItem.originalPrice.replace(/[^0-9,]/g, '').replace(',', '.'));
+
+        const priceMention = hasDiscount
+            ? `, ahora a un precio más bajo (${propItem.price})`
+            : propItem.price
+                ? ` (${propItem.price})`
+                : "";
+
+        setCustomMessage("Generando mensaje...");
+
+        try {
+            const prompt = `Eres una persona adulta, educada y con criterio que comparte por WhatsApp un enlace de Amazon a un conocido.
+
+            Producto: "${title}"${priceMention}.
+
+            REGLAS MUY ESTRICTAS:
+            - Español bueno: ortografía, acentos correctos, a veces te puedes equivocar un poco.
+            - No inventes ninguna característica del producto.
+            - Tono natural, profesional y calmado (como un amigo o colega con buen gusto).
+            - NUNCA uses emojis ni exclamaciones excesivas.
+            - NO inventes características del producto.
+            - NO suenes como si fueras una IA.
+            - Varía mucho el estilo: a veces menciona el nombre del producto, a veces no; a veces el precio si hay descuento, a veces no.
+            - Crea interés sutil: curiosidad, oportunidad, utilidad, pensamiento en la otra persona.
+            - Máximo 5 líneas cortas.
+            - Termina siempre invitando suavemente a mirar el enlace.
+            - Si tiene mucho descuento, resaltalo
+
+            Ejemplos de mensajes buenos (usa estilos similares pero variados):
+            "He visto este producto en Amazon que me ha parecido interesante. ¿Le echas un vistazo?"
+            "Mira esto que encontré en Amazon. Creo que puede valer la pena."
+            "Acabo de ver ${title}${priceMention ? priceMention : ""}. Me pareció una buena opción."
+            "Te paso este enlace de Amazon por si te interesa."
+            "He encontrado ${title} a un precio reducido. Quizás te resulte útil."
+            "Hola, mira buscando encontre esto que la verdad esta bastante bien y te puede interesar"
+
+            Genera un mensaje único y natural. Responde SOLO el texto del mensaje.`;
+
+            const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${GROQ_API_KEY}`,
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: "llama-3.1-8b-instant",
+                    messages: [{ role: "user", content: prompt }],
+                    temperature: 1,
+                    max_tokens: 120
+                })
+            });
+
+            if (!response.ok) throw new Error("Error Groq");
+
+            const data = await response.json();
+            const generated = data.choices[0]?.message?.content?.trim();
+
+            if (generated && generated.length > 15 && generated.length < 300) {
+                setCustomMessage(generated);
+            } else {
+                const fallbacks = [
+                    "He encontrado este producto en Amazon que me ha parecido interesante. ¿Le echas un vistazo?",
+                    "Mira este enlace de Amazon, creo que puede resultarte útil.",
+                    title.length < 60 ? `Te paso ${title}. Lo vi en Amazon y me pareció una buena opción.` : "Te paso este enlace de Amazon por si te interesa.",
+                    hasDiscount ? `He visto ${title} con un descuento notable. Quizás valga la pena.` : "Acabo de ver este producto en Amazon. Me llamó la atención.",
+                    "Encontré esto en Amazon y pensé que podría interesarte.",
+                    "Mira esto que encontré en Amazon. Parece interesante."
+                ];
+                const randomFallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
+                setCustomMessage(randomFallback);
+            }
+        } catch (err) {
+            console.error("Error generando mensaje:", err);
+            // Fallback seguro y profesional
+            setCustomMessage("He encontrado este producto en Amazon que me ha parecido interesante. ¿Le echas un vistazo?");
+        }
     };
 
     return (
@@ -745,15 +831,34 @@ const HistoryItem = ({
                                 </div>
 
                                 {selectedOption === "custom" && (
-                                    <div className="px-0 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div className="px-0 animate-in fade-in slide-in-from-top-2 duration-300 relative">
                                         <textarea
                                             value={customMessage}
                                             onChange={(e) => setCustomMessage(e.target.value)}
                                             placeholder="Escribe tu mensaje aquí..."
                                             rows="4"
                                             autoFocus
-                                            className="w-full px-4 py-3 text-sm text-slate-800 bg-slate-50/50 border border-violet-300 contenedorCosas resize-none focus:outline-none transition shadow-sm"
+                                            className="w-full px-4 py-3 pr-12 text-sm text-slate-800 bg-slate-50/50 border border-violet-300 contenedorCosas resize-none focus:outline-none transition shadow-sm"
                                         />
+                                        <button
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                await generateShareMessage();
+                                                const textarea = document.querySelector('#share-modal textarea');
+                                                if (textarea) {
+                                                    textarea.focus();
+                                                    textarea.selectionStart = textarea.selectionEnd = textarea.value.length;
+                                                }
+                                            }}
+                                            disabled={selectedOption !== "custom"}
+                                            className={`absolute top-1 right-1 p-1.5 rounded-lg transition-all duration-200 contenedorCosas ${selectedOption === "custom"
+                                                ? "text-violet-600 hover:text-violet-800 hover:bg-violet-100 cursor-pointer"
+                                                : "text-slate-300 cursor-not-allowed opacity-50"
+                                                }`}
+                                            title="Generar mensaje con IA"
+                                        >
+                                            <Bot className="w-7 h-7" />
+                                        </button>
                                     </div>
                                 )}
                             </div>
@@ -987,36 +1092,42 @@ export default function HistoryPage() {
         setHistory(updatedHistory);
 
         toast(
-            <div className="flex items-center justify-between w-full">
-                <span className="font-medium">Enlace eliminado</span>
-                <button
-                    onClick={() => {
-                        const deleted = lastDeletedRef.current;
-                        if (!deleted) return;
+            <div className="relative w-full pt-3 pb-4 px-4">  {/* padding normal, sin pb extra */}
+                {/* Texto y botón */}
+                <div className="flex items-center justify-between">
+                    <span className="font-medium text-slate-100">Enlace eliminado</span>
+                    <button
+                        onClick={() => {
+                            const deleted = lastDeletedRef.current;
+                            if (!deleted) return;
+                            const currentFullHistory = getHistory();
+                            let insertAt = deleted.originalIndex;
+                            if (insertAt > currentFullHistory.length) {
+                                insertAt = currentFullHistory.length;
+                            }
+                            const newHistory = [
+                                ...currentFullHistory.slice(0, insertAt),
+                                deleted.item,
+                                ...currentFullHistory.slice(insertAt)
+                            ];
+                            localStorage.setItem('amazon-affiliate-history', JSON.stringify(newHistory));
+                            setHistory(newHistory);
+                            lastDeletedRef.current = null;
+                            toast.dismiss("undo-delete");
+                        }}
+                        className="px-4 py-1.5 text-sm font-semibold text-slate-900 bg-white hover:bg-slate-100 contenedorCosas transition shadow-md"
+                    >
+                        Deshacer
+                    </button>
+                </div>
 
-                        const currentFullHistory = getHistory();
-
-                        let insertAt = deleted.originalIndex;
-                        if (insertAt > currentFullHistory.length) {
-                            insertAt = currentFullHistory.length;
-                        }
-
-                        const newHistory = [
-                            ...currentFullHistory.slice(0, insertAt),
-                            deleted.item,
-                            ...currentFullHistory.slice(insertAt)
-                        ];
-
-                        localStorage.setItem('amazon-affiliate-history', JSON.stringify(newHistory));
-                        setHistory(newHistory);
-
-                        lastDeletedRef.current = null;
-                        toast.dismiss("undo-delete");
-                    }}
-                    className="px-3 py-1 text-sm font-semibold text-slate-900 bg-white hover:bg-slate-200 contenedorCosas transition shadow-md"
-                >
-                    Deshacer
-                </button>
+                {/* Barra de progreso: superpuesta justo encima del borde inferior */}
+                <div className="absolute left-0 right-0 bottom-0 h-0.5 bg-slate-800/50">
+                    <div
+                        className="h-full bg-white origin-left"
+                        style={{ animation: 'shrink 5s linear forwards' }}
+                    />
+                </div>
             </div>,
             {
                 id: "undo-delete",
@@ -1025,10 +1136,11 @@ export default function HistoryPage() {
                 style: {
                     background: '#0f172a',
                     color: '#f1f5f9',
-                    borderRadius: '.3rem',
-                    padding: '12px 14px',
-                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.4)',
+                    borderRadius: '.5rem',
+                    padding: 0,
+                    boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.5)',
                     maxWidth: '420px',
+                    overflow: 'hidden',
                 },
                 className: 'font-medium',
                 onAutoClose: () => {
