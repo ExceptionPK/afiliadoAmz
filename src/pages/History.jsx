@@ -308,30 +308,33 @@ const HistoryItem = ({
         setCustomMessage("Generando mensaje...");
 
         try {
-            const prompt = `Eres una persona adulta, educada y con criterio que comparte por WhatsApp un enlace de Amazon a un conocido.
+            const prompt = `Eres una persona real (de España, adulta, con buen criterio) que acaba de ver un producto en Amazon y se lo quiere pasar por WhatsApp a un amigo o conocido para interesarle y que lo compre.
 
             Producto: "${title}"${priceMention}.
 
-            REGLAS MUY ESTRICTAS:
-            - Español bueno: ortografía, acentos correctos, a veces te puedes equivocar un poco.
+            Instrucciones clave:
+            - Usa español natural de España, puedes cometer errores leves y naturales.
+            - A veces usa contracciones informales: "q" en vez de "que", "xq" en vez de "porque".
             - No inventes ninguna característica del producto.
             - Tono natural, profesional y calmado (como un amigo o colega con buen gusto).
             - NUNCA uses emojis ni exclamaciones excesivas.
             - NO inventes características del producto.
-            - NO suenes como si fueras una IA.
-            - Varía mucho el estilo: a veces menciona el nombre del producto, a veces no; a veces el precio si hay descuento, a veces no.
+            - Varía pero siempre suena humano y nunca suenes como un anuncio o como una IA.
+            - Varía mucho el estilo: puedes mencionar o no el nombre del producto, el precio o el descuento según te parezca natural en ese momento.
+            - Si hay descuento importante, puedes resaltarlo con naturalidad pero no siempre (ej: "está bastante rebajado", "lo vi más barato de lo normal").
             - Crea interés sutil: curiosidad, oportunidad, utilidad, pensamiento en la otra persona.
-            - Máximo 5 líneas cortas.
+            - Máximo 3-5 líneas cortas.
             - Termina siempre invitando suavemente a mirar el enlace.
-            - Si tiene mucho descuento, resaltalo
 
-            Ejemplos de mensajes buenos (usa estilos similares pero variados):
-            "He visto este producto en Amazon que me ha parecido interesante. ¿Le echas un vistazo?"
-            "Mira esto que encontré en Amazon. Creo que puede valer la pena."
-            "Acabo de ver ${title}${priceMention ? priceMention : ""}. Me pareció una buena opción."
-            "Te paso este enlace de Amazon por si te interesa."
-            "He encontrado ${title} a un precio reducido. Quizás te resulte útil."
-            "Hola, mira buscando encontre esto que la verdad esta bastante bien y te puede interesar"
+            Ejemplos de mensajes reales que podrías enviar (varía siempre, no copies literalmente):
+            He visto este producto que me ha parecido interesante, le echas un vistazo?
+            Mira lo que encontré, creo que puede valer la pena
+            Acabo de ver ${title}${priceMention ? priceMention : ""} y me pareció una buena opción
+            Te paso este enlace por si te interesa
+            He encontrado ${title} a un precio reducido. Quizás te resulte útil.
+            Encontré esto buscando y la verdad es que tiene buena pinta
+            Por cierto, encontré esto en Amazon y me pareció buena opción.
+            Hola, mira buscando encontre esto que la verdad esta bastante bien y te puede interesar
 
             Genera un mensaje único y natural. Responde SOLO el texto del mensaje.`;
 
@@ -345,14 +348,22 @@ const HistoryItem = ({
                     model: "llama-3.1-8b-instant",
                     messages: [{ role: "user", content: prompt }],
                     temperature: 1,
-                    max_tokens: 120
+                    max_tokens: 100
                 })
             });
 
             if (!response.ok) throw new Error("Error Groq");
 
             const data = await response.json();
-            const generated = data.choices[0]?.message?.content?.trim();
+            let generated = data.choices[0]?.message?.content?.trim() || "";
+
+            generated = generated
+                .replace(/^"(.+)"$/, '$1')
+                .replace(/^“(.+)”$/, '$1')
+                .replace(/^«(.+)»$/, '$1')
+                .replace(/^'(.+)'$/, '$1')
+                .replace(/^`(.+)`$/, '$1')
+                .trim();
 
             if (generated && generated.length > 15 && generated.length < 300) {
                 setCustomMessage(generated);
@@ -1092,8 +1103,7 @@ export default function HistoryPage() {
         setHistory(updatedHistory);
 
         toast(
-            <div className="relative w-full pt-3 pb-4 px-4">  {/* padding normal, sin pb extra */}
-                {/* Texto y botón */}
+            <div className="relative w-full pt-3 pb-3 px-3">
                 <div className="flex items-center justify-between">
                     <span className="font-medium text-slate-100">Enlace eliminado</span>
                     <button
