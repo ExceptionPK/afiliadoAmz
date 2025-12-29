@@ -17,7 +17,7 @@ import {
     Copy,
     X,
     RefreshCw,
-    Brain,
+    Check,
     Bot
 } from "lucide-react";
 import {
@@ -293,6 +293,21 @@ const HistoryItem = ({
         setEditOriginalPrice("");
     };
 
+    const markAsVisited = (asin, domain) => {
+        const key = `visited_${asin}_${domain}`;
+        const timestamp = Date.now();
+        localStorage.setItem(key, timestamp.toString());
+    };
+
+    const wasVisitedRecently = (asin, domain) => {
+        const key = `visited_${asin}_${domain}`;
+        const timestampStr = localStorage.getItem(key);
+        if (!timestampStr) return false;
+        const timestamp = parseInt(timestampStr, 10);
+        const hours24 = 24 * 60 * 60 * 1000;
+        return Date.now() - timestamp < hours24;
+    };
+
     const generateShareMessage = async () => {
         const title = propItem.productTitle?.trim() || "este producto";
         const hasDiscount = propItem.originalPrice && propItem.price &&
@@ -332,9 +347,10 @@ const HistoryItem = ({
             Acabo de ver ${title}${priceMention ? priceMention : ""} y me pareció una buena opción
             Te paso este enlace por si te interesa
             He encontrado ${title} a un precio reducido. Quizás te resulte útil.
-            Encontré esto buscando y la verdad es que tiene buena pinta
+            Encontré esto que te interesaba, echale un vistazo
             Por cierto, encontré esto en Amazon y me pareció buena opción.
             Hola, mira buscando encontre esto que la verdad esta bastante bien y te puede interesar
+            Hola, he encontrado esto que me parece de buena calidad y en tu caso puede serte útil
 
             Genera un mensaje único y natural. Responde SOLO el texto del mensaje.`;
 
@@ -675,11 +691,24 @@ const HistoryItem = ({
                         href={propItem.affiliateUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        onClick={() => { markAsVisited(propItem.asin, propItem.domain); }}
-                        className="p-2 -mt-2 contenedorCosas hover:bg-slate-100 transition"
-                        title="Abrir"
+                        onClick={() => {
+                            const history = getHistory();
+                            const updatedHistory = history.map(item =>
+                                item.id === propItem.id
+                                    ? { ...item, lastVisited: Date.now() }
+                                    : item
+                            );
+                            localStorage.setItem('amazon-affiliate-history', JSON.stringify(updatedHistory));
+                            setHistory(updatedHistory);
+                        }}
+                        className="p-2 -mt-2 contenedorCosas hover:bg-slate-100 transition group"
+                        title="Abrir en Amazon"
                     >
-                        <ExternalLink className="w-4 h-4 text-slate-600" />
+                        {propItem.lastVisited && (Date.now() - propItem.lastVisited < 24 * 60 * 60 * 1000) ? (
+                            <Check className="w-4 h-4 text-slate-600" />
+                        ) : (
+                            <ExternalLink className="w-4 h-4 text-slate-600 group-hover:text-slate-800" />
+                        )}
                     </a>
                     <button
                         onClick={() => {
