@@ -18,7 +18,6 @@ const GoogleLogo = () => (
   </svg>
 );
 
-// NUEVO: Componente Loader circular con Framer Motion
 const Loader = () => (
   <motion.div
     className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full"
@@ -37,14 +36,16 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [isSignup, setIsSignup] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
   const navigate = useNavigate();
   const passwordInputRef = useRef(null);
   const [passwordFocused, setPasswordFocused] = useState(false);
 
-  // Validación de contraseña (exactamente igual que antes)
+  const [isSignup, setIsSignup] = useState(() => {
+    return localStorage.getItem('authMode') === 'signup';
+  });
+
   const [passwordValidations, setPasswordValidations] = useState({
     length: false,
     uppercase: false,
@@ -104,7 +105,7 @@ export default function Auth() {
     setLoading(true);
 
     let error;
-    let data; // Para capturar la respuesta completa
+    let data;
 
     if (isSignup) {
       const { data: signupData, error: signupError } = await supabase.auth.signUp({
@@ -146,13 +147,12 @@ export default function Auth() {
   const handleGoogleSignIn = async () => {
     setLoadingGoogle(true);
 
-    // ¡¡IMPORTANTE!! Usa la misma URL pero SIN barra final
-    const redirectTo = window.location.origin;  // ← así: https://afiliiado-amz.vercel.app (sin / al final)
+    const redirectTo = window.location.origin;
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo,  // Supabase añadirá automáticamente el #access_token=... aquí
+        redirectTo,
       },
     });
 
@@ -163,12 +163,14 @@ export default function Auth() {
     setLoadingGoogle(false);
   };
 
-  // Función para cambiar modo limpiando estados
   const toggleMode = () => {
-    setIsSignup(!isSignup);
+    setIsSignup(prev => {
+      const newValue = !prev;
+      localStorage.setItem('authMode', newValue ? 'signup' : 'signin');
+      return newValue;
+    });
     setPassword("");
     setShowPassword(false);
-    // No limpiamos email para mejor UX (el usuario suele mantenerlo)
   };
 
   const isLg = useMediaQuery({ minWidth: 1024 });
@@ -212,7 +214,7 @@ export default function Auth() {
           {/* === AQUÍ ESTÁ LA ANIMACIÓN PRINCIPAL === */}
           <AnimatePresence mode="wait">
             <motion.div
-              key={isSignup ? "signup-form" : "signin-form"} // Clave única para animar entrada/salida
+              key={isSignup ? "signup-form" : "signin-form"}
               variants={formVariants}
               initial="enter"
               animate="center"
@@ -403,7 +405,7 @@ export default function Auth() {
             </Suspense>
           </div>
 
-          {/* El texto DKS (sin cambios) */}
+          {/* El texto DKS */}
           <motion.div
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
