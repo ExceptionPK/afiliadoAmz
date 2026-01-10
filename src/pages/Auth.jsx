@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import MagicParticles from "../components/MagicParticles";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Mail, Check, X, Eye, EyeOff, Sparkles } from "lucide-react";
+import { Lock, Mail, Check, X, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { Suspense } from 'react';
 import Spline from '@splinetool/react-spline';
 import { useMediaQuery } from 'react-responsive';
@@ -176,262 +176,300 @@ export default function Auth() {
   const isLg = useMediaQuery({ minWidth: 1024 });
 
   return (
-    <div className="fixed inset-0 flex flex-col lg:flex-row overflow-hidden">
-      {/* LADO IZQUIERDO - Formulario */}
-      <div className="relative flex-1 flex items-center justify-center px-6 py-12">
-        <div className="absolute inset-0 opacity-30">
-          <MagicParticles />
-        </div>
-
-        <motion.div
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="relative z-10 w-full max-w-md"
+    <>
+      {/* Botón de cierre diferente según dispositivo */}
+      {isLg ? (
+        // PC: abajo a la derecha + texto completo
+        <button
+          onClick={() => navigate("/")}
+          className="fixed bottom-5 right-5 z-[1000] flex items-center gap-2 px-2.5 py-2 
+      contenedorCosas bg-white/65 backdrop-blur-xl border border-white/30 
+      shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] 
+      hover:bg-white/85 hover:shadow-[0_8px_30px_rgba(139,92,246,0.15)] 
+      hover:scale-[1.04] active:scale-95 
+      text-violet-700/90 hover:text-violet-600 
+      transition-all duration-300 ease-out font-medium text-sm rounded-full"
+          aria-label="Volver a la página principal"
         >
-          {/* Título y subtítulo con animación propia */}
-          <motion.h1
-            key={`title-${isSignup}`}
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
-            className="text-3xl md:text-4xl mt-10 font-bold text-center text-slate-900 mb-2"
-          >
-            {isSignup ? "Crear cuenta" : "Iniciar sesión"}
-          </motion.h1>
-          <motion.p
-            key={`subtitle-${isSignup}`}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.1, duration: 0.5 }}
-            className="text-center text-base text-slate-600 mb-8"
-          >
-            {isSignup
-              ? "Únete y empieza a guardar tus enlaces de Amazon"
-              : "Accede a tu cuenta para gestionar tus productos"}
-          </motion.p>
+          <ArrowLeft className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} />
+          <span className="inline">Volver a Inicio</span>
+        </button>
+      ) : (
+        // Móvil: solo X arriba a la derecha
+        <button
+          onClick={() => navigate("/")}
+          className="fixed top-6 right-6 z-[1000] flex items-center justify-center w-10 h-10 
+      rounded-full contenedorCosas bg-white/65 backdrop-blur-xl border border-white/30 
+      shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] 
+      hover:bg-white/85 hover:shadow-[0_8px_30px_rgba(139,92,246,0.15)] 
+      hover:scale-[1.04] active:scale-95 
+      text-violet-700/90 hover:text-violet-600 
+      transition-all duration-300 ease-out"
+          aria-label="Volver a la página principal"
+        >
+          <X className="w-5 h-5" strokeWidth={2.5} />
+        </button>
+      )}
 
-          {/* === AQUÍ ESTÁ LA ANIMACIÓN PRINCIPAL === */}
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={isSignup ? "signup-form" : "signin-form"}
-              variants={formVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.4, ease: "easeInOut" }}
-              className="space-y-4"
-            >
-              <form onSubmit={handleEmailPassword} className="space-y-6">
-                {/* Email */}
-                <div>
-                  <label className="block text-left text-sm font-medium text-slate-700 mb-2">
-                    Correo electrónico
-                  </label>
-                  <div className="relative">
-                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      required
-                      className="w-full h-12 pl-12 pr-4 bg-white border-2 border-slate-200 contenedorCosas text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 transition-all shadow-sm"
-                      placeholder="tu@email.com"
-                    />
-                  </div>
-                </div>
-
-                {/* Contraseña con toggle */}
-                <div>
-                  <label className="block text-left text-sm font-medium text-slate-700 mb-2">
-                    Contraseña
-                  </label>
-                  <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                    <input
-                      ref={passwordInputRef}
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onFocus={() => setPasswordFocused(true)}
-                      onBlur={() => setPasswordFocused(false)}
-                      required
-                      minLength={6}
-                      className="w-full h-12 pl-12 pr-14 bg-white border-2 border-slate-200 contenedorCosas text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 transition-all shadow-sm"
-                      placeholder="••••••••"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
-                      aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                    >
-                      {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </button>
-                  </div>
-
-                  {/* Validaciones EXACTAMENTE como las tenías */}
-                  <div className="mt-3 mb-11 min-h-[75px]">
-                    {isSignup && (
-                      <div className="relative mt-2">
-                        <AnimatePresence>
-                          {passwordFocused && (
-                            <motion.div
-                              initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                              animate={{ opacity: 1, y: 0, scale: 1 }}
-                              exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                              transition={{ duration: 0.2 }}
-                              className="absolute left-0 -top-2 translate-y-[-100%] w-72 bg-white border border-slate-200 contenedorCosas shadow-xl py-3 px-4 z-50"
-                            >
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2 text-xs">
-                                  {passwordValidations.length ? (
-                                    <Check className="w-4 h-4 text-green-600" />
-                                  ) : (
-                                    <X className="w-4 h-4 text-red-500" />
-                                  )}
-                                  <span className={passwordValidations.length ? "text-green-700 font-medium" : "text-slate-600"}>
-                                    Mínimo 6 caracteres
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs">
-                                  {passwordValidations.uppercase ? (
-                                    <Check className="w-4 h-4 text-green-600" />
-                                  ) : (
-                                    <X className="w-4 h-4 text-red-500" />
-                                  )}
-                                  <span className={passwordValidations.uppercase ? "text-green-700 font-medium" : "text-slate-600"}>
-                                    Al menos una mayúscula
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs">
-                                  {passwordValidations.lowercase ? (
-                                    <Check className="w-4 h-4 text-green-600" />
-                                  ) : (
-                                    <X className="w-4 h-4 text-red-500" />
-                                  )}
-                                  <span className={passwordValidations.lowercase ? "text-green-700 font-medium" : "text-slate-600"}>
-                                    Al menos una minúscula
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 text-xs">
-                                  {passwordValidations.number ? (
-                                    <Check className="w-4 h-4 text-green-600" />
-                                  ) : (
-                                    <X className="w-4 h-4 text-red-500" />
-                                  )}
-                                  <span className={passwordValidations.number ? "text-green-700 font-medium" : "text-slate-600"}>
-                                    Al menos un número
-                                  </span>
-                                </div>
-                              </div>
-                            </motion.div>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Botón principal - CAMBIADO: Ahora muestra Loader en lugar de texto cuando loading */}
-                <motion.button
-                  whileHover={{ scale: (isPasswordValid || !isSignup) ? 1.02 : 1 }}
-                  whileTap={{ scale: (isPasswordValid || !isSignup) ? 0.98 : 1 }}
-                  type="submit"
-                  disabled={loading || (isSignup && !isPasswordValid && password.length > 0)}
-                  className="w-full h-12 px-4 font-semibold text-white bg-gradient-to-r from-violet-600 to-purple-600 contenedorCosas shadow-lg hover:shadow-violet-600/40 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
-                >
-                  {loading ? (
-                    <Loader />
-                  ) : isSignup ? (
-                    "Crear cuenta"
-                  ) : (
-                    "Iniciar sesión"
-                  )}
-                </motion.button>
-              </form>
-
-              <div className="flex items-center my-4">
-                <div className="flex-1 h-px bg-slate-300" />
-                <span className="px-4 text-sm text-slate-500">O</span>
-                <div className="flex-1 h-px bg-slate-300" />
-              </div>
-
-              <motion.button
-                whileHover={{ scale: 1.02 }}
-                whileTap={{ scale: 0.98 }}
-                onClick={handleGoogleSignIn}
-                disabled={loadingGoogle}
-                className="w-full h-12 flex items-center justify-center gap-3 px-4 bg-white border-2 border-slate-200 text-slate-800 font-medium contenedorCosas shadow-md hover:shadow-lg transition-all disabled:opacity-70"
-              >
-                {loadingGoogle ? (
-                  <div className="w-5 h-5 border-2 border-slate-400 border-t-slate-800 contenedorCosas animate-spin" />
-                ) : (
-                  <GoogleLogo />
-                )}
-                Continuar con Google
-              </motion.button>
-            </motion.div>
-          </AnimatePresence>
-
-          {/* Enlace para cambiar modo */}
-          <p className="text-center mt-8 text-slate-600">
-            {isSignup ? "¿Ya tienes una cuenta?" : "¿No tienes cuenta?"}{" "}
-            <button
-              type="button"
-              onClick={toggleMode}
-              className="font-medium text-violet-600 hover:text-violet-700 hover:underline underline-offset-4 transition-all"
-            >
-              {isSignup ? "Iniciar sesión" : "Crear una cuenta"}
-            </button>
-          </p>
-        </motion.div>
-      </div>
-
-      {/* LADO DERECHO - Hero SOLO en pantallas grandes */}
-      {isLg && (
-        <div className="lg:relative lg:flex lg:flex-1 bg-gradient-to-br from-violet-900 via-purple-900 to-slate-900 flex items-center justify-center overflow-hidden">
-          <MagicParticles />
-          <div className="absolute inset-0 z-10">
-            <Suspense fallback={
-              <div className="w-full h-full flex items-center justify-center text-white text-xl">
-                Cargando cubo...
-              </div>
-            }>
-              <Spline
-                scene="https://prod.spline.design/9hqvpCPz93euGBFn/scene.splinecode"
-                style={{ width: '100%', height: '100%', background: 'transparent' }}
-              />
-            </Suspense>
+      <div className="fixed inset-0 flex flex-col lg:flex-row overflow-hidden">
+        {/* LADO IZQUIERDO - Formulario */}
+        <div className="relative flex-1 flex items-center justify-center px-6 py-12">
+          <div className="absolute inset-0 opacity-30">
+            <MagicParticles />
           </div>
 
-          {/* El texto DKS */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 1.1, delay: 0.4, ease: "easeOut" }}
-            className="relative z-20 flex items-center justify-center w-full h-full text-center px-10 pointer-events-none"
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="relative z-10 w-full max-w-md"
           >
-            <div className="relative">
-              <h1
-                className="text-[10rem] md:text-[16rem] lg:text-[16rem] font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-violet-200 to-purple-300/70 drop-shadow-[0_0_60px_rgba(139,92,246,0.6)]"
-                style={{
-                  WebkitTextStroke: "1px rgba(139,92,246,0.3)",
-                  textShadow: "0 0 80px rgba(139,92,246,0.5), 0 0 120px rgba(168,85,247,0.4)",
-                }}
+            {/* Título y subtítulo con animación propia */}
+            <motion.h1
+              key={`title-${isSignup}`}
+              initial={{ opacity: 0, y: -20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+              className="text-3xl md:text-4xl mt-10 font-bold text-center text-slate-900 mb-2"
+            >
+              {isSignup ? "Crear cuenta" : "Iniciar sesión"}
+            </motion.h1>
+            <motion.p
+              key={`subtitle-${isSignup}`}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              transition={{ delay: 0.1, duration: 0.5 }}
+              className="text-center text-base text-slate-600 mb-8"
+            >
+              {isSignup
+                ? "Únete y empieza a guardar tus enlaces de Amazon"
+                : "Accede a tu cuenta para gestionar tus productos"}
+            </motion.p>
+
+            {/* === ANIMACIÓN PRINCIPAL === */}
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={isSignup ? "signup-form" : "signin-form"}
+                variants={formVariants}
+                initial="enter"
+                animate="center"
+                exit="exit"
+                transition={{ duration: 0.4, ease: "easeInOut" }}
+                className="space-y-4"
               >
-                DKS
-              </h1>
-              <motion.p
-                initial={{ opacity: 0, y: 40 }}
-                animate={{ opacity: 0.7, y: 0 }}
-                transition={{ delay: 0.9, duration: 0.8 }}
-                className="absolute bottom-[-60px] left-1/2 -translate-x-1/2 text-xl md:text-2xl font-light tracking-widest text-violet-200/60"
-              />
-            </div>
+                <form onSubmit={handleEmailPassword} className="space-y-6">
+                  {/* Email */}
+                  <div>
+                    <label className="block text-left text-sm font-medium text-slate-700 mb-2">
+                      Correo electrónico
+                    </label>
+                    <div className="relative">
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        required
+                        className="w-full h-12 pl-12 pr-4 bg-white border-2 border-slate-200 contenedorCosas text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 transition-all shadow-sm"
+                        placeholder="tu@email.com"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Contraseña con toggle */}
+                  <div>
+                    <label className="block text-left text-sm font-medium text-slate-700 mb-2">
+                      Contraseña
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                      <input
+                        ref={passwordInputRef}
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onFocus={() => setPasswordFocused(true)}
+                        onBlur={() => setPasswordFocused(false)}
+                        required
+                        minLength={6}
+                        className="w-full h-12 pl-12 pr-14 bg-white border-2 border-slate-200 contenedorCosas text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 transition-all shadow-sm"
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
+                        aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                      >
+                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                      </button>
+                    </div>
+
+                    {/* Validaciones */}
+                    <div className="mt-3 mb-11 min-h-[75px]">
+                      {isSignup && (
+                        <div className="relative mt-2">
+                          <AnimatePresence>
+                            {passwordFocused && (
+                              <motion.div
+                                initial={{ opacity: 0, y: -8, scale: 0.95 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: -8, scale: 0.95 }}
+                                transition={{ duration: 0.2 }}
+                                className="absolute left-0 -top-2 translate-y-[-100%] w-72 bg-white border border-slate-200 contenedorCosas shadow-xl py-3 px-4 z-50"
+                              >
+                                <div className="space-y-2">
+                                  <div className="flex items-center gap-2 text-xs">
+                                    {passwordValidations.length ? (
+                                      <Check className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                      <X className="w-4 h-4 text-red-500" />
+                                    )}
+                                    <span className={passwordValidations.length ? "text-green-700 font-medium" : "text-slate-600"}>
+                                      Mínimo 6 caracteres
+                                    </span>
+                                  </div>
+                                  {/* ... resto de validaciones igual ... */}
+                                  <div className="flex items-center gap-2 text-xs">
+                                    {passwordValidations.uppercase ? (
+                                      <Check className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                      <X className="w-4 h-4 text-red-500" />
+                                    )}
+                                    <span className={passwordValidations.uppercase ? "text-green-700 font-medium" : "text-slate-600"}>
+                                      Al menos una mayúscula
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs">
+                                    {passwordValidations.lowercase ? (
+                                      <Check className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                      <X className="w-4 h-4 text-red-500" />
+                                    )}
+                                    <span className={passwordValidations.lowercase ? "text-green-700 font-medium" : "text-slate-600"}>
+                                      Al menos una minúscula
+                                    </span>
+                                  </div>
+                                  <div className="flex items-center gap-2 text-xs">
+                                    {passwordValidations.number ? (
+                                      <Check className="w-4 h-4 text-green-600" />
+                                    ) : (
+                                      <X className="w-4 h-4 text-red-500" />
+                                    )}
+                                    <span className={passwordValidations.number ? "text-green-700 font-medium" : "text-slate-600"}>
+                                      Al menos un número
+                                    </span>
+                                  </div>
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Botón principal */}
+                  <motion.button
+                    whileHover={{ scale: (isPasswordValid || !isSignup) ? 1.02 : 1 }}
+                    whileTap={{ scale: (isPasswordValid || !isSignup) ? 0.98 : 1 }}
+                    type="submit"
+                    disabled={loading || (isSignup && !isPasswordValid && password.length > 0)}
+                    className="w-full h-12 px-4 font-semibold text-white bg-gradient-to-r from-violet-600 to-purple-600 contenedorCosas shadow-lg hover:shadow-violet-600/40 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
+                  >
+                    {loading ? (
+                      <Loader />
+                    ) : isSignup ? (
+                      "Crear cuenta"
+                    ) : (
+                      "Iniciar sesión"
+                    )}
+                  </motion.button>
+                </form>
+
+                <div className="flex items-center my-4">
+                  <div className="flex-1 h-px bg-slate-300" />
+                  <span className="px-4 text-sm text-slate-500">O</span>
+                  <div className="flex-1 h-px bg-slate-300" />
+                </div>
+
+                <motion.button
+                  whileHover={{ scale: 1.02 }}
+                  whileTap={{ scale: 0.98 }}
+                  onClick={handleGoogleSignIn}
+                  disabled={loadingGoogle}
+                  className="w-full h-12 flex items-center justify-center gap-3 px-4 bg-white border-2 border-slate-200 text-slate-800 font-medium contenedorCosas shadow-md hover:shadow-lg transition-all disabled:opacity-70"
+                >
+                  {loadingGoogle ? (
+                    <div className="w-5 h-5 border-2 border-slate-400 border-t-slate-800 contenedorCosas animate-spin" />
+                  ) : (
+                    <GoogleLogo />
+                  )}
+                  Continuar con Google
+                </motion.button>
+              </motion.div>
+            </AnimatePresence>
+
+            {/* Enlace para cambiar modo */}
+            <p className="text-center mt-8 text-slate-600">
+              {isSignup ? "¿Ya tienes una cuenta?" : "¿No tienes cuenta?"}{" "}
+              <button
+                type="button"
+                onClick={toggleMode}
+                className="font-medium text-violet-600 hover:text-violet-700 hover:underline underline-offset-4 transition-all"
+              >
+                {isSignup ? "Iniciar sesión" : "Crear una cuenta"}
+              </button>
+            </p>
           </motion.div>
         </div>
-      )}
-    </div>
+
+        {/* LADO DERECHO - Hero SOLO en pantallas grandes */}
+        {isLg && (
+          <div className="lg:relative lg:flex lg:flex-1 bg-gradient-to-br from-violet-900 via-purple-900 to-slate-900 flex items-center justify-center overflow-hidden">
+            <MagicParticles />
+            <div className="absolute inset-0 z-10">
+              <Suspense fallback={
+                <div className="w-full h-full flex items-center justify-center text-white text-xl">
+                  Cargando cubo...
+                </div>
+              }>
+                <Spline
+                  scene="https://prod.spline.design/9hqvpCPz93euGBFn/scene.splinecode"
+                  style={{ width: '100%', height: '100%', background: 'transparent' }}
+                />
+              </Suspense>
+            </div>
+
+            {/* El texto DKS */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 1.1, delay: 0.4, ease: "easeOut" }}
+              className="relative z-20 flex items-center justify-center w-full h-full text-center px-10 pointer-events-none"
+            >
+              <div className="relative">
+                <h1
+                  className="text-[10rem] md:text-[16rem] lg:text-[16rem] font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-violet-200 to-purple-300/70 drop-shadow-[0_0_60px_rgba(139,92,246,0.6)]"
+                  style={{
+                    WebkitTextStroke: "1px rgba(139,92,246,0.3)",
+                    
+                    textShadow: "0 0 80px rgba(139,92,246,0.5), 0 0 120px rgba(168,85,247,0.4)",
+                  }}
+                >
+                  DKS
+                </h1>
+                <motion.p
+                  initial={{ opacity: 0, y: 40 }}
+                  animate={{ opacity: 0.7, y: 0 }}
+                  transition={{ delay: 0.9, duration: 0.8 }}
+                  className="absolute bottom-[-60px] left-1/2 -translate-x-1/2 text-xl md:text-2xl font-light tracking-widest text-violet-200/60"
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </div>
+    </>
   );
 }

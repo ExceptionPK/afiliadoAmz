@@ -16,6 +16,9 @@ function App() {
   const prevSessionRef = useRef(null);
   const location = useLocation();
 
+  // Detectamos si estamos en la página de autenticación
+  const isAuthPage = location.pathname === '/auth';
+
   useEffect(() => {
     // Carga inicial de sesión
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -28,19 +31,18 @@ function App() {
       const wasLoggedOut = !prevSessionRef.current;
       const isNowLoggedIn = !!currentSession;
 
-      // Caso: acaba de hacer login (de no tener sesión → tenerla)
+      // Caso: nuevo login detectado
       if (wasLoggedOut && isNowLoggedIn) {
-        // Retrasamos la actualización del estado para que se vea el loading
         const timer = setTimeout(() => {
           setSession(currentSession);
           prevSessionRef.current = currentSession;
           setLoading(false);
-        }, 1400); // ← 1.4 segundos, puedes bajarlo a 1000 o subirlo a 1800
+        }, 1400); // ajusta este tiempo según prefieras
 
         return () => clearTimeout(timer);
       }
 
-      // Todos los demás casos (refresh, logout, etc)
+      // Resto de casos
       setSession(currentSession);
       prevSessionRef.current = currentSession;
       setLoading(false);
@@ -69,7 +71,8 @@ function App() {
         }}
       />
 
-      <Navbar session={session} />
+      {/* Solo mostramos el Navbar si NO estamos en /auth */}
+      {!isAuthPage && <Navbar session={session} />}
 
       <Routes>
         <Route path="/auth" element={<Auth />} />
