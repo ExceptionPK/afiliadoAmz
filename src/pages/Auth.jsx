@@ -53,6 +53,12 @@ export default function Auth() {
   });
 
   useEffect(() => {
+    if (window.location.hash) {
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     if (password === "") {
       setPasswordValidations({
         length: false,
@@ -156,7 +162,7 @@ export default function Auth() {
   };
 
   const isLg = useMediaQuery({ minWidth: 1024 });
-  
+
   return (
     <div className="fixed inset-0 flex flex-col lg:flex-row overflow-hidden">
       {/* LADO IZQUIERDO - Formulario */}
