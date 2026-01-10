@@ -146,12 +146,13 @@ export default function Auth() {
   const handleGoogleSignIn = async () => {
     setLoadingGoogle(true);
 
-    const redirectTo = window.location.origin;
+    // ¡¡IMPORTANTE!! Usa la misma URL pero SIN barra final
+    const redirectTo = window.location.origin;  // ← así: https://afiliiado-amz.vercel.app (sin / al final)
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo,
+        redirectTo,  // Supabase añadirá automáticamente el #access_token=... aquí
       },
     });
 
