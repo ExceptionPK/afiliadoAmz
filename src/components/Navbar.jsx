@@ -13,8 +13,9 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
   const dropdownRef = useRef(null);
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut();
+    const { error } = await supabase.auth.signOut({ scope: 'local' });
     if (error) {
+      console.error("Error en signOut:", error);
       toast.error("Error al cerrar sesión");
     } else {
       toast.info("Sesión cerrada");
