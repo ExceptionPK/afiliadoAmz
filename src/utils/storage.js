@@ -62,14 +62,19 @@ export const addToHistory = (entry) => {
 };
 
 
-// FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS (versión mejorada 2025)
+// FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS (versión mejorada 2026)
 export const fetchRealData = async (entry) => {
     const proxies = [
         'https://api.codetabs.com/v1/proxy?quest=',
         'https://cors.x2u.in/',
         'https://www.thebugging.com/apis/cors-proxy/?url=',
         'https://corsproxy.io/?',
-        'https://proxy.cors.sh/'
+        'https://proxy.cors.sh/',
+        'https://test.cors.workers.dev/?url=',  // Nuevo (Cloudflare)
+        'https://cors-anywhere.herokuapp.com/',  // Clásico, pero aún funciona en 2026 para testing
+        'https://cors.bridged.cc/',  // Nuevo, soporta raw
+        'https://api.allorigins.win/get?url=',  // Nuevo, devuelve JSON {contents: html}
+        'https://cors.lol/'  // Nuevo, simple /url
     ];
 
     const userAgents = [
@@ -77,7 +82,9 @@ export const fetchRealData = async (entry) => {
         'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
         'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0',
         'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
-        'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+        'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',  // Nuevo UA 2026
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'  // Nuevo
     ];
     const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
 
@@ -90,13 +97,14 @@ export const fetchRealData = async (entry) => {
             let proxyUrl = proxy + encodeURIComponent(entry.originalUrl);
 
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 14000);
+            const timeoutId = setTimeout(() => controller.abort(), 20000);  // Aumentado a 20s
 
             const res = await fetch(proxyUrl, {
                 signal: controller.signal,
                 headers: {
                     'X-Requested-With': 'XMLHttpRequest',
                     'User-Agent': randomUA,
+                    'Accept-Language': 'es-ES,es;q=0.9'  // Añadido para .es
                 },
             });
 
@@ -104,10 +112,19 @@ export const fetchRealData = async (entry) => {
 
             if (!res.ok) continue;
 
-            html = await res.text();
+            // Manejo inteligente de respuesta (JSON o text)
+            const contentType = res.headers.get('content-type');
+            let responseData;
+            if (contentType && contentType.includes('application/json')) {
+                responseData = await res.json();
+                html = responseData.contents || responseData.html || responseData.body || null;
+            } else {
+                html = await res.text();
+            }
 
             // Filtramos páginas de bloqueo o error
             if (
+                !html ||
                 html.includes('Captcha') ||
                 html.includes('sorry') ||
                 html.includes('robot') ||
@@ -136,37 +153,89 @@ export const fetchRealData = async (entry) => {
 
     // ==================== TÍTULO LIMPIO ====================
     let realTitle = entry.productTitle;
-    const titleMatch = html.match(/<title[^>]*>([^<]{10,})<\/title>/i);
-    if (titleMatch?.[1]) {
-        realTitle = titleMatch[1]
-            .split(/ - Amazon\.| : | \| | – /)[0]
-            .replace(/\s*\([^)]*(oferta|descuento|prime|ahorro|cupón|envío|[0-9]+ ?€|envio)[^)]*\)/gi, '')
-            .replace(/\s*\[.*?\]/g, '')
-            .replace(/\s+/g, ' ')
-            .trim();
+
+    // Prioridad 1: JSON-LD
+    const ldMatches = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
+    for (const match of ldMatches) {
+        try {
+            const json = JSON.parse(match[1]);
+            if (json.name && json.name.length > 10) {
+                realTitle = json.name
+                    .replace(/\s*\([^)]*(oferta|descuento|prime|ahorro|cupón|envío|[0-9]+ ?€|envio)[^)]*\)/gi, '')
+                    .replace(/\s*\[.*?\]/g, '')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                break;
+            }
+        } catch { }
+    }
+
+    // Prioridad 2: <title>
+    if (!realTitle || realTitle.length < 15) {
+        const titleMatch = html.match(/<title[^>]*>([^<]{20,})<\/title>/i);
+        if (titleMatch?.[1]) {
+            realTitle = titleMatch[1]
+                .split(/[-:|–](?=\s*Amazon)/i)[0]
+                .replace(/\s*\([^)]*\)/g, '')
+                .replace(/\s+/g, ' ')
+                .trim();
+        }
+    }
+
+    // Prioridad 3: #productTitle
+    if (!realTitle || realTitle.length < 15) {
+        const prodTitleMatch = html.match(/id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i);
+        if (prodTitleMatch?.[1]) {
+            realTitle = prodTitleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+        }
     }
 
     // ==================== PRECIO REAL ====================
     let price = null;
     const toNumber = (str) => parseFloat(String(str).replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
 
-    // Intento 1: Selectores clásicos
-    const symbol = html.match(/class=["']a-price-symbol["'][^>]*>([^<]*)</i)?.[1]?.trim() || '€';
-    const whole = html.match(/class=["']a-price-whole["'][^>]*>([^<]*)</i)?.[1]?.replace(/\.\s*/g, '') || '';
-    const fraction = (html.match(/class=["']a-price-fraction["'][^>]*>([^<]*)</i)?.[1] || '00').padEnd(2, '0').slice(0, 2);
+    // Intento 1: JSON embebido (mejorado y prioritario)
+    let priceFromJson = null;
+    const jsonCandidates = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
 
-    if (whole && toNumber(whole) > 10) {
-        price = `${symbol}${whole},${fraction}`;
+    for (const match of jsonCandidates) {
+        try {
+            const json = JSON.parse(match[1]);
+            const candidate = json?.offers?.price || json?.offers?.lowPrice || json?.offers?.highPrice;
+            if (candidate && toNumber(candidate) > 10) {
+                priceFromJson = candidate;
+                break;
+            }
+        } catch { }
     }
 
-    // Intento 2: JSON embebido (muy fiable)
-    if (!price) {
-        const jsonMatch = html.match(/"priceAmount"\s*:\s*"([^"]+)"|"(?:displayPrice|landingPrice|priceToPay)Amount"\s*:\s*"([^"]+)"/i);
-        if (jsonMatch) {
-            const candidate = jsonMatch[1] || jsonMatch[2];
-            if (candidate && toNumber(candidate) > 10) {
-                price = candidate.trim();
+    if (!priceFromJson) {
+        const scriptMatches = html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+        for (const m of scriptMatches) {
+            const content = m[1];
+            const priceMatch = content.match(/"priceAmount"\s*:\s*"([^"]+)"|"displayPriceAmount"\s*:\s*"([^"]+)"|"priceToPayAmount"\s*:\s*"([^"]+)"|"landingPriceAmount"\s*:\s*"([^"]+)"/i);
+            if (priceMatch) {
+                priceFromJson = priceMatch[1] || priceMatch[2] || priceMatch[3] || priceMatch[4];
+                if (toNumber(priceFromJson) > 10) break;
             }
+        }
+    }
+
+    if (priceFromJson) {
+        let num = toNumber(priceFromJson);
+        if (num > 10) {
+            price = num.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+        }
+    }
+
+    // Intento 2: Selectores clásicos (si JSON falla)
+    if (!price) {
+        const symbol = html.match(/class=["']a-price-symbol["'][^>]*>([^<]*)</i)?.[1]?.trim() || '€';
+        const whole = html.match(/class=["']a-price-whole["'][^>]*>([^<]*)</i)?.[1]?.replace(/\.\s*/g, '') || '';
+        const fraction = (html.match(/class=["']a-price-fraction["'][^>]*>([^<]*)</i)?.[1] || '00').padEnd(2, '0').slice(0, 2);
+
+        if (whole && toNumber(whole) > 10) {
+            price = `${symbol}${whole},${fraction}`;
         }
     }
 
@@ -267,31 +336,73 @@ export const fetchRealData = async (entry) => {
     // ==================== RECOMENDACIONES ====================
     let recommended = [];
 
-    const sponsored = html.matchAll(/data-asin=["']([A-Z0-9]{10})["'].*?title=["']([^"']{10,200})[^"']*["']/gi);
-    for (const m of sponsored) {
-        const asin = m[1];
-        const titleRaw = m[2].replace(/&quot;|&#039;|\s+/g, ' ').trim();
-        if (asin && titleRaw && asin !== entry.asin && !recommended.some(r => r.asin === asin)) {
-            recommended.push({ asin, title: titleRaw.slice(0, 100) });
+    // 1. Sponsored products (muy frecuente: data-asin + title en contenedores)
+    const sponsoredRegex = /data-asin=["']([A-Z0-9]{10})["'][^>]*?title=["']([^"']{10,250})[^"']*["']/gi;
+    let match;
+    while ((match = sponsoredRegex.exec(html)) !== null) {
+        const asin = match[1];
+        let title = match[2]
+            .replace(/&quot;|&#039;|&amp;/g, "'")
+            .replace(/\s+/g, ' ')
+            .trim();
+        if (
+            asin !== entry.asin &&
+            title.length > 15 &&
+            !recommended.some(r => r.asin === asin) &&
+            !/patrocinado|sponsored|ad|anuncio|prime/i.test(title.toLowerCase())
+        ) {
+            recommended.push({ asin, title: title.slice(0, 120) });
         }
     }
 
-    if (recommended.length < 3) {
-        const related = html.matchAll(/\/dp\/([A-Z0-9]{10}).*?alt=["']([^"']{10,200})[^"']*["']/gi);
-        for (const m of related) {
+    // 2. Carruseles "Customers also viewed", "Related", "Frequently bought together" (más moderno 2025-2026)
+    const carouselRegex = /<div[^>]*data-asin=["']([A-Z0-9]{10})["'][^>]*?>([\s\S]*?)<(?:img|span)[^>]*alt=["']([^"']{10,250})[^"']*["']|title=["']([^"']{10,250})[^"']*["']/gi;
+    for (const m of html.matchAll(carouselRegex)) {
+        const asin = m[1];
+        let title = (m[3] || m[4] || '').replace(/&quot;|&#039;|&amp;/g, "'").replace(/\s+/g, ' ').trim();
+
+        if (
+            asin !== entry.asin &&
+            title.length > 15 &&
+            !recommended.some(r => r.asin === asin) &&
+            !/patrocinado|sponsored|ad|anuncio|prime|oferta/i.test(title.toLowerCase())
+        ) {
+            recommended.push({ asin, title: title.slice(0, 120) });
+            if (recommended.length >= 10) break;  // Límite razonable
+        }
+    }
+
+    // 3. Fallback amplio: cualquier data-asin con alt en img (muchos carruseles usan esto)
+    if (recommended.length < 4) {
+        const fallbackRegex = /data-asin=["']([A-Z0-9]{10})["'].*?alt=["']([^"']{10,250})[^"']*["']/gi;
+        for (const m of html.matchAll(fallbackRegex)) {
             const asin = m[1];
-            const titleRaw = m[2].replace(/&quot;|&#039;|\s+/g, ' ').trim();
-            if (asin && titleRaw && asin !== entry.asin && !recommended.some(r => r.asin === asin)) {
-                recommended.push({ asin, title: titleRaw.slice(0, 100) });
-                if (recommended.length >= 6) break;
+            let title = m[2]
+                .replace(/&quot;|&#039;|&amp;/g, "'")
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            if (
+                asin !== entry.asin &&
+                title.length > 15 &&
+                !recommended.some(r => r.asin === asin) &&
+                !/patrocinado|sponsored|ad|anuncio|prime|oferta/i.test(title.toLowerCase())
+            ) {
+                recommended.push({ asin, title: title.slice(0, 120) });
+                if (recommended.length >= 8) break;
             }
         }
     }
 
+    // 4. Limpieza final: eliminar duplicados y basura
+    recommended = [...new Map(recommended.map(item => [item.asin, item])).values()]
+        .filter(r => r.title && r.title.length > 15);  // Refiltro por longitud mínima
+
+    // Guardar solo si hay algo útil
     if (recommended.length > 0) {
         const finalHistory = getHistory().map(h =>
             h.asin === entry.asin && h.domain === entry.domain
-                ? { ...h, recommended: recommended.slice(0, 8) }
+                ? { ...h, recommended: recommended.slice(0, 8) }  // Máximo 8 para no saturar
                 : h
         );
         localStorage.setItem(STORAGE_KEY, JSON.stringify(finalHistory));

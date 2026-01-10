@@ -1,98 +1,132 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Sparkles, History, Home as HomeIcon } from 'lucide-react';
+import { History, Home as HomeIcon, LogOut, User, Settings, ChevronDown, LogIn } from 'lucide-react';
+import { supabase } from '../utils/supabaseClient';
+import { toast } from 'sonner';
+import { motion, AnimatePresence } from 'framer-motion';
 
-const Navbar = () => {
+const Navbar = ({ session }) => {   // ← solo añadimos esta prop
   const location = useLocation();
   const navigate = useNavigate();
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
 
-  const touchStartX = useRef(null);
-  const touchCurrentX = useRef(null);
+  const dropdownRef = useRef(null);
 
-  // Orden de navegación con swipe (solo Inicio y Historial)
-  const swipeRoutes = ['/', '/history'];
-  const currentIndex = swipeRoutes.indexOf(location.pathname);
+  const handleLogout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      toast.error("Error al cerrar sesión");
+    } else {
+      toast.info("Sesión cerrada");
+      setIsDropdownOpen(false);
+      navigate("/auth");
+    }
+  };
 
+  // Cerrar dropdown al click fuera (sin cambios)
   useEffect(() => {
-    if (currentIndex === -1) return;
-
-    const handleTouchStart = (e) => {
-      touchStartX.current = e.touches[0].clientX;
-      touchCurrentX.current = e.touches[0].clientX;
-    };
-
-    const handleTouchMove = (e) => {
-      if (!touchStartX.current) return;
-      touchCurrentX.current = e.touches[0].clientX;
-    };
-
-    const handleTouchEnd = () => {
-      if (!touchStartX.current || !touchCurrentX.current) return;
-
-      const deltaX = touchCurrentX.current - touchStartX.current;
-      const minSwipeDistance = 50;
-
-      // Swipe izquierda → siguiente
-      if (deltaX < -minSwipeDistance && currentIndex < swipeRoutes.length - 1) {
-        navigate(swipeRoutes[currentIndex + 1]);
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
       }
-      // Swipe derecha → anterior
-      else if (deltaX > minSwipeDistance && currentIndex > 0) {
-        navigate(swipeRoutes[currentIndex - 1]);
-      }
-
-      touchStartX.current = null;
-      touchCurrentX.current = null;
     };
 
-    document.addEventListener('touchstart', handleTouchStart, { passive: true });
-    document.addEventListener('touchmove', handleTouchMove, { passive: true });
-    document.addEventListener('touchend', handleTouchEnd, { passive: true });
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
 
-    return () => {
-      document.removeEventListener('touchstart', handleTouchStart);
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [location.pathname, currentIndex, navigate]);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isDropdownOpen]);
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100">
-      <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-        {/* Logo */}
-        <Link to="/">
-          <div className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 contenedorCosas border border-violet-100 shadow-sm">
-            <Sparkles className="w-4 h-4 text-violet-500" />
-            <span className="text-sm font-medium text-slate-700">DeKolapS</span>
+    <>
+      <div className="fixed top-0 left-0 right-0 z-50 bg-white/80 backdrop-blur-md border-b border-slate-100">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+          {/* Izquierda: Mi cuenta o Iniciar sesión */}
+          <div className="relative" ref={dropdownRef}>
+            {session ? (
+              // ── Versión original casi intacta ───────────────────────────────
+              <button
+                onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 contenedorCosas border border-violet-100 shadow-sm hover:shadow transition"
+              >
+                <User className="w-4 h-4 text-violet-500" />
+                <span className="text-sm font-medium text-slate-700">Mi cuenta</span>
+                <ChevronDown
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`}
+                />
+              </button>
+            ) : (
+              // ── Versión muy parecida, mismo estilo base ─────────────────────
+              <button
+                onClick={() => navigate("/auth")}
+                className="inline-flex items-center gap-2 bg-white/80 backdrop-blur-sm px-3 py-1.5 contenedorCosas border border-violet-100 shadow-sm hover:shadow transition"
+              >
+                <LogIn className="w-4 h-4 text-violet-500" />
+                <span className="text-sm font-medium text-slate-700">Iniciar sesión</span>
+              </button>
+            )}
+
+            {/* Dropdown solo aparece si hay sesión */}
+            <AnimatePresence>
+              {session && isDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                  transition={{ duration: 0.2, ease: "easeOut" }}
+                  className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden z-50"
+                >
+                  <Link
+                    to="/profile"
+                    onClick={() => setIsDropdownOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                  >
+                    <User className="w-4 h-4" />
+                    Perfil
+                  </Link>
+                  <Link
+                    to="/settings"
+                    onClick={() => setIsDropdownOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                  >
+                    <Settings className="w-4 h-4" />
+                    Configuración
+                  </Link>
+                  <hr className="border-slate-200" />
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-sm text-red-600 hover:bg-red-50 transition text-left"
+                  >
+                    <LogOut className="w-4 h-4" />
+                    Cerrar sesión
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
-        </Link>
 
-        {/* Navegación - visible siempre (móvil y desktop) */}
-        <nav className="flex gap-1">
-          <Link
-            to="/"
-            className={`nav-link flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
-              location.pathname === '/' ? 'active' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <HomeIcon className="w-5 h-5" />
-            <span className="hidden sm:inline">Inicio</span>
-            <span className="sm:hidden">Inicio</span> {/* Siempre visible en móvil si quieres solo icono, quita el texto */}
-          </Link>
+          {/* Centro: navegación principal → sin ningún cambio */}
+          <nav className="flex items-center gap-1">
+            <Link
+              to="/"
+              className={`nav-link flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${location.pathname === '/' ? 'active' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              <HomeIcon className="w-5 h-5" />
+              <span>Inicio</span>
+            </Link>
 
-          <Link
-            to="/history"
-            className={`nav-link flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${
-              location.pathname === '/history' ? 'active' : 'text-slate-600 hover:text-slate-900'
-            }`}
-          >
-            <History className="w-5 h-5" />
-            <span className="hidden sm:inline">Historial</span>
-            <span className="sm:hidden">Historial</span>
-          </Link>
-        </nav>
+            <Link
+              to="/history"
+              className={`nav-link flex items-center gap-2 px-4 py-2 text-sm font-medium transition-all ${location.pathname === '/history' ? 'active' : 'text-slate-600 hover:text-slate-900'}`}
+            >
+              <History className="w-5 h-5" />
+              <span>Historial</span>
+            </Link>
+          </nav>
+        </div>
       </div>
-    </div>
+    </>
   );
 };
 

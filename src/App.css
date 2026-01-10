@@ -509,6 +509,7 @@ html, body {
     linear-gradient(0deg, transparent 45%, #e0d4ff 46%, #e0d4ff 54%, transparent 55%),
     #e0d4ff;
   background-size: 100% 100%;
+  
 }
 
 .magic-particle::before {
@@ -521,6 +522,8 @@ html, body {
   animation: twinkle 3s infinite ease-in-out;
   animation-delay: calc(var(--delay) + 0.5s);
 }
+
+
 
 
 @keyframes star-float {
