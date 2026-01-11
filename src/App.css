@@ -276,6 +276,8 @@ html, body {
   gap: 0.25rem; /* gap-1 */
 }
 
+
+
 /* Estilos base de cada enlace */
 .nav-link {
   display: flex;

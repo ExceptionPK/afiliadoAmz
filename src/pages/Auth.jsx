@@ -4,7 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import MagicParticles from "../components/MagicParticles";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Mail, Check, X, Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, ArrowLeft, X, Check } from "lucide-react";
 import { Suspense } from 'react';
 import Spline from '@splinetool/react-spline';
 import { useMediaQuery } from 'react-responsive';
@@ -20,65 +20,38 @@ const GoogleLogo = () => (
 
 const Loader = () => (
   <motion.div
-    className="w-6 h-6 border-2 border-white/30 border-t-white rounded-full"
-    animate={{ rotate: 360 }}
+    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"
     transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
   />
 );
 
-const formVariants = {
-  enter: { opacity: 0, y: 30 },
-  center: { opacity: 1, y: 0 },
-  exit: { opacity: 0, y: -30 },
-};
+const Auth = () => {
+  const [mode, setMode] = useState(
+    localStorage.getItem('authMode') === 'register' ? 'register' : 'login'
+  );
 
-export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingGoogle, setLoadingGoogle] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
+
   const navigate = useNavigate();
   const passwordInputRef = useRef(null);
-  const [passwordFocused, setPasswordFocused] = useState(false);
 
-  const [isSignup, setIsSignup] = useState(() => {
-    return localStorage.getItem('authMode') === 'signup';
-  });
-
-  const [passwordValidations, setPasswordValidations] = useState({
+  const [passwordChecks, setPasswordChecks] = useState({
     length: false,
-    uppercase: false,
-    lowercase: false,
+    upper: false,
+    lower: false,
     number: false,
   });
 
-  useEffect(() => {
-    if (window.location.hash) {
-      window.history.replaceState({}, document.title, window.location.pathname);
-    }
-  }, []);
+  const isLg = useMediaQuery({ minWidth: 1024 });
 
   useEffect(() => {
-    if (password === "") {
-      setPasswordValidations({
-        length: false,
-        uppercase: false,
-        lowercase: false,
-        number: false,
-      });
-      return;
-    }
-
-    setPasswordValidations({
-      length: password.length >= 6,
-      uppercase: /[A-Z]/.test(password),
-      lowercase: /[a-z]/.test(password),
-      number: /[0-9]/.test(password),
-    });
-  }, [password]);
-
-  const isPasswordValid = Object.values(passwordValidations).every(Boolean);
+    localStorage.setItem('authMode', mode);
+  }, [mode]);
 
   useEffect(() => {
     const checkSession = async () => {
@@ -87,351 +60,314 @@ export default function Auth() {
     };
     checkSession();
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
       if (session) navigate("/");
     });
 
     return () => listener?.subscription?.unsubscribe();
   }, [navigate]);
 
-  const handleEmailPassword = async (e) => {
+  useEffect(() => {
+    if (!password) {
+      setPasswordChecks({ length: false, upper: false, lower: false, number: false });
+      return;
+    }
+
+    setPasswordChecks({
+      length: password.length >= 6,
+      upper: /[A-Z]/.test(password),
+      lower: /[a-z]/.test(password),
+      number: /[0-9]/.test(password),
+    });
+  }, [password]);
+
+  const isPasswordStrong = Object.values(passwordChecks).every(Boolean);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (isSignup && !isPasswordValid) {
-      toast.error("La contraseña no cumple los requisitos");
+    if (mode === 'register' && !isPasswordStrong) {
+      toast.error("La contraseña no cumple los requisitos mínimos");
       return;
     }
 
     setLoading(true);
 
     let error;
-    let data;
 
-    if (isSignup) {
-      const { data: signupData, error: signupError } = await supabase.auth.signUp({
+    if (mode === 'register') {
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
         options: { emailRedirectTo: window.location.origin + "/" },
       });
-      data = signupData;
-      error = signupError;
+      error = signUpError;
+
+      if (!error) {
+        if (data.user && !data.user.confirmed_at) {
+          toast.info("Revisa tu correo para confirmar la cuenta");
+        } else {
+          toast.success("¡Cuenta creada!");
+        }
+      }
     } else {
-      const { error: signinError } = await supabase.auth.signInWithPassword({
+      const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
-      error = signinError;
-    }
+      error = signInError;
 
-    if (error) {
-      if (error.message.includes("Invalid login credentials")) {
-        toast.error("Credenciales incorrectas o cuenta creada con Google");
-      } else {
-        toast.error(error.message);
-      }
-    } else {
-      if (isSignup) {
-        if (data.user && data.user.identities && data.user.identities.length === 0) {
-          toast.error("Este email ya está registrado. Inicia sesión o usa recuperación de contraseña.");
-        } else if (data.user && !data.user.confirmed_at && data.session === null) {
-          toast.info("Revisa tu correo para confirmar tu cuenta.");
-        } else {
-          toast.success("¡Cuenta creada correctamente!");
-        }
+      if (error?.message.includes("Invalid login credentials")) {
+        toast.error("Credenciales incorrectas o cuenta de Google");
       }
     }
 
+    if (error) toast.error(error.message);
     setLoading(false);
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogle = async () => {
     setLoadingGoogle(true);
-
-    const redirectTo = window.location.origin;
-
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: {
-        redirectTo,
-      },
+      options: { redirectTo: window.location.origin },
     });
-
-    if (error) {
-      toast.error(error.message);
-      console.error(error);
-    }
+    if (error) toast.error(error.message);
     setLoadingGoogle(false);
   };
 
-  const toggleMode = () => {
-    setIsSignup(prev => {
-      const newValue = !prev;
-      localStorage.setItem('authMode', newValue ? 'signup' : 'signin');
-      return newValue;
-    });
+  const resetForm = () => {
+    setEmail("");
     setPassword("");
     setShowPassword(false);
+    setShowTooltip(false);
   };
-
-  const isLg = useMediaQuery({ minWidth: 1024 });
 
   return (
     <>
-      {/* Botón de cierre diferente según dispositivo */}
+      {/* Botón de cierre */}
       {isLg ? (
-        // PC: abajo a la derecha + texto completo
         <button
           onClick={() => navigate("/")}
           className="fixed bottom-5 right-5 z-[1000] flex items-center gap-2 px-2.5 py-2 
-      contenedorCosas bg-white/65 backdrop-blur-xl border border-white/30 
-      shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] 
-      hover:bg-white/85 hover:shadow-[0_8px_30px_rgba(139,92,246,0.15)] 
-      hover:scale-[1.04] active:scale-95 
-      text-violet-700/90 hover:text-violet-600 
-      transition-all duration-300 ease-out font-medium text-sm rounded-full"
-          aria-label="Volver a la página principal"
+            bg-white/65 backdrop-blur-xl border border-white/30 
+            shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] 
+            hover:bg-white/85 hover:shadow-[0_8px_30px_rgba(139,92,246,0.15)] 
+            text-violet-700 hover:text-violet-600 
+            transition-all duration-300 font-medium text-sm contenedorCosas"
         >
-          <ArrowLeft className="w-4 h-4 flex-shrink-0" strokeWidth={2.5} />
-          <span className="inline">Volver a Inicio</span>
+          <ArrowLeft className="w-4 h-4" /> Volver a Inicio
         </button>
       ) : (
-        // Móvil: solo X arriba a la derecha
         <button
           onClick={() => navigate("/")}
-          className="fixed top-6 right-6 z-[1000] flex items-center justify-center w-10 h-10 
-      rounded-full contenedorCosas bg-white/65 backdrop-blur-xl border border-white/30 
-      shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] 
-      hover:bg-white/85 hover:shadow-[0_8px_30px_rgba(139,92,246,0.15)] 
-      hover:scale-[1.04] active:scale-95 
-      text-violet-700/90 hover:text-violet-600 
-      transition-all duration-300 ease-out"
-          aria-label="Volver a la página principal"
+          className="fixed top-6 right-4 z-[1000] w-10 h-10 
+            bg-white/65 backdrop-blur-xl border border-white/30 
+            shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] 
+            hover:bg-white/85 hover:shadow-[0_8px_30px_rgba(139,92,246,0.15)] 
+            text-violet-700 hover:text-violet-600 transition-all contenedorCosas"
         >
-          <X className="w-5 h-5" strokeWidth={2.5} />
+          <X className="w-5 h-5 mx-auto" />
         </button>
       )}
 
       <div className="fixed inset-0 flex flex-col lg:flex-row overflow-hidden">
         {/* LADO IZQUIERDO - Formulario */}
-        <div className="relative flex-1 flex items-center justify-center px-6 py-12">
-          <div className="absolute inset-0 opacity-30">
+        <div className="relative flex-1 flex items-center justify-center px-4 py-10 bg-gradient-to-br from-slate-50 via-violet-50 to-purple-50">
+          <div className="absolute inset-0 opacity-30 pointer-events-none">
             <MagicParticles />
           </div>
 
           <motion.div
             initial={{ opacity: 0, y: 30 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.8 }}
+            transition={{ duration: 0.7 }}
             className="relative z-10 w-full max-w-md"
           >
-            {/* Título y subtítulo con animación propia */}
-            <motion.h1
-              key={`title-${isSignup}`}
-              initial={{ opacity: 0, y: -20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.5 }}
-              className="text-3xl md:text-4xl mt-10 font-bold text-center text-slate-900 mb-2"
-            >
-              {isSignup ? "Crear cuenta" : "Iniciar sesión"}
-            </motion.h1>
-            <motion.p
-              key={`subtitle-${isSignup}`}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 0.1, duration: 0.5 }}
-              className="text-center text-base text-slate-600 mb-8"
-            >
-              {isSignup
-                ? "Únete y empieza a guardar tus enlaces de Amazon"
-                : "Accede a tu cuenta para gestionar tus productos"}
-            </motion.p>
-
-            {/* === ANIMACIÓN PRINCIPAL === */}
-            <AnimatePresence mode="wait">
-              <motion.div
-                key={isSignup ? "signup-form" : "signin-form"}
-                variants={formVariants}
-                initial="enter"
-                animate="center"
-                exit="exit"
-                transition={{ duration: 0.4, ease: "easeInOut" }}
-                className="space-y-4"
+              <div
+                className="
+                  bg-white/55 backdrop-blur-xl border border-slate-200/20
+                  shadow-[0_8px_32px_-4px_rgba(0,0,0,0.12),_0_4px_16px_-4px_rgba(0,0,0,0.08)]
+                  hover:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.18),_0_8px_30px_-8px_rgba(139,92,246,0.15)]
+                  ring-1 ring-black/5 transition-all duration-300 ease-out
+                  contenedorCosas overflow-hidden
+                "
               >
-                <form onSubmit={handleEmailPassword} className="space-y-6">
-                  {/* Email */}
-                  <div>
-                    <label className="block text-left text-sm font-medium text-slate-700 mb-2">
-                      Correo electrónico
-                    </label>
-                    <div className="relative">
-                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                      <input
-                        type="email"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        required
-                        className="w-full h-12 pl-12 pr-4 bg-white border-2 border-slate-200 contenedorCosas text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 transition-all shadow-sm"
-                        placeholder="tu@email.com"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Contraseña con toggle */}
-                  <div>
-                    <label className="block text-left text-sm font-medium text-slate-700 mb-2">
-                      Contraseña
-                    </label>
-                    <div className="relative">
-                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                      <input
-                        ref={passwordInputRef}
-                        type={showPassword ? "text" : "password"}
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        onFocus={() => setPasswordFocused(true)}
-                        onBlur={() => setPasswordFocused(false)}
-                        required
-                        minLength={6}
-                        className="w-full h-12 pl-12 pr-14 bg-white border-2 border-slate-200 contenedorCosas text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 transition-all shadow-sm"
-                        placeholder="••••••••"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition"
-                        aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
-                      >
-                        {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                      </button>
-                    </div>
-
-                    {/* Validaciones */}
-                    <div className="mt-3 mb-11 min-h-[75px]">
-                      {isSignup && (
-                        <div className="relative mt-2">
-                          <AnimatePresence>
-                            {passwordFocused && (
-                              <motion.div
-                                initial={{ opacity: 0, y: -8, scale: 0.95 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, y: -8, scale: 0.95 }}
-                                transition={{ duration: 0.2 }}
-                                className="absolute left-0 -top-2 translate-y-[-100%] w-72 bg-white border border-slate-200 contenedorCosas shadow-xl py-3 px-4 z-50"
-                              >
-                                <div className="space-y-2">
-                                  <div className="flex items-center gap-2 text-xs">
-                                    {passwordValidations.length ? (
-                                      <Check className="w-4 h-4 text-green-600" />
-                                    ) : (
-                                      <X className="w-4 h-4 text-red-500" />
-                                    )}
-                                    <span className={passwordValidations.length ? "text-green-700 font-medium" : "text-slate-600"}>
-                                      Mínimo 6 caracteres
-                                    </span>
-                                  </div>
-                                  {/* ... resto de validaciones igual ... */}
-                                  <div className="flex items-center gap-2 text-xs">
-                                    {passwordValidations.uppercase ? (
-                                      <Check className="w-4 h-4 text-green-600" />
-                                    ) : (
-                                      <X className="w-4 h-4 text-red-500" />
-                                    )}
-                                    <span className={passwordValidations.uppercase ? "text-green-700 font-medium" : "text-slate-600"}>
-                                      Al menos una mayúscula
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2 text-xs">
-                                    {passwordValidations.lowercase ? (
-                                      <Check className="w-4 h-4 text-green-600" />
-                                    ) : (
-                                      <X className="w-4 h-4 text-red-500" />
-                                    )}
-                                    <span className={passwordValidations.lowercase ? "text-green-700 font-medium" : "text-slate-600"}>
-                                      Al menos una minúscula
-                                    </span>
-                                  </div>
-                                  <div className="flex items-center gap-2 text-xs">
-                                    {passwordValidations.number ? (
-                                      <Check className="w-4 h-4 text-green-600" />
-                                    ) : (
-                                      <X className="w-4 h-4 text-red-500" />
-                                    )}
-                                    <span className={passwordValidations.number ? "text-green-700 font-medium" : "text-slate-600"}>
-                                      Al menos un número
-                                    </span>
-                                  </div>
-                                </div>
-                              </motion.div>
-                            )}
-                          </AnimatePresence>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Botón principal */}
-                  <motion.button
-                    whileHover={{ scale: (isPasswordValid || !isSignup) ? 1.02 : 1 }}
-                    whileTap={{ scale: (isPasswordValid || !isSignup) ? 0.98 : 1 }}
-                    type="submit"
-                    disabled={loading || (isSignup && !isPasswordValid && password.length > 0)}
-                    className="w-full h-12 px-4 font-semibold text-white bg-gradient-to-r from-violet-600 to-purple-600 contenedorCosas shadow-lg hover:shadow-violet-600/40 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center"
-                  >
-                    {loading ? (
-                      <Loader />
-                    ) : isSignup ? (
-                      "Crear cuenta"
-                    ) : (
-                      "Iniciar sesión"
-                    )}
-                  </motion.button>
-                </form>
-
-                <div className="flex items-center my-4">
-                  <div className="flex-1 h-px bg-slate-300" />
-                  <span className="px-4 text-sm text-slate-500">O</span>
-                  <div className="flex-1 h-px bg-slate-300" />
-                </div>
-
-                <motion.button
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={handleGoogleSignIn}
-                  disabled={loadingGoogle}
-                  className="w-full h-12 flex items-center justify-center gap-3 px-4 bg-white border-2 border-slate-200 text-slate-800 font-medium contenedorCosas shadow-md hover:shadow-lg transition-all disabled:opacity-70"
+              {/* Tabs superiores */}
+              <div className="flex border-b border-gray-200/30 bg-white/30 backdrop-blur-md">
+                <button
+                  onClick={() => { setMode('login'); resetForm(); }}
+                  className={`flex-1 py-4 text-center font-medium transition-all duration-200
+                    ${mode === 'login'
+                      ? "text-violet-700 border-b-2 border-violet-600 bg-white/20 shadow-sm"
+                      : "text-slate-600 hover:text-slate-800 hover:bg-white/15"}`}
                 >
-                  {loadingGoogle ? (
-                    <div className="w-5 h-5 border-2 border-slate-400 border-t-slate-800 contenedorCosas animate-spin" />
-                  ) : (
-                    <GoogleLogo />
-                  )}
-                  Continuar con Google
-                </motion.button>
-              </motion.div>
-            </AnimatePresence>
+                  Iniciar sesión
+                </button>
+                <button
+                  onClick={() => { setMode('register'); resetForm(); }}
+                  className={`flex-1 py-4 text-center font-medium transition-all duration-200
+                    ${mode === 'register'
+                      ? "text-violet-700 border-b-2 border-violet-600 bg-white/20 shadow-sm"
+                      : "text-slate-600 hover:text-slate-800 hover:bg-white/15"}`}
+                >
+                  Crear cuenta
+                </button>
+              </div>
 
-            {/* Enlace para cambiar modo */}
-            <p className="text-center mt-8 text-slate-600">
-              {isSignup ? "¿Ya tienes una cuenta?" : "¿No tienes cuenta?"}{" "}
-              <button
-                type="button"
-                onClick={toggleMode}
-                className="font-medium text-violet-600 hover:text-violet-700 hover:underline underline-offset-4 transition-all"
-              >
-                {isSignup ? "Iniciar sesión" : "Crear una cuenta"}
-              </button>
-            </p>
+              {/* Formulario */}
+              <div className="p-5 min-h-[380px] flex flex-col">
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={mode}
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ duration: 0.35 }}
+                    className="flex flex-col flex-1"
+                  >
+                    <form onSubmit={handleSubmit} className="space-y-5 flex-1 flex flex-col">
+                      {/* Email */}
+                      <div>
+                        <label className="block text-left text-sm font-medium text-slate-700 mb-1.5">
+                          Correo electrónico
+                        </label>
+                        <div className="relative">
+                          <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                          <input
+                            type="email"
+                            value={email}
+                            onChange={(e) => setEmail(e.target.value)}
+                            required
+                            className="w-full h-11 pl-11 pr-4 bg-white/90 border-2 border-slate-200 contenedorCosas text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200/40 transition-all shadow-sm"
+                            placeholder="nombre@ejemplo.com"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Password */}
+                      <div>
+                        <label className="block text-left text-sm font-medium text-slate-700 mb-1.5">
+                          Contraseña
+                        </label>
+                        <div className="relative">
+                          <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                          <input
+                            ref={passwordInputRef}
+                            type={showPassword ? "text" : "password"}
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            required
+                            minLength={6}
+                            onFocus={() => setShowTooltip(true)}
+                            onBlur={() => setShowTooltip(false)}
+                            className="w-full h-11 pl-11 pr-12 bg-white/90 border-2 border-slate-200 contenedorCosas text-slate-900 placeholder-slate-400 focus:outline-none focus:border-violet-500 focus:ring-2 focus:ring-violet-200/40 transition-all shadow-sm"
+                            placeholder="••••••••"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700 transition-colors"
+                          >
+                            {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                          </button>
+                        </div>
+
+                        {/* Tooltip requisitos - solo registro y con foco */}
+                        <AnimatePresence>
+                          {mode === 'register' && showTooltip && (
+                            <motion.div
+                              initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                              animate={{ opacity: 1, y: 0, scale: 1 }}
+                              exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                              transition={{
+                                duration: 0.2,
+                                ease: [0.4, 0, 0.2, 1], // curva suave tipo material design
+                              }}
+                              className="
+                              mt-2
+                              max-w-[240px] w-full
+                              px-3 py-2.5
+                              bg-white/95 backdrop-blur-sm 
+                              border border-violet-200/60 contenedorCosas 
+                              shadow-lg
+                              text-[11px] leading-tight
+                              pointer-events-none
+                              z-50
+                              absolute left-5 right-0
+                              "
+                            >
+                              <div className="space-y-1.5">
+                                {[
+                                  { key: "length", label: "Mínimo 6 caracteres" },
+                                  { key: "upper", label: "Al menos una mayúscula" },
+                                  { key: "lower", label: "Al menos una minúscula" },
+                                  { key: "number", label: "Al menos un número" },
+                                ].map(({ key, label }) => (
+                                  <div key={key} className="flex items-center gap-2 whitespace-nowrap">
+                                    {passwordChecks[key] ? (
+                                      <Check size={12} className="text-green-600 flex-shrink-0" />
+                                    ) : (
+                                      <span className="w-2.5 h-2.5 rounded-full border-2 border-slate-300 inline-block flex-shrink-0" />
+                                    )}
+                                    <span className={passwordChecks[key] ? "text-green-700" : "text-slate-600"}>
+                                      {label}
+                                    </span>
+                                  </div>
+                                ))}
+                              </div>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
+
+                      </div>
+
+                      {/* Zona inferior fija */}
+                      <div className="mt-auto pt-6 border-gray-200/30">
+                        <button
+                          type="submit"
+                          disabled={loading || (mode === 'register' && !isPasswordStrong)}
+                          className="w-full h-11 bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium contenedorCosas shadow-lg hover:shadow-xl hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 mb-3"
+                        >
+                          {loading ? <Loader /> : null}
+                          {loading
+                            ? "Procesando..."
+                            : mode === 'login'
+                              ? "Iniciar sesión"
+                              : "Crear cuenta"}
+                        </button>
+
+                        <div className="relative my-2 flex items-center gap-2">
+                          <div className="flex-1 h-px bg-gray-300/90" />
+                          <span className="text-slate-500 text-sm font-medium contenedorCosas">o</span>
+                          <div className="flex-1 h-px bg-gray-300/90" />
+                        </div>
+
+                        <button
+                          onClick={handleGoogle}
+                          disabled={loadingGoogle}
+                          className="w-full h-11 flex items-center justify-center gap-3 bg-white border-2 border-slate-200 contenedorCosas shadow-sm hover:shadow-md hover:bg-slate-50 transition-all text-slate-800 font-medium disabled:opacity-60"
+                        >
+                          {loadingGoogle ? <Loader /> : <GoogleLogo />}
+                          Continuar con Google
+                        </button>
+                      </div>
+                    </form>
+                  </motion.div>
+                </AnimatePresence>
+              </div>
+            </div>
           </motion.div>
         </div>
 
-        {/* LADO DERECHO - Hero SOLO en pantallas grandes */}
+        {/* LADO DERECHO - igual que antes */}
         {isLg && (
-          <div className="lg:relative lg:flex lg:flex-1 bg-gradient-to-br from-violet-900 via-purple-900 to-slate-900 flex items-center justify-center overflow-hidden">
+          <div className="relative flex-1 bg-gradient-to-br from-violet-900 via-purple-900 to-slate-900 flex items-center justify-center overflow-hidden">
             <MagicParticles />
             <div className="absolute inset-0 z-10">
               <Suspense fallback={
                 <div className="w-full h-full flex items-center justify-center text-white text-xl">
-                  Cargando cubo...
+                  Cargando...
                 </div>
               }>
                 <Spline
@@ -441,30 +377,22 @@ export default function Auth() {
               </Suspense>
             </div>
 
-            {/* El texto DKS */}
             <motion.div
               initial={{ opacity: 0, scale: 0.8 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 1.1, delay: 0.4, ease: "easeOut" }}
+              transition={{ duration: 1.1, delay: 0.4 }}
               className="relative z-20 flex items-center justify-center w-full h-full text-center px-10 pointer-events-none"
             >
               <div className="relative">
                 <h1
-                  className="text-[10rem] md:text-[16rem] lg:text-[16rem] font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-violet-200 to-purple-300/70 drop-shadow-[0_0_60px_rgba(139,92,246,0.6)]"
+                  className="text-[12rem] lg:text-[16rem] font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-b from-white via-violet-200 to-purple-300/70 drop-shadow-[0_0_60px_rgba(139,92,246,0.6)]"
                   style={{
                     WebkitTextStroke: "1px rgba(139,92,246,0.3)",
-                    
                     textShadow: "0 0 80px rgba(139,92,246,0.5), 0 0 120px rgba(168,85,247,0.4)",
                   }}
                 >
                   DKS
                 </h1>
-                <motion.p
-                  initial={{ opacity: 0, y: 40 }}
-                  animate={{ opacity: 0.7, y: 0 }}
-                  transition={{ delay: 0.9, duration: 0.8 }}
-                  className="absolute bottom-[-60px] left-1/2 -translate-x-1/2 text-xl md:text-2xl font-light tracking-widest text-violet-200/60"
-                />
               </div>
             </motion.div>
           </div>
@@ -472,4 +400,6 @@ export default function Auth() {
       </div>
     </>
   );
-}
+};
+
+export default Auth;
