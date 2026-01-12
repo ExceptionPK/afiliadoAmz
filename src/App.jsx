@@ -8,50 +8,44 @@ import Chat from './pages/Chat';
 import Auth from './pages/Auth';
 import LoadingScreen from './components/LoadingScreen';
 import { supabase } from './utils/supabaseClient';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 
 function App() {
   const [session, setSession] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const prevSessionRef = useRef(null);
+  const [isAuthenticating, setIsAuthenticating] = useState(true); // Controla la carga inicial
   const location = useLocation();
 
-  // Detectamos si estamos en la página de autenticación
   const isAuthPage = location.pathname === '/auth';
 
   useEffect(() => {
-    // Carga inicial de sesión
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      prevSessionRef.current = session;
-      setLoading(false);
-    });
-
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, currentSession) => {
-      const wasLoggedOut = !prevSessionRef.current;
-      const isNowLoggedIn = !!currentSession;
-
-      // Caso: nuevo login detectado
-      if (wasLoggedOut && isNowLoggedIn) {
-        const timer = setTimeout(() => {
-          setSession(currentSession);
-          prevSessionRef.current = currentSession;
-          setLoading(false);
-        }, 1400); // ajusta este tiempo según prefieras
-
-        return () => clearTimeout(timer);
+    // 1. Carga inicial de la sesión
+    const initializeAuth = async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+      } catch (error) {
+        console.error('Error al obtener sesión inicial:', error);
+      } finally {
+        setIsAuthenticating(false);
       }
+    };
 
-      // Resto de casos
+    initializeAuth();
+
+    // 2. Listener de cambios de estado de autenticación
+    const { data: listener } = supabase.auth.onAuthStateChange((_, currentSession) => {
       setSession(currentSession);
-      prevSessionRef.current = currentSession;
-      setLoading(false);
+      setIsAuthenticating(false); // Ya no necesitamos loading después del primer cambio
     });
 
-    return () => listener?.subscription?.unsubscribe();
+    // Cleanup
+    return () => {
+      listener?.subscription?.unsubscribe();
+    };
   }, []);
 
-  if (loading) {
+  // Mientras estamos resolviendo si hay sesión o no → mostramos pantalla de carga
+  if (isAuthenticating) {
     return <LoadingScreen />;
   }
 
@@ -71,7 +65,7 @@ function App() {
         }}
       />
 
-      {/* Solo mostramos el Navbar si NO estamos en /auth */}
+      {/* Solo mostramos Navbar si NO estamos en la página de auth */}
       {!isAuthPage && <Navbar session={session} />}
 
       <Routes>
@@ -89,7 +83,9 @@ function App() {
 
         <Route
           path="*"
-          element={session ? <Navigate to="/" replace /> : <Navigate to="/auth" replace />}
+          element={
+            session ? <Navigate to="/" replace /> : <Navigate to="/auth" replace />
+          }
         />
       </Routes>
     </>

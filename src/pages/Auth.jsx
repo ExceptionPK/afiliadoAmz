@@ -94,37 +94,54 @@ const Auth = () => {
     setLoading(true);
 
     let error;
+    let data;
 
     if (mode === 'register') {
-      const { data, error: signUpError } = await supabase.auth.signUp({
+      const response = await supabase.auth.signUp({
         email,
         password,
         options: { emailRedirectTo: window.location.origin + "/" },
       });
-      error = signUpError;
 
-      if (!error) {
-        if (data.user && !data.user.confirmed_at) {
-          toast.info("Revisa tu correo para confirmar la cuenta");
-        } else {
-          toast.success("¡Cuenta creada!");
+      data = response.data;
+      error = response.error;
+
+      if (error) {
+        toast.error(error.message);
+      } else if (data?.user) {
+        // Caso 1: Email ya registrado y confirmado → identities vacío
+        if (data.user.identities?.length === 0) {
+          toast.warning("Este correo ya está registrado.");
+        }
+        // Caso 2: Registro nuevo o pendiente de confirmar
+        else if (!data.user.confirmed_at) {
+          toast.info("Revisa tu correo para confirmar la cuenta.");
+        }
+        // Caso raro: ya confirmado automáticamente (poco común con confirm email activado)
+        else {
+          toast.success("¡Cuenta creada correctamente!");
         }
       }
     } else {
+      // Login
       const { error: signInError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       error = signInError;
 
-      if (error?.message.includes("Invalid login credentials")) {
-        toast.error("Credenciales incorrectas o cuenta de Google");
+      if (error) {
+        if (error.message.includes("Invalid login credentials")) {
+          toast.error("Credenciales incorrectas o cuenta de Google");
+        } else {
+          toast.error(error.message);
+        }
       }
     }
 
-    if (error) toast.error(error.message);
     setLoading(false);
   };
+
 
   const handleGoogle = async () => {
     setLoadingGoogle(true);
@@ -184,15 +201,15 @@ const Auth = () => {
             transition={{ duration: 0.7 }}
             className="relative z-10 w-full max-w-md"
           >
-              <div
-                className="
+            <div
+              className="
                   bg-white/55 backdrop-blur-xl border border-slate-200/20
                   shadow-[0_8px_32px_-4px_rgba(0,0,0,0.12),_0_4px_16px_-4px_rgba(0,0,0,0.08)]
                   hover:shadow-[0_20px_50px_-12px_rgba(0,0,0,0.18),_0_8px_30px_-8px_rgba(139,92,246,0.15)]
                   ring-1 ring-black/5 transition-all duration-300 ease-out
                   contenedorCosas overflow-hidden
                 "
-              >
+            >
               {/* Tabs superiores */}
               <div className="flex border-b border-gray-200/30 bg-white/30 backdrop-blur-md">
                 <button
@@ -329,12 +346,13 @@ const Auth = () => {
                           disabled={loading || (mode === 'register' && !isPasswordStrong)}
                           className="w-full h-11 bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium contenedorCosas shadow-lg hover:shadow-xl hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2 mb-3"
                         >
-                          {loading ? <Loader /> : null}
-                          {loading
-                            ? "Procesando..."
-                            : mode === 'login'
-                              ? "Iniciar sesión"
-                              : "Crear cuenta"}
+                          {loading ? (
+                            <Loader />
+                          ) : mode === 'login' ? (
+                            "Iniciar sesión"
+                          ) : (
+                            "Crear cuenta"
+                          )}
                         </button>
 
                         <div className="relative my-2 flex items-center gap-2">
