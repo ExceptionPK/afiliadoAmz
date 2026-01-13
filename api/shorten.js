@@ -16,7 +16,7 @@ export default async function handler(req, res) {
     const response = await fetch('https://api.short.io/links', {
       method: 'POST',
       headers: {
-        'Authorization': process.env.SHORT_IO_API_KEY,
+        'Authorization': process.env.VITE_SHORT_IO_API_KEY,
         'Content-Type': 'application/json',
         'Accept': 'application/json'
       },

@@ -815,7 +815,7 @@ export const shortenWithShortGy = async (longUrl, customSlug = null) => {
         return shortURL
     } catch (err) {
         console.error('Fallo al acortar con el endpoint propio:', err)
-        return longUrl // fallback importante
+        return longUrl
     }
 }
 
