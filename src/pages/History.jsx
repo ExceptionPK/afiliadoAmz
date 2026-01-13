@@ -200,18 +200,41 @@ const HistoryItem = ({
         }
     };
 
-    const handleShare = () => {
+    const handleShare = async () => {
         let message = "";
-
         if (selectedOption === "quick") {
             message = customMessage || "Mira este producto en Amazon:";
         } else if (selectedOption === "custom") {
             message = customMessage.trim();
         }
-        const text = encodeURIComponent(
-            message ? `${message} ${propItem.affiliateUrl}` : propItem.affiliateUrl
-        );
 
+        // Priorizamos shortLink si existe, si no → generamos uno ahora
+        let linkToShare = propItem.shortLink;
+
+        if (!linkToShare) {
+            try {
+                const { shortenWithShortGy } = await import("../utils/storage");
+
+                const slugBase = propItem.asin.toLowerCase();
+                const customSlug = `p-${slugBase}`;
+
+                linkToShare = await shortenWithShortGy(propItem.affiliateUrl, customSlug);
+
+                const history = getHistory();
+                const updated = history.map(h =>
+                    h.id === propItem.id ? { ...h, shortLink: linkToShare } : h
+                );
+                localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
+                setHistory(updated);
+            } catch (err) {
+                console.error("Error generando short link on-demand:", err);
+                linkToShare = propItem.affiliateUrl; // fallback
+            }
+        }
+
+        const text = encodeURIComponent(
+            message ? `${message} ${linkToShare}` : linkToShare
+        );
         const whatsappUrl = `https://api.whatsapp.com/send?text=${text}`;
         window.open(whatsappUrl, "_blank");
 

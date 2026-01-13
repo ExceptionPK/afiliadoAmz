@@ -25,7 +25,7 @@ export const getHistory = () => {
     }
 };
 
-export const addToHistory = (entry) => {
+export const addToHistory = async (entry) => {
     const history = getHistory();
     const exists = history.some(h => h.asin === entry.asin && h.domain === entry.domain);
     if (exists) return;
@@ -44,11 +44,37 @@ export const addToHistory = (entry) => {
         }
     } catch { }
 
+    let customSlug = null;
+
+    if (productTitle && productTitle.length > 5) {
+        const cleanTitle = productTitle
+            .toLowerCase()
+            .replace(/\s*$$   [^)]*   $$/g, '')
+            .replace(/prime|oferta|descuento|rebajado/gi, '')
+            .replace(/[^a-z0-9\s-]/g, '')
+            .replace(/\s+/g, '-')
+            .replace(/-+/g, '-')
+            .replace(/^-+|-+$/g, '')
+            .slice(0, 35);
+
+        if (cleanTitle.length >= 5) {
+            customSlug = `p-${cleanTitle}`;
+        }
+    }
+
+    if (!customSlug) {
+        const slugBase = entry.asin.toLowerCase();
+        customSlug = `p-${slugBase}`;
+    }
+
+    const shortLink = await shortenWithShortGy(entry.affiliateUrl, customSlug);
+
     const newEntry = {
         ...entry,
         id: Date.now() + '-' + Math.random().toString(36).substring(2, 9),
         timestamp: new Date().toISOString(),
         productTitle: productTitle.slice(0, 120),
+        shortLink,
         price: null,
         originalPrice: null,
         prices: [],
@@ -57,6 +83,7 @@ export const addToHistory = (entry) => {
 
     history.unshift(newEntry);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
+    window.dispatchEvent(new Event('amazon-history-updated'));
 
     setTimeout(() => fetchRealData(newEntry), 500);
 };
@@ -763,5 +790,46 @@ export const updateOutdatedPricesManually = async () => {
                 ? "¡Todos los precios actualizados correctamente!"
                 : `Precios actualizados en ${realSuccessCount} de ${toUpdate.length} productos`
     };
+};
+
+// === FUNCIÓN PARA ACORTAR ENLACES CON SHORT.IO (tu subdominio amazon-dks.short.gy) ===
+export const shortenWithShortGy = async (longUrl, customSlug = null) => {
+    const API_KEY = import.meta.env.VITE_SHORT_IO_API_KEY;
+
+    if (!API_KEY) {
+        console.warn("API key de Short.io no configurada → usando enlace largo");
+        return longUrl;
+    }
+
+    try {
+        const payload = {
+            originalURL: longUrl,
+            domain: "amazon-dks.short.gy",
+            path: customSlug || `p-${Date.now().toString(36)}`,
+            title: "Producto Amazon"
+        };
+
+        const response = await fetch("https://api.short.io/links", {
+            method: "POST",
+            headers: {
+                "Authorization": API_KEY,
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errData = await response.json();
+            console.error("Error en Short.io:", errData);
+            return longUrl;
+        }
+
+        const data = await response.json();
+        return data.shortURL;
+    } catch (error) {
+        console.error("Fallo al acortar con Short.io:", error);
+        return longUrl;
+    }
 };
 
