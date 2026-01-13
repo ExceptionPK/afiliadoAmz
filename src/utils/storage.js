@@ -794,42 +794,28 @@ export const updateOutdatedPricesManually = async () => {
 
 // === FUNCIÓN PARA ACORTAR ENLACES CON SHORT.IO (tu subdominio amazon-dks.short.gy) ===
 export const shortenWithShortGy = async (longUrl, customSlug = null) => {
-    const API_KEY = import.meta.env.VITE_SHORT_IO_API_KEY;
-
-    if (!API_KEY) {
-        console.warn("API key de Short.io no configurada → usando enlace largo");
-        return longUrl;
-    }
-
     try {
-        const payload = {
-            originalURL: longUrl,
-            domain: "amazon-dks.short.gy",
-            path: customSlug || `p-${Date.now().toString(36)}`,
-            title: "Producto Amazon"
-        };
-
-        const response = await fetch("https://api.short.io/links", {
-            method: "POST",
+        const res = await fetch('/api/shorten', {
+            method: 'POST',
             headers: {
-                "Authorization": API_KEY,
-                "Content-Type": "application/json",
-                "Accept": "application/json"
+                'Content-Type': 'application/json',
             },
-            body: JSON.stringify(payload)
-        });
+            body: JSON.stringify({
+                originalURL: longUrl,
+                path: customSlug,
+                title: 'Producto Amazon'
+            })
+        })
 
-        if (!response.ok) {
-            const errData = await response.json();
-            console.error("Error en Short.io:", errData);
-            return longUrl;
+        if (!res.ok) {
+            throw new Error(`Error ${res.status}`)
         }
 
-        const data = await response.json();
-        return data.shortURL;
-    } catch (error) {
-        console.error("Fallo al acortar con Short.io:", error);
-        return longUrl;
+        const { shortURL } = await res.json()
+        return shortURL
+    } catch (err) {
+        console.error('Fallo al acortar con el endpoint propio:', err)
+        return longUrl // fallback importante
     }
-};
+}
 
