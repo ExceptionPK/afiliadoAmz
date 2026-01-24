@@ -19,7 +19,8 @@ import {
     X,
     RefreshCw,
     Check,
-    Bot
+    Bot,
+    Save
 } from "lucide-react";
 import {
     getHistory,
@@ -35,7 +36,9 @@ import {
     deleteFromHistory,
     clearUserHistory,
     saveToHistory,
-    updateHistoryPositions
+    updateHistoryPositions,
+    saveSimpleMessage,
+    getSavedMessages
 } from "../utils/supabaseStorage";
 
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
@@ -357,7 +360,6 @@ const HistoryItem = ({
     };
 
     const wasVisitedRecently = (item) => {
-        // 1. Prioridad máxima: caché local (muy rápido)
         const key = `visited_${item.asin}_${item.domain}`;
         const localTs = localStorage.getItem(key);
         if (localTs) {
@@ -365,7 +367,6 @@ const HistoryItem = ({
             if (Date.now() - ts < 24 * 60 * 60 * 1000) return true;
         }
 
-        // 2. Si no hay caché reciente → mirar Supabase
         if (item.lastVisited) {
             return Date.now() - item.lastVisited < 24 * 60 * 60 * 1000;
         }
@@ -385,39 +386,61 @@ const HistoryItem = ({
                 ? ` (${propItem.price})`
                 : "";
 
+        const userContext = customMessage.trim();
+
         setCustomMessage("Generando mensaje...");
 
         try {
-            const prompt = `Eres una persona real (de España, adulta, con buen criterio) que acaba de ver un producto en Amazon y se lo quiere pasar por WhatsApp a un amigo o conocido para interesarle y que lo compre.
+            let contextInstruction = "";
+
+            if (userContext) {
+                contextInstruction = `El usuario ha escrito esto en el campo de mensaje: "${userContext}"
+
+            IMPORTANTE: SI el texto escrito por el usuario parece un nombre propio (como "Teresa", "Mamá", "Juan", "Laura", etc.) o un destinatario claro, DEBES empezar el mensaje dirigiéndote directamente a esa persona con "Hola [nombre]", "Oye [nombre]", "Mira [nombre]", etc.
+
+            SIEMPRE escribe el mensaje en PRIMERA PERSONA como si TÚ fueras quien lo envía por WhatsApp.
+            NUNCA hables en tercera persona ni digas cosas como "creo que a [nombre] le vendría bien", "le puede interesar a [nombre]", etc.
+            El mensaje debe sonar como si lo estuvieras enviando directamente a esa persona.`;
+                        } else {
+                            contextInstruction = `Escribe el mensaje en PRIMERA PERSONA, como si TÚ lo estuvieras enviando por WhatsApp a un amigo o conocido.
+            NUNCA uses tercera persona.`;
+            }
+
+
+            const savedMessages = await getSavedMessages(10);
+
+            let savedExamples = '';
+            if (savedMessages.length > 0) {
+                savedExamples = `\n\nEstos son mensajes que el usuario ha guardado porque le gustaron (OBLIGATORIO: intenta imitar su estilo natural, longitud, tono y forma de hablar, pero varía un poco cada vez):\n` +
+                    savedMessages.map((msg, i) => `${i + 1}. "${msg}"`).join('\n') +
+                    `\n\nOBLIGATORIO: Adapta el nuevo mensaje para que se parezca al estilo de estos ejemplos guardados.`;
+            }
+
+            const prompt = `Eres una persona real de España que le está mandando un WhatsApp a un amigo, familiar o conocido para recomendarle un producto de Amazon.
 
             Producto: "${title}"${priceMention}.
-
-            Instrucciones clave:
-            - Usa español natural de España, puedes cometer errores leves y naturales.
-            - A veces usa contracciones informales: "q" en vez de "que", "xq" en vez de "porque".
-            - No inventes ninguna característica del producto.
-            - Tono natural, profesional y calmado (como un amigo o colega con buen gusto).
-            - NUNCA uses emojis ni exclamaciones excesivas.
-            - NO inventes características del producto.
-            - Varía pero siempre suena humano y nunca suenes como un anuncio o como una IA.
-            - Varía mucho el estilo: puedes mencionar o no el nombre del producto, el precio o el descuento según te parezca natural en ese momento.
-            - Si hay descuento importante, puedes resaltarlo con naturalidad pero no siempre (ej: "está bastante rebajado", "lo vi más barato de lo normal").
-            - Crea interés sutil: curiosidad, oportunidad, utilidad, pensamiento en la otra persona.
-            - Máximo 3-5 líneas cortas.
-            - Termina siempre invitando suavemente a mirar el enlace.
-
-            Ejemplos de mensajes reales que podrías enviar (varía siempre, no copies literalmente):
-            He visto este producto que me ha parecido interesante, le echas un vistazo?
-            Mira lo que encontré, creo que puede valer la pena
-            Acabo de ver ${title}${priceMention ? priceMention : ""} y me pareció una buena opción
-            Te paso este enlace por si te interesa
-            He encontrado ${title} a un precio reducido. Quizás te resulte útil.
-            Encontré esto que te interesaba, echale un vistazo
-            Por cierto, encontré esto en Amazon y me pareció buena opción.
-            Hola, mira buscando encontre esto que la verdad esta bastante bien y te puede interesar
-            Hola, he encontrado esto que me parece de buena calidad y en tu caso puede serte útil
-
-            Genera un mensaje único y natural. Responde SOLO el texto del mensaje.`;
+                    
+            ${contextInstruction}
+            ${savedExamples}
+                    
+            Reglas OBLIGATORIAS:
+            - Empieza casi siempre con un saludo directo o nombre si se identifica uno (Hola Teresa, Oye mamá, Mira Juan, Ey Laura…)
+            - Habla SIEMPRE en PRIMERA PERSONA: "te paso", "mira lo que he visto", "he pensado en ti", etc.
+            - Prohibido hablar en tercera persona sobre el destinatario
+            - Español natural de España, coloquial pero no infantil
+            - Puedes usar contracciones: q, xq, pa, tq, etc. cuando sea natural
+            - Máximo 3–5 líneas cortas
+            - Sin emojis ni signos de exclamación exagerados
+            - Termina invitando a mirar el enlace de forma suave
+            - No inventes características del producto
+            - Suena como un mensaje real de WhatsApp entre conocidos
+                    
+            Ejemplos de lo que SÍ quieres (varía mucho):
+            Hola Teresa, mira lo que he pillado, creo que te vendría genial para los peques
+            Oye mamá, he visto esto y me he acordado de ti, ¿qué te parece?
+            Mira Juan, está bastante bien de precio, te lo paso por si te interesa
+                    
+            Genera SOLO el texto del mensaje WhatsApp, nada más.`;
 
             const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                 method: "POST",
@@ -428,42 +451,39 @@ const HistoryItem = ({
                 body: JSON.stringify({
                     model: "llama-3.1-8b-instant",
                     messages: [{ role: "user", content: prompt }],
-                    temperature: 1,
-                    max_tokens: 100
+                    temperature: 0.9,
+                    max_tokens: 140,
+                    top_p: 0.92
                 })
             });
 
-            if (!response.ok) throw new Error("Error Groq");
+            if (!response.ok) throw new Error("Error en Groq");
 
             const data = await response.json();
-            let generated = data.choices[0]?.message?.content?.trim() || "";
+            let generated = data.choices?.[0]?.message?.content?.trim() || "";
 
             generated = generated
                 .replace(/^"(.+)"$/, '$1')
-                .replace(/^“(.+)”$/, '$1')
-                .replace(/^«(.+)»$/, '$1')
-                .replace(/^'(.+)'$/, '$1')
-                .replace(/^`(.+)`$/, '$1')
+                .replace(/^(¡|Hola|Oye|Mira|Ey)\s*/i, match => match)
                 .trim();
 
-            if (generated && generated.length > 15 && generated.length < 300) {
+            if (generated.length > 12 && generated.length < 350) {
                 setCustomMessage(generated);
             } else {
-                const fallbacks = [
-                    "He encontrado este producto en Amazon que me ha parecido interesante. ¿Le echas un vistazo?",
-                    "Mira este enlace de Amazon, creo que puede resultarte útil.",
-                    title.length < 60 ? `Te paso ${title}. Lo vi en Amazon y me pareció una buena opción.` : "Te paso este enlace de Amazon por si te interesa.",
-                    hasDiscount ? `He visto ${title} con un descuento notable. Quizás valga la pena.` : "Acabo de ver este producto en Amazon. Me llamó la atención.",
-                    "Encontré esto en Amazon y pensé que podría interesarte.",
-                    "Mira esto que encontré en Amazon. Parece interesante."
-                ];
-                const randomFallback = fallbacks[Math.floor(Math.random() * fallbacks.length)];
-                setCustomMessage(randomFallback);
+                // fallback simple
+                const fallback = userContext
+                    ? `Hola ${userContext}, mira este producto que vi en Amazon`
+                    : "Mira lo que he encontrado, por si te interesa";
+                setCustomMessage(fallback);
             }
+
         } catch (err) {
             console.error("Error generando mensaje:", err);
-            // Fallback seguro y profesional
-            setCustomMessage("He encontrado este producto en Amazon que me ha parecido interesante. ¿Le echas un vistazo?");
+            setCustomMessage(
+                userContext
+                    ? `Hola ${userContext}, te paso este enlace de Amazon`
+                    : "Mira este producto que vi, por si te mola"
+            );
         }
     };
 
@@ -958,13 +978,42 @@ const HistoryItem = ({
                                                 }
                                             }}
                                             disabled={selectedOption !== "custom"}
-                                            className={`absolute top-1 right-1 p-1.5 rounded-lg transition-all duration-200 contenedorCosas ${selectedOption === "custom"
+                                            className={`absolute top-1.5 right-1.5 p-1 transition-all duration-200 contenedorCosas ${selectedOption === "custom"
                                                 ? "text-violet-600 hover:text-violet-800 hover:bg-violet-100 cursor-pointer"
                                                 : "text-slate-300 cursor-not-allowed opacity-50"
                                                 }`}
                                             title="Generar mensaje con IA"
                                         >
                                             <Bot className="w-7 h-7" />
+                                        </button>
+                                        {/* NUEVO botón Guardar */}
+                                        <button
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+
+                                                const trimmed = customMessage.trim();
+                                                if (!trimmed) {
+                                                    toast.warning("Escribe algo antes de guardar");
+                                                    return;
+                                                }
+
+                                                // Llamada a la función de guardado simple que ya tienes o acabas de crear
+                                                const success = await saveSimpleMessage(trimmed);
+
+                                                if (success) {
+                                                    // Opcional: puedes cerrar el modal o limpiar el textarea
+                                                    // setShowShareModal(false);
+                                                    // setCustomMessage("");
+                                                }
+                                            }}
+                                            disabled={selectedOption !== "custom" || !customMessage.trim()}
+                                            className={`absolute bottom-3 right-1.5 p-1 transition-all duration-200 contenedorCosas ${selectedOption === "custom" && customMessage.trim()
+                                                ? "text-violet-600 hover:text-violet-800 hover:bg-violet-100 cursor-pointer"
+                                                : "text-slate-300 cursor-not-allowed opacity-50"
+                                                }`}
+                                            title="Guardar este mensaje"
+                                        >
+                                            <Save className="w-6 h-6" />
                                         </button>
                                     </div>
                                 )}

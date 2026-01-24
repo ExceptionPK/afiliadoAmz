@@ -317,3 +317,46 @@ export const syncLocalToSupabase = async () => {
     // localStorage.removeItem('amazon-affiliate-history');
   }
 };
+
+// utils/supabaseStorage.js
+
+export const saveSimpleMessage = async (messageText) => {
+  if (!messageText?.trim()) {
+    toast.warning("No hay texto para guardar");
+    return false;
+  }
+
+  try {
+    const { error } = await supabase
+      .from('saved_messages')
+      .insert([{
+        message_text: messageText.trim()
+      }]);
+
+    if (error) throw error;
+
+    toast.success("Mensaje guardado");
+    return true;
+  } catch (err) {
+    console.error("Error al guardar mensaje:", err);
+    toast.error("No se pudo guardar el mensaje");
+    return false;
+  }
+};
+
+export const getSavedMessages = async (limit = 10) => {
+  try {
+    const { data, error } = await supabase
+      .from('saved_messages')
+      .select('message_text')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    if (error) throw error;
+
+    return data.map(item => item.message_text) || [];
+  } catch (err) {
+    console.error("Error obteniendo mensajes guardados:", err);
+    return [];
+  }
+};
