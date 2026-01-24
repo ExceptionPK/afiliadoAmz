@@ -1,6 +1,10 @@
 const STORAGE_KEY = 'amazon-affiliate-history';
 const TITLE_CACHE_KEY = 'amazon-title-cache';
 
+import { supabase } from './supabaseClient';
+import { saveToHistory } from './supabaseStorage';
+import { getUserHistory } from './supabaseStorage';
+
 const getTitleCache = () => {
     try {
         const data = localStorage.getItem(TITLE_CACHE_KEY);
@@ -460,10 +464,10 @@ export const exportHistory = () => {
 };
 
 // utils/storage.js → FUNCIÓN importHistory MEJORADA CON NOMBRE DE ARCHIVO EN TOAST
-export const importHistory = (file, callback) => {
+export const importHistory = async (file, callback) => {
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = async (e) => {
         const content = e.target.result.trim();
 
         // Obtenemos el nombre del archivo sin extensión para mostrarlo bonito
@@ -505,7 +509,7 @@ export const importHistory = (file, callback) => {
             }
 
             // -------------------------------------------------
-            // 2. CSV (mismo código que tenías)
+            // 2. CSV (tu lógica original intacta)
             // -------------------------------------------------
             if (importedItems.length === 0) {
                 const lines = content.split(/\r\n|\n|\r/).map(l => l.trim()).filter(Boolean);
@@ -617,65 +621,117 @@ export const importHistory = (file, callback) => {
 
             if (importedItems.length === 0) throw new Error("No se encontraron enlaces válidos");
 
-            // ==================== MERGE INTELIGENTE ====================
-            const currentHistory = getHistory();
-            const historyMap = new Map();
-            currentHistory.forEach(item => {
-                historyMap.set(`${item.asin}-${item.domain}`, item);
-            });
+            // Detectar sesión
+            const { data: { user } } = await supabase.auth.getUser();
+            const isLoggedIn = !!user;
 
             let addedCount = 0;
-            const mergedHistory = [...currentHistory];
-            const newItemsToAdd = [];
+            let updatedCount = 0;
+            let skippedCount = 0;
 
-            importedItems.forEach(newItem => {
-                const key = `${newItem.asin}-${newItem.domain}`;
+            // Declaramos antes para que estén disponibles en los mensajes
+            let currentHistory = [];
+            let currentItems = [];
 
-                if (historyMap.has(key)) {
-                    const existingIndex = mergedHistory.findIndex(h => `${h.asin}-${h.domain}` === key);
-                    const existing = mergedHistory[existingIndex];
+            if (isLoggedIn) {
+                currentItems = await getUserHistory(1000); // límite alto para no perder items
+                const historyMap = new Map();
+                currentItems.forEach(item => {
+                    const key = `${item.asin}-${item.domain}`;
+                    historyMap.set(key, item);
+                });
 
-                    const existingTime = new Date(existing.timestamp).getTime();
-                    const newTime = new Date(newItem.timestamp).getTime();
+                for (const newItem of importedItems) {
+                    const key = `${newItem.asin}-${newItem.domain}`;
+                    const existing = historyMap.get(key);
 
-                    if (newTime > existingTime) {
-                        mergedHistory[existingIndex] = {
-                            ...existing,
-                            ...newItem,
-                            timestamp: newItem.timestamp,
-                            id: existing.id
-                        };
+                    if (existing) {
+                        const existingTime = new Date(existing.timestamp).getTime();
+                        const newTime = new Date(newItem.timestamp).getTime();
+
+                        if (newTime > existingTime) {
+                            await saveToHistory({
+                                ...existing,
+                                ...newItem,
+                                timestamp: newItem.timestamp,
+                                id: existing.id // mantenemos el ID de Supabase
+                            });
+                            updatedCount++;
+                        } else {
+                            skippedCount++;
+                        }
+                    } else {
+                        await saveToHistory(newItem);
+                        addedCount++;
                     }
-                } else {
-                    newItemsToAdd.push({
-                        ...newItem,
-                        id: Date.now() + '-' + Math.random().toString(36).substring(2, 9),
-                        originalPrice: newItem.originalPrice || newItem.price || null,
-                        prices: newItem.prices || (newItem.price ? [{ timestamp: newItem.timestamp, price: newItem.price }] : []),
-                        lastUpdate: newItem.lastUpdate || newItem.timestamp,
-                    });
-                    addedCount++;
-                    historyMap.set(key, newItem);
                 }
-            });
+            } else {
+                currentHistory = getHistory();
+                const historyMap = new Map();
+                currentHistory.forEach(item => {
+                    historyMap.set(`${item.asin}-${item.domain}`, item);
+                });
 
-            if (newItemsToAdd.length > 0) {
-                mergedHistory.unshift(...newItemsToAdd);
+                const mergedHistory = [...currentHistory];
+
+                importedItems.forEach(newItem => {
+                    const key = `${newItem.asin}-${newItem.domain}`;
+
+                    if (historyMap.has(key)) {
+                        const existingIndex = mergedHistory.findIndex(h => `${h.asin}-${h.domain}` === key);
+                        const existing = mergedHistory[existingIndex];
+
+                        const existingTime = new Date(existing.timestamp).getTime();
+                        const newTime = new Date(newItem.timestamp).getTime();
+
+                        if (newTime > existingTime) {
+                            mergedHistory[existingIndex] = {
+                                ...existing,
+                                ...newItem,
+                                timestamp: newItem.timestamp,
+                                id: existing.id
+                            };
+                            updatedCount++;
+                        } else {
+                            skippedCount++;
+                        }
+                    } else {
+                        mergedHistory.unshift({
+                            ...newItem,
+                            id: Date.now() + '-' + Math.random().toString(36).substring(2, 9),
+                            originalPrice: newItem.originalPrice || newItem.price || null,
+                            prices: newItem.prices || (newItem.price ? [{ timestamp: newItem.timestamp, price: newItem.price }] : []),
+                            lastUpdate: newItem.lastUpdate || newItem.timestamp,
+                        });
+                        addedCount++;
+                    }
+                });
+
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedHistory));
             }
 
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedHistory));
-
-            // ==================== MENSAJES PERSONALIZADOS CON NOMBRE DEL ARCHIVO ====================
-            let toastMessage;
+            // Mensaje final - natural, bonito y con tu texto preferido para la primera vez
+            let toastMessage = "";
             let useInfoToast = false;
 
-            if (currentHistory.length === 0) {
-                toastMessage = `"${displayName}" se ha importado`;
-            } else if (addedCount === 0) {
-                toastMessage = `Nada nuevo en "${displayName}"`;
+            const totalChanges = addedCount + updatedCount;
+            const wasEmpty = (isLoggedIn ? currentItems.length : currentHistory.length) === 0;
+
+            if (totalChanges === 0) {
+                toastMessage = `Nada nuevo de «${displayName}».`;
                 useInfoToast = true;
+            } else if (wasEmpty) {
+                // Primera importación (historial vacío)
+                toastMessage = `Se ha importado «${displayName}»`;
             } else {
-                toastMessage = `+${addedCount} añadidos de "${displayName}"`;
+                // Importaciones posteriores
+                if (addedCount > 0 && updatedCount === 0) {
+                    toastMessage = `+${addedCount} producto${addedCount === 1 ? '' : 's'} nuevo${addedCount === 1 ? '' : 's'} de «${displayName}»`;
+                } else if (addedCount === 0 && updatedCount > 0) {
+                    toastMessage = `Se han actualizado ${updatedCount} producto${updatedCount === 1 ? '' : 's'} de «${displayName}»`;
+                } else {
+                    toastMessage = `«${displayName}»: +${addedCount} nuevos, ${updatedCount} actualizados`;
+                }
             }
 
             callback(true, toastMessage, useInfoToast);
@@ -691,6 +747,8 @@ export const importHistory = (file, callback) => {
     reader.onerror = () => callback(false, "Error leyendo el archivo");
     reader.readAsText(file, "UTF-8");
 };
+
+
 
 // === FUNCIÓN PARA ACTUALIZACIÓN MANUAL DE PRECIOS (SOLO CUENTA ÉXITOS CON PRECIO NUEVO) ===
 export const updateOutdatedPricesManually = async () => {

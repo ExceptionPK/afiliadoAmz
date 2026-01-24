@@ -364,6 +364,7 @@ const Auth = () => {
                         <button
                           onClick={handleGoogle}
                           disabled={loadingGoogle}
+                          type="button"
                           className="w-full h-11 flex items-center justify-center gap-3 bg-white border-2 border-slate-200 contenedorCosas shadow-sm hover:shadow-md hover:bg-slate-50 transition-all text-slate-800 font-medium disabled:opacity-60"
                         >
                           {loadingGoogle ? <Loader /> : <GoogleLogo />}
