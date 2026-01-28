@@ -396,13 +396,13 @@ const HistoryItem = ({
             if (userContext) {
                 contextInstruction = `El usuario ha escrito esto en el campo de mensaje: "${userContext}"
 
-            IMPORTANTE: SI el texto escrito por el usuario parece un nombre propio (como "Teresa", "Mamá", "Juan", "Laura", etc.) o un destinatario claro, DEBES empezar el mensaje dirigiéndote directamente a esa persona con "Hola [nombre]", "Oye [nombre]", "Mira [nombre]", etc.
+            IMPORTANTE: SI el texto escrito por el usuario parece un nombre propio o apodo  (como "Tere", "Teresa", "Mamá", "Juan", "Laura", etc.) o un destinatario claro, DEBES empezar el mensaje dirigiéndote directamente a esa persona con "Hola [nombre]", "Oye [nombre]", "Mira [nombre]", etc.
 
             SIEMPRE escribe el mensaje en PRIMERA PERSONA como si TÚ fueras quien lo envía por WhatsApp.
             NUNCA hables en tercera persona ni digas cosas como "creo que a [nombre] le vendría bien", "le puede interesar a [nombre]", etc.
             El mensaje debe sonar como si lo estuvieras enviando directamente a esa persona.`;
-                        } else {
-                            contextInstruction = `Escribe el mensaje en PRIMERA PERSONA, como si TÚ lo estuvieras enviando por WhatsApp a un amigo o conocido.
+            } else {
+                contextInstruction = `Escribe el mensaje en PRIMERA PERSONA, como si TÚ lo estuvieras enviando por WhatsApp a un amigo o conocido.
             NUNCA uses tercera persona.`;
             }
 
@@ -532,24 +532,44 @@ const HistoryItem = ({
                                 <div
                                     contentEditable
                                     suppressContentEditableWarning
-                                    onBlur={(e) => {
+                                    onBlur={async (e) => {
                                         const newText = e.currentTarget.textContent.trim().slice(0, 120);
-                                        setEditTitle(newText);
-                                        if (newText && newText !== localTitle) {
+                                        if (!newText || newText === localTitle) {
+                                            setEditingId(null);
+                                            return;
+                                        }
+
+                                        const updatedEntry = { ...propItem, productTitle: newText };
+
+                                        // 1. Guardar en Supabase si está autenticado
+                                        if (isAuthenticated) {
+                                            await updateHistoryItem(updatedEntry);
+                                        }
+                                        // 2. Guardar en localStorage si no está autenticado
+                                        else {
                                             const history = getHistory();
                                             const updated = history.map(h =>
-                                                h.id === propItem.id ? { ...h, productTitle: newText } : h
+                                                h.id === propItem.id ? updatedEntry : h
                                             );
                                             localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
-                                            setHistory(updated);
-                                            try {
-                                                const cache = getTitleCache();
-                                                cache[propItem.asin] = newText;
-                                                saveTitleCache(cache);
-                                            } catch (err) {
-                                                console.warn("Error actualizando caché", err);
-                                            }
+                                            window.dispatchEvent(new Event('amazon-history-updated'));
                                         }
+
+                                        // 3. Actualizar estado local del componente
+                                        setLocalTitle(newText);
+                                        setHistory(prev => prev.map(h =>
+                                            h.id === propItem.id ? updatedEntry : h
+                                        ));
+
+                                        // 4. Guardar en caché de títulos
+                                        try {
+                                            const cache = getTitleCache();
+                                            cache[propItem.asin] = newText;
+                                            saveTitleCache(cache);
+                                        } catch (err) {
+                                            console.warn("Error actualizando caché", err);
+                                        }
+
                                         setEditingId(null);
                                     }}
                                     onKeyDown={(e) => {
