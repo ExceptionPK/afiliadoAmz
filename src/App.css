@@ -270,13 +270,20 @@ html, body {
   margin-left: auto;
   margin-right: auto;
 }
+
+@keyframes shine-fast {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(100%);  }
+}
+
+.animate-shine-fast {
+  animation: shine-fast 3s ease-in-out infinite;
+}
 /*----------------------------------------- NAVBAR ESTILOS */
 .nav-container {
   display: flex;
   gap: 0.25rem; /* gap-1 */
 }
-
-
 
 /* Estilos base de cada enlace */
 .nav-link {

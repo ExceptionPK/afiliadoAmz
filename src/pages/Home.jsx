@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import MagicParticles from "../components/MagicParticles";
 import RecommendedProducts from "../components/RecommendedProducts";
 import { toast } from "sonner";
+import { useAppUpdate } from '../hooks/useAppUpdate';
 import {
   Link as LinkIcon,
   Copy,
@@ -61,6 +62,7 @@ export default function AmazonAffiliate() {
   const [copied, setCopied] = useState(false);
   const [showResult, setShowResult] = useState(false);
   const [showError, setShowError] = useState(false);
+  const { showUpdateModal, changes, closeModal } = useAppUpdate();
 
   useEffect(() => {
     if (affiliateUrl) {
@@ -137,17 +139,11 @@ export default function AmazonAffiliate() {
       setAffiliateUrl(newAffiliateUrl);
       setLastProcessedUrl(inputUrl);
 
-      // Cambio principal: usamos saveToHistory en lugar de addToHistory
       await saveToHistory({
         originalUrl: inputUrl,
         affiliateUrl: newAffiliateUrl,
         asin,
         domain,
-        // Opcional: puedes añadir más campos si ya los tienes disponibles
-        // productTitle: "...",
-        // shortLink: "...",
-        // price: "...",
-        // etc.
       });
 
       toast.success("Producto guardado", { duration: 1500 });
@@ -317,9 +313,8 @@ export default function AmazonAffiliate() {
 
                 {/* Error */}
                 <div
-                  className={`overflow-hidden transition-all duration-300 ${
-                    showError ? "max-h-40 opacity-100" : "max-h-0 opacity-0"
-                  }`}
+                  className={`overflow-hidden transition-all duration-300 ${showError ? "max-h-40 opacity-100" : "max-h-0 opacity-0"
+                    }`}
                 >
                   {error && (
                     <div className="relative p-4 bg-red-50 border border-red-100 contenedorCosas animate-fade-in">
@@ -342,9 +337,8 @@ export default function AmazonAffiliate() {
 
                 {/* Separador mágico */}
                 <div
-                  className={`overflow-hidden transition-all duration-700 ${
-                    showResult ? "max-h-32 opacity-100" : "max-h-0 opacity-0"
-                  }`}
+                  className={`overflow-hidden transition-all duration-700 ${showResult ? "max-h-32 opacity-100" : "max-h-0 opacity-0"
+                    }`}
                 >
                   <div className="relative pt-14 animate-fade-in-down">
                     <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-px bg-gradient-to-r from-transparent via-violet-300 to-transparent" />
@@ -359,9 +353,8 @@ export default function AmazonAffiliate() {
 
                 {/* PRODUCTOS RECOMENDADOS */}
                 <div
-                  className={`overflow-hidden transition-all duration-700 ${
-                    showResult ? "max-h-screen opacity-100" : "max-h-0 opacity-0"
-                  }`}
+                  className={`overflow-hidden transition-all duration-700 ${showResult ? "max-h-screen opacity-100" : "max-h-0 opacity-0"
+                    }`}
                 >
                   <div className="mt-0 pt-3">
                     {affiliateUrl && lastProcessedUrl && (
@@ -381,6 +374,67 @@ export default function AmazonAffiliate() {
             </Card>
           </div>
         </div>
+        {/* ← MODAL DE ACTUALIZACIÓN – lo ponemos aquí al final del div principal */}
+        {showUpdateModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white contenedorCosas shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-300 border border-violet-200">
+
+              {/* Header */}
+              <div
+                className="
+    relative overflow-hidden
+    bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-600
+    text-white px-2.5 py-4
+  "
+              >
+                <div
+                  className="
+      absolute inset-0
+      bg-gradient-to-r from-transparent via-white/30 to-transparent
+      -translate-x-full animate-shine-fast
+    "
+                />
+                <h2 className="text-xl font-bold text-center relative z-10">
+                  ¡Nueva versión!
+                </h2>
+              </div>
+
+              {/* Contenido */}
+              <div className="p-6">
+                <ul className="space-y-2.5 font-medium text-slate-600 text-sm">
+                  {changes.length > 0 ? (
+                    changes.map((change, i) => (
+                      <li key={i} className="flex items-start gap-2">
+                        <span className="text-violet-600 font-bold text-lg leading-none">•</span>
+                        <span>{change}</span>
+                      </li>
+                    ))
+                  ) : (
+                    <li className="italic text-slate-500">
+                      Mejoras de estabilidad y rendimiento
+                    </li>
+                  )}
+                </ul>
+              </div>
+
+              {/* Botones */}
+              <div className="px-2.5 py-2.5 border-t bg-slate-50 flex justify-center">
+                <button
+                  onClick={closeModal}
+                  className="
+                  px-6 py-3 bg-violet-600 text-white contenedorCosas
+                  hover:bg-violet-700 transition font-semibold shadow-md
+                  w-full text-center
+                  min-w-[180px]
+                "
+                >
+                  Aceptar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </>
   );
