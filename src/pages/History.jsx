@@ -1267,15 +1267,20 @@ export default function HistoryPage() {
         if (!search.trim()) return history;
 
         const normalize = (str) =>
-            str
+            (str || "")
                 .toLowerCase()
                 .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "")
-                .replace(/[^a-z0-9\s]/g, "")
+                .replace(/[\u0300-\u036f]/g, "")           // quita acentos
+                .replace(/[^a-z0-9\s-]/g, "")              // solo letras, números, espacios y guiones
+                .replace(/\s+/g, " ")                      // colapsa espacios
                 .trim();
 
-        const searchLower = normalize(search);
+        const searchNormalized = normalize(search);
 
+        // Si la búsqueda es muy corta → permitimos coincidencias en ASIN, dominio, url
+        const isShortSearch = searchNormalized.length <= 3;
+
+        // Reemplazos comunes (solo aplicamos si no es búsqueda muy corta)
         const commonReplacements = {
             xiomi: "xiaomi",
             xioami: "xiaomi",
@@ -1285,23 +1290,38 @@ export default function HistoryPage() {
             huaewi: "huawei",
             samsumg: "samsung",
             samgsung: "samsung",
+            movil: "móvil",
+            moviles: "móviles",
+            cel: "celular",
+            telefono: "teléfono",
         };
 
-        const enhancedSearch = commonReplacements[searchLower] || searchLower;
+        const enhancedSearch = isShortSearch
+            ? searchNormalized
+            : (commonReplacements[searchNormalized] || searchNormalized);
 
         return history.filter((item) => {
-            const titleNorm = normalize(item.productTitle || "");
-            const asinNorm = item.asin.toLowerCase();
-            const domainNorm = item.domain.toLowerCase();
-            const urlNorm = item.originalUrl.toLowerCase();
+            const titleNorm = normalize(item.productTitle);
+            const asinNorm = item.asin?.toLowerCase() || "";
+            const domainNorm = item.domain?.toLowerCase() || "";
+            const urlNorm = item.originalUrl?.toLowerCase() || "";
 
-            return (
-                asinNorm.includes(searchLower) ||
-                domainNorm.includes(searchLower) ||
-                urlNorm.includes(searchLower) ||
-                titleNorm.includes(enhancedSearch) ||
-                titleNorm.includes(searchLower)
-            );
+            // Coincidencia principal → en el título
+            if (titleNorm.includes(enhancedSearch)) {
+                return true;
+            }
+
+            // Si la búsqueda es muy corta → permitimos también ASIN, dominio o URL
+            if (isShortSearch) {
+                return (
+                    asinNorm.includes(searchNormalized) ||
+                    domainNorm.includes(searchNormalized) ||
+                    urlNorm.includes(searchNormalized)
+                );
+            }
+
+            // Búsquedas normales → solo título + búsqueda mejorada
+            return titleNorm.includes(searchNormalized);
         });
     }, [history, search]);
 

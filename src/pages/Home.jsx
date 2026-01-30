@@ -3,6 +3,7 @@ import MagicParticles from "../components/MagicParticles";
 import RecommendedProducts from "../components/RecommendedProducts";
 import { toast } from "sonner";
 import { useAppUpdate } from '../hooks/useAppUpdate';
+import FeedbackForm from '../components/FeedbackForm';
 import {
   Link as LinkIcon,
   Copy,
@@ -10,6 +11,7 @@ import {
   AlertCircle,
   Sparkles,
   ExternalLink,
+  MessageSquare,
 } from "lucide-react";
 import { saveToHistory } from '../utils/supabaseStorage';
 
@@ -63,6 +65,7 @@ export default function AmazonAffiliate() {
   const [showResult, setShowResult] = useState(false);
   const [showError, setShowError] = useState(false);
   const { showUpdateModal, changes, closeModal } = useAppUpdate();
+  const [showFeedback, setShowFeedback] = useState(false);
 
   useEffect(() => {
     if (affiliateUrl) {
@@ -434,7 +437,29 @@ export default function AmazonAffiliate() {
             </div>
           </div>
         )}
+        { /* Botón flotante de feedback */}
+        <button
+          onClick={() => setShowFeedback(true)}
+          disabled={false} // puedes poner condición si quieres
+          className={`
+    fixed bottom-6 right-6 z-40
+    bg-violet-500 text-white
+    w-12 h-12 rounded-full
+    transition-all duration-300
+    shadow-lg flex items-center justify-center
+    hover:bg-violet-700 hover:scale-110 active:scale-95
+    shadow-violet-500/50 hover:shadow-xl hover:shadow-violet-600/60
+  `}
+          title="Enviar sugerencia, bug o mejora"
+          aria-label="Dar feedback"
+        >
+          <MessageSquare className="w-5 h-5" />
+        </button>
 
+        {/* Modal de feedback */}
+        {showFeedback && (
+          <FeedbackForm onClose={() => setShowFeedback(false)} />
+        )}
       </div>
     </>
   );
