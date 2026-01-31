@@ -1,25 +1,47 @@
 // src/components/FeedbackForm.jsx
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { toast } from 'sonner';
-import { MessageSquare, X } from 'lucide-react';
+import { MessageSquare, X, ChevronDown, Phone } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
 import { useLocation } from 'react-router-dom';
-import { motion } from 'framer-motion'; // si no lo tienes, quítalo o instálalo
+import { motion, AnimatePresence } from 'framer-motion';
 
-// Loader idéntico al de Auth.jsx
+// Loader
 const Loader = () => (
   <motion.div
-    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"
+    className="w-5 h-5 border-2 border-white/30 border-t-white contenedorCosas animate-spin"
     transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
   />
 );
 
+const feedbackTypes = [
+  { value: 'bug', label: 'Bug / Error encontrado' },
+  { value: 'mejora', label: 'Mejora / Idea' },
+  { value: 'sugerencia', label: 'Sugerencia / Nueva funcionalidad' },
+  { value: 'otro', label: 'Otro comentario' },
+];
+
 export default function FeedbackForm({ onClose }) {
   const [type, setType] = useState('mejora');
   const [message, setMessage] = useState('');
-  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');           // ← Cambiado de email a phone
   const [loading, setLoading] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const location = useLocation();
+  const selectRef = useRef(null);
+
+  // Cerrar select al click fuera
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (selectRef.current && !selectRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const selectedOption = feedbackTypes.find((opt) => opt.value === type);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -34,20 +56,48 @@ export default function FeedbackForm({ onClose }) {
       const { data: { user } } = await supabase.auth.getUser();
       const isLoggedIn = !!user;
 
+      // Limpiamos el teléfono (quitamos espacios, guiones, etc.)
+      const cleanPhone = phone.replace(/\D/g, '');
+
       const { error } = await supabase.from('feedback').insert({
         user_id: isLoggedIn ? user.id : null,
         type,
         message: message.trim(),
         page: location.pathname,
-        email: email.trim() || null,
+        phone: cleanPhone || null,           // ← nuevo campo
       });
 
       if (error) throw error;
 
       toast.success('¡Gracias por tu feedback!');
+
+      if (cleanPhone && cleanPhone.length >= 9) {
+        try {
+          const { error: funcError } = await supabase.functions.invoke('send-whatsapp', {
+            body: {
+              phone: cleanPhone,
+              type: selectedOption?.label || type,
+              message: message.trim()
+            }
+          });
+
+          if (funcError) {
+            console.error('Error invocando send-whatsapp:', funcError);
+            toast.warning('Feedback guardado, pero no se pudo enviar confirmación por WhatsApp.');
+          } else {
+            toast.info('Te hemos enviado un mensaje de confirmación por WhatsApp.');
+          }
+        } catch (invokeErr) {
+          console.error('Excepción al invocar función:', invokeErr);
+          toast.warning('Feedback guardado, pero hubo un problema técnico con WhatsApp.');
+        }
+      }
+
+      // Resetear formulario
       setMessage('');
-      setEmail('');
+      setPhone('');
       onClose?.();
+
     } catch (err) {
       console.error('Error al enviar feedback:', err);
       toast.error('No se pudo enviar. Inténtalo de nuevo más tarde.');
@@ -56,7 +106,6 @@ export default function FeedbackForm({ onClose }) {
     }
   };
 
-  // Clase base para inputs (ya ajustada antes)
   const inputBaseClass = `
     w-full bg-white/90 border-2 border-slate-200 contenedorCosas 
     text-slate-900 placeholder-slate-400 
@@ -79,20 +128,64 @@ export default function FeedbackForm({ onClose }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          <div>
+          {/* Select personalizado */}
+          <div className="relative" ref={selectRef}>
             <label className="block text-sm text-left font-medium text-slate-700 mb-1.5">
               Tipo de comentario
             </label>
-            <select
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-              className={`${inputBaseClass} px-4 py-2.5 h-12 appearance-none`}
+
+            <button
+              type="button"
+              onClick={() => setIsOpen(!isOpen)}
+              className={`
+                ${inputBaseClass} px-4 py-2.5 h-12 
+                flex items-center justify-between 
+                text-left cursor-pointer
+              `}
             >
-              <option value="bug">Bug / Error encontrado</option>
-              <option value="mejora">Mejora o idea para la app</option>
-              <option value="sugerencia">Sugerencia / Nueva funcionalidad</option>
-              <option value="otro">Otro comentario</option>
-            </select>
+              <span className={selectedOption ? 'text-slate-900' : 'text-slate-400'}>
+                {selectedOption?.label || 'Selecciona una opción'}
+              </span>
+              <ChevronDown
+                className={`w-5 h-5 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+              />
+            </button>
+
+            <AnimatePresence>
+              {isOpen && (
+                <motion.ul
+                  initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                  transition={{ duration: 0.15 }}
+                  className="
+                    absolute z-10 mt-1.5 w-full 
+                    bg-white border border-slate-200 contenedorCosas
+                    shadow-xl overflow-hidden rounded-lg
+                  "
+                >
+                  {feedbackTypes.map((option) => (
+                    <motion.li
+                      key={option.value}
+                      whileHover={{ backgroundColor: '#f1f5f9' }}
+                      transition={{ duration: 0.1 }}
+                      onClick={() => {
+                        setType(option.value);
+                        setIsOpen(false);
+                      }}
+                      className={`
+                        px-4 py-3 cursor-pointer text-slate-800
+                        ${type === option.value
+                          ? 'bg-violet-50 text-violet-700 font-medium'
+                          : 'hover:bg-slate-50'}
+                      `}
+                    >
+                      {option.label}
+                    </motion.li>
+                  ))}
+                </motion.ul>
+              )}
+            </AnimatePresence>
           </div>
 
           <div>
@@ -109,33 +202,40 @@ export default function FeedbackForm({ onClose }) {
             />
           </div>
 
+          {/* Campo de teléfono con prefijo +34 fijo */}
           <div>
             <label className="block text-left text-sm font-medium text-slate-700 mb-1.5">
-              Email (opcional – solo si quieres que te respondamos)
+              Teléfono (opcional – para responderte por WhatsApp)
             </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="tucorreo@ejemplo.com"
-              className={`${inputBaseClass} px-4 py-2.5 h-11`}
-            />
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 flex items-center pl-4 pointer-events-none">
+                <span className="text-slate-500 font-medium">+34</span>
+              </div>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => {
+                  // Solo permite números, espacios y guiones
+                  const val = e.target.value.replace(/[^0-9\s-]/g, '');
+                  setPhone(val);
+                }}
+                placeholder="612 345 678"
+                className={`${inputBaseClass} pl-16 px-4 py-2.5 h-11`}
+                inputMode="tel"
+              />
+            </div>
           </div>
 
           <button
             type="submit"
             disabled={loading || !message.trim()}
-            className="w-full h-11 bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium contenedorCosas shadow-lg hover:shadow-xl hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 mt-0"
+            className="w-full h-11 bg-gradient-to-r from-violet-600 to-purple-600 text-white font-medium contenedorCosas shadow-lg hover:shadow-xl hover:brightness-105 disabled:opacity-60 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 mt-2"
           >
-            {loading ? (
-              <Loader />
-            ) : (
-              'Enviar comentario'
-            )}
+            {loading ? <Loader /> : 'Enviar comentario'}
           </button>
 
           <p className="text-xs text-center text-slate-500">
-            No compartimos tu email con nadie. Solo lo usamos si necesitas respuesta.
+            No guardamos ni compartimos tu número. Solo se usa para abrir WhatsApp si lo proporcionas.
           </p>
         </form>
       </div>
