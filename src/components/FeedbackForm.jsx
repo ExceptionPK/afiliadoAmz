@@ -9,7 +9,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 // Loader
 const Loader = () => (
   <motion.div
-    className="w-5 h-5 border-2 border-white/30 border-t-white contenedorCosas animate-spin"
+    className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"
     transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
   />
 );
