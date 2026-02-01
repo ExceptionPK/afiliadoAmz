@@ -364,7 +364,7 @@ const HistoryItem = ({
         const localTs = localStorage.getItem(key);
         if (localTs) {
             const ts = parseInt(localTs, 10);
-            if (Date.now() - ts < 24 * 60 * 60 * 1000) return true;
+            if (Date.now() - ts < 6 * 60 * 60 * 1000) return true;
         }
 
         if (item.lastVisited) {

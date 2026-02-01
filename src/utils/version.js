@@ -1,6 +1,5 @@
 // src/utils/version.js
-export const APP_VERSION = "v11";
+export const APP_VERSION = "v12";
 export const CHANGELOG = [
-  "Arreglado filtrado de búsqueda para mejor precisión",
-  "Añadido boton de sugerencias"
+  "Se redujo la confirmación de visita al enlace de 24h a 6h"
 ];
