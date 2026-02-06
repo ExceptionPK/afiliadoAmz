@@ -1,8 +1,6 @@
 const STORAGE_KEY = 'amazon-affiliate-history';
 const TITLE_CACHE_KEY = 'amazon-title-cache';
 
-const scrapeDoKey = import.meta.env.VITE_SCRAPEDO_API_KEY;
-
 import { supabase } from './supabaseClient';
 import { saveToHistory } from './supabaseStorage';
 import { getUserHistory } from './supabaseStorage';
