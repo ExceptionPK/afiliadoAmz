@@ -403,7 +403,7 @@ export default function AmazonAffiliate() {
               </div>
 
               {/* Contenido */}
-              <div className="p-6">
+              <div className="p-6 text-left">
                 <ul className="space-y-2.5 font-medium text-slate-600 text-sm">
                   {changes.length > 0 ? (
                     changes.map((change, i) => (

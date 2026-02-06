@@ -1982,9 +1982,9 @@ export default function HistoryPage() {
                                   bg-white border border-slate-200 contenedorCosas noResultado p-8 text-center text-slate-500
                                   transition-all duration-700
                                   ${history.length === 0 || !isLoading
-                                                                        ? 'opacity-100 translate-y-0'
-                                                                        : 'opacity-0 translate-y-8'
-                                                                    }
+                                            ? 'opacity-100 translate-y-0'
+                                            : 'opacity-0 translate-y-8'
+                                        }
                                 `}
                                     style={{
                                         animation: history.length === 0 || !isLoading
@@ -2095,7 +2095,7 @@ export default function HistoryPage() {
                                 }
 
                                 setIsUpdatingPrices(false);
-                                setHistory(getHistory());
+                                window.dispatchEvent(new Event('amazon-history-updated'));
                             }}
                             disabled={isUpdatingPrices || history.length === 0}
                             className={`

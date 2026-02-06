@@ -1,6 +1,8 @@
 const STORAGE_KEY = 'amazon-affiliate-history';
 const TITLE_CACHE_KEY = 'amazon-title-cache';
 
+const apiKey = import.meta.env.VITE_WEBSCRAPINGAPI_KEY;
+
 import { supabase } from './supabaseClient';
 import { saveToHistory } from './supabaseStorage';
 import { getUserHistory } from './supabaseStorage';
@@ -89,218 +91,104 @@ export const addToHistory = async (entry) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
     window.dispatchEvent(new Event('amazon-history-updated'));
 
-    setTimeout(() => fetchRealData(newEntry), 3000);
+    setTimeout(() => fetchRealData(newEntry), 500);
 };
 
 
 // FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS (versión mejorada 2026)
 export const fetchRealData = async (entry) => {
+    // Verificar que existe la clave API
+    if (!apiKey) {
+        console.error("Error: No se encontró VITE_WEBSCRAPINGAPI_KEY en .env.local");
+        return;
+    }
+
     const asin = entry.asin;
     if (!asin || asin.length !== 10) {
         console.warn("ASIN inválido o ausente:", entry.asin);
         return;
     }
 
-    // URL objetivo
-    let targetUrl = entry.originalUrl;
-    if (!targetUrl) {
-        const domain = entry.domain || 'amazon.es';
-        targetUrl = `https://${domain}/dp/${asin}`;
+    // Limpieza robusta del dominio
+    let domainPart = (entry.domain || 'amazon.es')
+        .replace(/^(https?:\/\/)?(www\.)?/i, '')     // quita protocolo y www.
+        .replace(/^amazon\./i, '')                   // quita amazon. si ya está
+        .split('.')[0]                               // toma solo la parte del país (es, com, de...)
+        .toLowerCase();
+
+    // Forzamos valores válidos conocidos si algo sale raro
+    if (!['es', 'com', 'de', 'fr', 'it', 'co.uk', 'ca', 'com.mx', 'com.br', 'in', 'jp'].includes(domainPart)) {
+        domainPart = 'es'; // fallback seguro a amazon.es
     }
 
-    // Proxy en Vercel (en producción) o localhost en desarrollo
-    const isDev = import.meta.env.DEV;
-    const proxyBase = isDev ? 'http://localhost:3000' : ''; // ajusta puerto si usas otro en local
-    const proxyUrl = `${proxyBase}/api/scrape?url=${encodeURIComponent(targetUrl)}`;
+    const amazonDomain = `amazon.${domainPart}`;
 
-    console.log(`[fetchRealData] ASIN ${asin} → ${targetUrl}`);
-    console.log(`[fetchRealData] Llamando proxy: ${proxyUrl}`);
+    const scraperUrl = `https://ecom.webscrapingapi.com/v1?api_key=${apiKey}&engine=amazon&type=product&product_id=${asin}&amazon_domain=${amazonDomain}`;
+
+    console.log(`[fetchRealData] Intentando obtener datos para ASIN ${asin} → ${amazonDomain}`);
+    console.log(`URL generada: ${scraperUrl}`);
 
     try {
-        const res = await fetch(proxyUrl);
+        const res = await fetch(scraperUrl, {
+            headers: {
+                'Accept': 'application/json',
+            },
+        });
+
         if (!res.ok) {
-            const errorText = await res.text().catch(() => 'sin detalles');
-            console.error(`[Proxy Vercel] HTTP ${res.status}: ${errorText.slice(0, 300)}...`);
+            const errorData = await res.json().catch(() => ({}));
+            const errorMsg = errorData.error || errorData.message || `HTTP ${res.status}`;
+            throw new Error(`WebScrapingAPI falló: ${errorMsg}`);
+        }
+
+        const data = await res.json();
+
+        if (!data?.product_results) {
+            console.warn("Respuesta sin 'product_results'", data);
             return;
         }
 
-        const html = await res.text();
+        const product = data.product_results;
 
-        if (html.length < 1000 || html.includes('captcha') || html.includes('blocked') || html.includes('Access Denied')) {
-            console.warn("[fetchRealData] Respuesta inválida o bloqueada (posible captcha/bloqueo)");
-            return;
-        }
+        // Título
+        let realTitle = product.title?.trim()
+            || product.name?.trim()
+            || entry.productTitle
+            || `Producto ${asin}`;
 
-        console.log(`[fetchRealData] HTML recibido (${html.length} caracteres)`);
+        // Limpieza opcional del título (puedes quitar o ajustar)
+        realTitle = realTitle
+            .replace(/\s*\([^)]{5,}\)$/g, '')     // quita paréntesis largos al final
+            .replace(/\s*[-–—]\s*Amazon\.es/gi, '') // quita " - Amazon.es" si aparece
+            .trim();
 
-        // ==================== TÍTULO ====================
-        let realTitle = entry.productTitle || `Producto ${asin}`;
-
-        // Prioridad 1: JSON-LD
-        const ldMatches = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
-        for (const match of ldMatches) {
-            try {
-                const json = JSON.parse(match[1]);
-                if (json.name && json.name.length > 10) {
-                    realTitle = json.name
-                        .replace(/\s*\([^)]*(oferta|descuento|prime|ahorro|cupón|envío|[0-9]+ ?€|envio)[^)]*\)/gi, '')
-                        .replace(/\s*\[.*?\]/g, '')
-                        .replace(/\s+/g, ' ')
-                        .trim();
-                    break;
-                }
-            } catch {}
-        }
-
-        // Prioridad 2: <title>
-        if (realTitle.length < 15 || realTitle.startsWith("Producto ")) {
-            const titleMatch = html.match(/<title[^>]*>([^<]{20,})<\/title>/i);
-            if (titleMatch?.[1]) {
-                realTitle = titleMatch[1]
-                    .split(/[-:|–](?=\s*Amazon)/i)[0]
-                    .replace(/\s*\([^)]*\)/g, '')
-                    .replace(/\s+/g, ' ')
-                    .trim();
-            }
-        }
-
-        // Prioridad 3: #productTitle
-        if (realTitle.length < 15 || realTitle.startsWith("Producto ")) {
-            const prodTitleMatch = html.match(/id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i);
-            if (prodTitleMatch?.[1]) {
-                realTitle = prodTitleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-            }
-        }
-
-        // ==================== PRECIO ====================
+        // Precio principal
         let price = null;
-        const toNumber = (str) => parseFloat(String(str).replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
+        if (product.price?.value) {
+            const numeric = parseFloat(product.price.value);
+            const currency = product.price.symbol || product.price.currency || '€';
 
-        // Intento 1: JSON embebido
-        let priceFromJson = null;
-        const jsonCandidates = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
-        for (const match of jsonCandidates) {
-            try {
-                const json = JSON.parse(match[1]);
-                const candidate = json?.offers?.price || json?.offers?.lowPrice || json?.offers?.highPrice;
-                if (candidate && toNumber(candidate) > 5) {
-                    priceFromJson = candidate;
-                    break;
-                }
-            } catch {}
-        }
-
-        if (priceFromJson) {
-            let num = toNumber(priceFromJson);
-            if (num > 5) {
-                price = num.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+            if (!isNaN(numeric)) {
+                price = numeric.toLocaleString('es-ES', {
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }) + ` ${currency}`;
             }
         }
 
-        // Intento 2: Selectores clásicos
-        if (!price) {
-            const symbol = html.match(/class=["']a-price-symbol["'][^>]*>([^<]*)</i)?.[1]?.trim() || '€';
-            const whole = html.match(/class=["']a-price-whole["'][^>]*>([^<]*)</i)?.[1]?.replace(/\.\s*/g, '') || '';
-            const fraction = (html.match(/class=["']a-price-fraction["'][^>]*>([^<]*)</i)?.[1] || '00').padEnd(2, '0').slice(0, 2);
-
-            if (whole && toNumber(whole) > 5) {
-                price = `${whole},${fraction} ${symbol}`;
+        // Fallback: precio desde buybox si el principal falla
+        if (!price && data.buybox?.price?.value) {
+            const buyboxNumeric = parseFloat(data.buybox.price.value);
+            if (!isNaN(buyboxNumeric)) {
+                price = buyboxNumeric.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' €';
             }
         }
 
-        // Intento 3: Offscreen prices
-        if (!price) {
-            const offscreenPrices = [...html.matchAll(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)</gi)]
-                .map(m => m[1].trim())
-                .filter(txt => {
-                    const val = toNumber(txt);
-                    const text = txt.toLowerCase();
-                    return txt.includes('€') && val > 5 && !text.includes('ahorro') && !text.includes('cupón') && !text.includes('descuento');
-                });
+        // Disponibilidad (opcional, para log o futuro uso)
+        const availability = product.availability_description ||
+            (product.available ? 'En stock' : 'No disponible');
 
-            if (offscreenPrices.length > 0) {
-                const lowestTxt = offscreenPrices.sort((a, b) => toNumber(a) - toNumber(b))[0];
-                price = lowestTxt;
-            }
-        }
-
-        // Formateo final del precio
-        if (price) {
-            let numericPart = price.replace(/[^0-9,.]/g, '').trim();
-            if (numericPart.includes(',') && numericPart.includes('.')) numericPart = numericPart.replace(/\./g, '');
-            else if (numericPart.includes('.')) numericPart = numericPart.replace('.', ',');
-            const [whole, decimal = ''] = numericPart.split(',');
-            const formattedWhole = parseInt(whole || '0').toLocaleString('es-ES');
-            const formattedDecimal = decimal.padEnd(2, '0').slice(0, 2);
-            price = `${formattedWhole},${formattedDecimal} €`;
-        }
-
-        // ==================== RECOMENDACIONES ====================
-        let recommended = [];
-
-        // Sponsored products
-        const sponsoredRegex = /data-asin=["']([A-Z0-9]{10})["'][^>]*?title=["']([^"']{10,250})[^"']*["']/gi;
-        let match;
-        while ((match = sponsoredRegex.exec(html)) !== null) {
-            const recAsin = match[1];
-            let recTitle = match[2]
-                .replace(/&quot;|&#039;|&amp;/g, "'")
-                .replace(/\s+/g, ' ')
-                .trim();
-            if (
-                recAsin !== asin &&
-                recTitle.length > 15 &&
-                !recommended.some(r => r.asin === recAsin) &&
-                !/patrocinado|sponsored|ad|anuncio|prime/i.test(recTitle.toLowerCase())
-            ) {
-                recommended.push({ asin: recAsin, title: recTitle.slice(0, 120) });
-            }
-        }
-
-        // Carruseles
-        const carouselRegex = /<div[^>]*data-asin=["']([A-Z0-9]{10})["'][^>]*?>([\s\S]*?)<(?:img|span)[^>]*alt=["']([^"']{10,250})[^"']*["']|title=["']([^"']{10,250})[^"']*["']/gi;
-        for (const m of html.matchAll(carouselRegex)) {
-            const recAsin = m[1];
-            let recTitle = (m[3] || m[4] || '').replace(/&quot;|&#039;|&amp;/g, "'").replace(/\s+/g, ' ').trim();
-
-            if (
-                recAsin !== asin &&
-                recTitle.length > 15 &&
-                !recommended.some(r => r.asin === recAsin) &&
-                !/patrocinado|sponsored|ad|anuncio|prime|oferta/i.test(recTitle.toLowerCase())
-            ) {
-                recommended.push({ asin: recAsin, title: recTitle.slice(0, 120) });
-                if (recommended.length >= 10) break;
-            }
-        }
-
-        // Fallback
-        if (recommended.length < 4) {
-            const fallbackRegex = /data-asin=["']([A-Z0-9]{10})["'].*?alt=["']([^"']{10,250})[^"']*["']/gi;
-            for (const m of html.matchAll(fallbackRegex)) {
-                const recAsin = m[1];
-                let recTitle = m[2]
-                    .replace(/&quot;|&#039;|&amp;/g, "'")
-                    .replace(/\s+/g, ' ')
-                    .trim();
-
-                if (
-                    recAsin !== asin &&
-                    recTitle.length > 15 &&
-                    !recommended.some(r => r.asin === recAsin) &&
-                    !/patrocinado|sponsored|ad|anuncio|prime|oferta/i.test(recTitle.toLowerCase())
-                ) {
-                    recommended.push({ asin: recAsin, title: recTitle.slice(0, 120) });
-                    if (recommended.length >= 8) break;
-                }
-            }
-        }
-
-        // Limpieza final
-        recommended = [...new Map(recommended.map(item => [item.asin, item])).values()]
-            .filter(r => r.title && r.title.length > 15);
-
-        // ==================== ACTUALIZAR HISTORIAL ====================
+        // ── Actualizar historial ──
         const now = new Date().toISOString();
         const history = getHistory();
 
@@ -314,9 +202,8 @@ export const fetchRealData = async (entry) => {
 
                 let finalTitle = h.productTitle;
                 const isDefaultTitle = h.productTitle.startsWith("Producto ") || h.productTitle.length < 10;
-                const isGoodNewTitle = realTitle && realTitle.length > 10 && realTitle.length <= 120;
 
-                if (isDefaultTitle && isGoodNewTitle) {
+                if (isDefaultTitle && realTitle.length > 10) {
                     finalTitle = realTitle;
                 }
 
@@ -327,7 +214,10 @@ export const fetchRealData = async (entry) => {
                     originalPrice: h.originalPrice || price || h.price,
                     prices: newPrices,
                     lastUpdate: now,
-                    recommended: recommended.slice(0, 8),  // ¡Esto hace que RecommendedProducts funcione!
+                    // Opcional: puedes guardar más si lo necesitas después
+                    // availability,
+                    // mainImage: product.main_image,
+                    // rating: product.rating,
                 };
             }
             return h;
@@ -336,17 +226,11 @@ export const fetchRealData = async (entry) => {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
         window.dispatchEvent(new Event('amazon-history-updated'));
 
-        console.log(`[Proxy Vercel OK] ASIN ${asin}: ${realTitle} → ${price || 'sin precio'} | ${recommended.length} recomendaciones`);
-
-        // Cachear título
-        if (realTitle.length > 5) {
-            const cache = getTitleCache();
-            cache[asin] = realTitle.slice(0, 120);
-            saveTitleCache(cache);
-        }
+        console.log(`[fetchRealData] ÉXITO ${asin}: ${realTitle} → ${price || 'sin precio'} (${availability})`);
 
     } catch (err) {
-        console.error(`[fetchRealData ERROR] ASIN ${asin}: ${err.message}`);
+        console.error(`[fetchRealData] ERROR para ${asin}:`, err.message);
+        // Opcional: podrías marcar el entry como "fallido" o reintentar más tarde
     }
 };
 
@@ -661,24 +545,51 @@ export const importHistory = async (file, callback) => {
 
 // === FUNCIÓN PARA ACTUALIZACIÓN MANUAL DE PRECIOS (SOLO CUENTA ÉXITOS CON PRECIO NUEVO) ===
 export const updateOutdatedPricesManually = async () => {
-    const history = getHistory();
-    if (history.length === 0) {
-        return { status: "empty", message: "No hay productos en el historial" };
+    // 1. Detectar si hay sesión activa
+    const { data: { user } } = await supabase.auth.getUser();
+    const isAuthenticated = !!user?.id;
+
+    // 2. Cargar el historial desde la fuente correcta
+    let history = [];
+    try {
+        if (isAuthenticated) {
+            history = await getUserHistory(500); // límite alto para no quedarnos cortos
+        } else {
+            history = getHistory();
+        }
+    } catch (err) {
+        console.error("Error al cargar historial para actualización de precios:", err);
+        return {
+            status: "error",
+            message: "No se pudo cargar el historial"
+        };
     }
 
-    const twentyFourHours = 24 * 60 * 60 * 1000;
+    if (!history || history.length === 0) {
+        return {
+            status: "empty",
+            message: "No hay productos en el historial"
+        };
+    }
+
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
     const now = Date.now();
 
+    // Filtrar los que llevan más de 24h sin actualizar
     const outdated = history.filter(item => {
         const last = item.lastUpdate ? new Date(item.lastUpdate).getTime() : 0;
-        return now - last > twentyFourHours;
+        return now - last > TWENTY_FOUR_HOURS;
     });
 
     if (outdated.length === 0) {
-        return { status: "up_to_date", message: "Todos los precios están al día" };
+        return {
+            status: "up_to_date",
+            message: "Todos los precios están al día"
+        };
     }
 
-    const toUpdate = outdated.slice(0, 3);
+    // Limitamos a 10 para no saturar la API en una sola pasada
+    const toUpdate = outdated.slice(0, 10);
 
     let realSuccessCount = 0;
     let attemptedCount = 0;
@@ -688,19 +599,18 @@ export const updateOutdatedPricesManually = async () => {
     for (const item of toUpdate) {
         attemptedCount++;
 
+        // Pequeña espera entre peticiones para evitar bloqueos
         if (attemptedCount > 1) {
             await new Promise(resolve => setTimeout(resolve, 1800));
         }
 
         const previousPrice = item.price;
 
-        let hadNetworkError = false;
-
         try {
             await fetchRealData(item);
             consecutiveFailures = 0;
         } catch (err) {
-            console.warn(`Error actualizando ${item.asin}:`, err);
+            console.warn(`Error actualizando ${item.asin} (${item.domain}):`, err.message);
 
             const isNetworkError =
                 err.name === 'TypeError' && err.message.includes('Failed to fetch') ||
@@ -709,14 +619,12 @@ export const updateOutdatedPricesManually = async () => {
                 err.name === 'AbortError';
 
             if (isNetworkError) {
-                hadNetworkError = true;
                 consecutiveFailures++;
             }
 
             if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-                console.warn("Cancelando actualización: múltiples fallos de proxy/red consecutivos");
+                console.warn("Cancelando actualización: múltiples fallos consecutivos de red/proxy");
                 window.dispatchEvent(new Event('amazon-history-updated'));
-
                 return {
                     status: "proxy_failed",
                     updated: realSuccessCount,
@@ -724,12 +632,29 @@ export const updateOutdatedPricesManually = async () => {
                     message: "Actualización cancelada por problemas graves con los proxies"
                 };
             }
+
+            // Continuamos con el siguiente aunque uno falle
+            continue;
         }
 
-        const currentHistory = getHistory();
-        const updatedItem = currentHistory.find(
-            h => h.asin === item.asin && h.domain === item.domain
-        );
+        // 3. Comprobar si realmente cambió el precio → desde la fuente correcta
+        let updatedItem;
+        try {
+            if (isAuthenticated) {
+                const freshHistory = await getUserHistory(500);
+                updatedItem = freshHistory.find(
+                    h => h.asin === item.asin && h.domain === item.domain
+                );
+            } else {
+                const currentHistory = getHistory();
+                updatedItem = currentHistory.find(
+                    h => h.asin === item.asin && h.domain === item.domain
+                );
+            }
+        } catch (refreshErr) {
+            console.warn("No se pudo recargar historial para verificar cambio:", refreshErr);
+            continue;
+        }
 
         if (updatedItem) {
             const newPrice = updatedItem.price;
@@ -743,6 +668,7 @@ export const updateOutdatedPricesManually = async () => {
         }
     }
 
+    // Disparamos el evento para que History.jsx recargue desde la fuente correcta
     window.dispatchEvent(new Event('amazon-history-updated'));
 
     return {

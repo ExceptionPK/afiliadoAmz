@@ -1,5 +1,6 @@
 // src/utils/version.js
-export const APP_VERSION = "v12";
+export const APP_VERSION = "v14";
 export const CHANGELOG = [
-  "Se redujo la confirmación de visita al enlace de 24h a 6h"
+  "Mejora en las proxies",
+  "Fix de error que rompia la app al recargar precios con sesión iniciada"
 ];
