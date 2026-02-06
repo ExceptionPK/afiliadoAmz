@@ -1,6 +1,8 @@
 const STORAGE_KEY = 'amazon-affiliate-history';
 const TITLE_CACHE_KEY = 'amazon-title-cache';
 
+const scrapeDoKey = import.meta.env.VITE_SCRAPEDO_API_KEY;
+
 import { supabase } from './supabaseClient';
 import { saveToHistory } from './supabaseStorage';
 import { getUserHistory } from './supabaseStorage';
@@ -89,355 +91,264 @@ export const addToHistory = async (entry) => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history));
     window.dispatchEvent(new Event('amazon-history-updated'));
 
-    setTimeout(() => fetchRealData(newEntry), 500);
+    setTimeout(() => fetchRealData(newEntry), 3000);
 };
 
 
 // FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS (versión mejorada 2026)
 export const fetchRealData = async (entry) => {
-    const proxies = [
-        'https://api.codetabs.com/v1/proxy?quest=',
-        'https://cors.x2u.in/',
-        'https://www.thebugging.com/apis/cors-proxy/?url=',
-        'https://corsproxy.io/?',
-        'https://proxy.cors.sh/',
-        'https://test.cors.workers.dev/?url=',  // Nuevo (Cloudflare)
-        'https://cors-anywhere.herokuapp.com/',  // Clásico, pero aún funciona en 2026 para testing
-        'https://cors.bridged.cc/',  // Nuevo, soporta raw
-        'https://api.allorigins.win/get?url=',  // Nuevo, devuelve JSON {contents: html}
-        'https://cors.lol/'  // Nuevo, simple /url
-    ];
-
-    const userAgents = [
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:131.0) Gecko/20100101 Firefox/131.0',
-        'Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1',
-        'Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36',
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',  // Nuevo UA 2026
-        'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_2) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36'  // Nuevo
-    ];
-    const randomUA = userAgents[Math.floor(Math.random() * userAgents.length)];
-
-    const shuffledProxies = [...proxies].sort(() => 0.5 - Math.random());
-
-    let html = null;
-
-    for (const proxy of shuffledProxies) {
-        try {
-            let proxyUrl = proxy + encodeURIComponent(entry.originalUrl);
-
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 20000);  // Aumentado a 20s
-
-            const res = await fetch(proxyUrl, {
-                signal: controller.signal,
-                headers: {
-                    'X-Requested-With': 'XMLHttpRequest',
-                    'User-Agent': randomUA,
-                    'Accept-Language': 'es-ES,es;q=0.9'  // Añadido para .es
-                },
-            });
-
-            clearTimeout(timeoutId);
-
-            if (!res.ok) continue;
-
-            // Manejo inteligente de respuesta (JSON o text)
-            const contentType = res.headers.get('content-type');
-            let responseData;
-            if (contentType && contentType.includes('application/json')) {
-                responseData = await res.json();
-                html = responseData.contents || responseData.html || responseData.body || null;
-            } else {
-                html = await res.text();
-            }
-
-            // Filtramos páginas de bloqueo o error
-            if (
-                !html ||
-                html.includes('Captcha') ||
-                html.includes('sorry') ||
-                html.includes('robot') ||
-                html.includes('unusual traffic') ||
-                html.includes('api-services-support@amazon.com') ||
-                html.length < 5000
-            ) {
-                console.warn(`Proxy ${proxy} devolvió página bloqueada o inválida`);
-                html = null;
-                continue;
-            }
-
-            // Si tiene contenido real de Amazon, salimos
-            if (html && html.length > 2000 && /amazon/i.test(html)) {
-                break;
-            }
-        } catch (e) {
-            console.warn(`Proxy falló: ${proxy}`, e.message);
-        }
-    }
-
-    if (!html) {
-        console.warn('Todos los proxies fallaron para:', entry.originalUrl);
+    const asin = entry.asin;
+    if (!asin || asin.length !== 10) {
+        console.warn("ASIN inválido o ausente:", entry.asin);
         return;
     }
 
-    // ==================== TÍTULO LIMPIO ====================
-    let realTitle = entry.productTitle;
+    // URL objetivo
+    let targetUrl = entry.originalUrl;
+    if (!targetUrl) {
+        const domain = entry.domain || 'amazon.es';
+        targetUrl = `https://${domain}/dp/${asin}`;
+    }
 
-    // Prioridad 1: JSON-LD
-    const ldMatches = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
-    for (const match of ldMatches) {
-        try {
-            const json = JSON.parse(match[1]);
-            if (json.name && json.name.length > 10) {
-                realTitle = json.name
-                    .replace(/\s*\([^)]*(oferta|descuento|prime|ahorro|cupón|envío|[0-9]+ ?€|envio)[^)]*\)/gi, '')
-                    .replace(/\s*\[.*?\]/g, '')
+    // Proxy en Vercel (en producción) o localhost en desarrollo
+    const isDev = import.meta.env.DEV;
+    const proxyBase = isDev ? 'http://localhost:3000' : ''; // ajusta puerto si usas otro en local
+    const proxyUrl = `${proxyBase}/api/scrape?url=${encodeURIComponent(targetUrl)}`;
+
+    console.log(`[fetchRealData] ASIN ${asin} → ${targetUrl}`);
+    console.log(`[fetchRealData] Llamando proxy: ${proxyUrl}`);
+
+    try {
+        const res = await fetch(proxyUrl);
+        if (!res.ok) {
+            const errorText = await res.text().catch(() => 'sin detalles');
+            console.error(`[Proxy Vercel] HTTP ${res.status}: ${errorText.slice(0, 300)}...`);
+            return;
+        }
+
+        const html = await res.text();
+
+        if (html.length < 1000 || html.includes('captcha') || html.includes('blocked') || html.includes('Access Denied')) {
+            console.warn("[fetchRealData] Respuesta inválida o bloqueada (posible captcha/bloqueo)");
+            return;
+        }
+
+        console.log(`[fetchRealData] HTML recibido (${html.length} caracteres)`);
+
+        // ==================== TÍTULO ====================
+        let realTitle = entry.productTitle || `Producto ${asin}`;
+
+        // Prioridad 1: JSON-LD
+        const ldMatches = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
+        for (const match of ldMatches) {
+            try {
+                const json = JSON.parse(match[1]);
+                if (json.name && json.name.length > 10) {
+                    realTitle = json.name
+                        .replace(/\s*\([^)]*(oferta|descuento|prime|ahorro|cupón|envío|[0-9]+ ?€|envio)[^)]*\)/gi, '')
+                        .replace(/\s*\[.*?\]/g, '')
+                        .replace(/\s+/g, ' ')
+                        .trim();
+                    break;
+                }
+            } catch {}
+        }
+
+        // Prioridad 2: <title>
+        if (realTitle.length < 15 || realTitle.startsWith("Producto ")) {
+            const titleMatch = html.match(/<title[^>]*>([^<]{20,})<\/title>/i);
+            if (titleMatch?.[1]) {
+                realTitle = titleMatch[1]
+                    .split(/[-:|–](?=\s*Amazon)/i)[0]
+                    .replace(/\s*\([^)]*\)/g, '')
                     .replace(/\s+/g, ' ')
                     .trim();
-                break;
-            }
-        } catch { }
-    }
-
-    // Prioridad 2: <title>
-    if (!realTitle || realTitle.length < 15) {
-        const titleMatch = html.match(/<title[^>]*>([^<]{20,})<\/title>/i);
-        if (titleMatch?.[1]) {
-            realTitle = titleMatch[1]
-                .split(/[-:|–](?=\s*Amazon)/i)[0]
-                .replace(/\s*\([^)]*\)/g, '')
-                .replace(/\s+/g, ' ')
-                .trim();
-        }
-    }
-
-    // Prioridad 3: #productTitle
-    if (!realTitle || realTitle.length < 15) {
-        const prodTitleMatch = html.match(/id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i);
-        if (prodTitleMatch?.[1]) {
-            realTitle = prodTitleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
-        }
-    }
-
-    // ==================== PRECIO REAL ====================
-    let price = null;
-    const toNumber = (str) => parseFloat(String(str).replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
-
-    // Intento 1: JSON embebido (mejorado y prioritario)
-    let priceFromJson = null;
-    const jsonCandidates = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
-
-    for (const match of jsonCandidates) {
-        try {
-            const json = JSON.parse(match[1]);
-            const candidate = json?.offers?.price || json?.offers?.lowPrice || json?.offers?.highPrice;
-            if (candidate && toNumber(candidate) > 10) {
-                priceFromJson = candidate;
-                break;
-            }
-        } catch { }
-    }
-
-    if (!priceFromJson) {
-        const scriptMatches = html.matchAll(/<script[^>]*>([\s\S]*?)<\/script>/gi);
-        for (const m of scriptMatches) {
-            const content = m[1];
-            const priceMatch = content.match(/"priceAmount"\s*:\s*"([^"]+)"|"displayPriceAmount"\s*:\s*"([^"]+)"|"priceToPayAmount"\s*:\s*"([^"]+)"|"landingPriceAmount"\s*:\s*"([^"]+)"/i);
-            if (priceMatch) {
-                priceFromJson = priceMatch[1] || priceMatch[2] || priceMatch[3] || priceMatch[4];
-                if (toNumber(priceFromJson) > 10) break;
             }
         }
-    }
 
-    if (priceFromJson) {
-        let num = toNumber(priceFromJson);
-        if (num > 10) {
-            price = num.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+        // Prioridad 3: #productTitle
+        if (realTitle.length < 15 || realTitle.startsWith("Producto ")) {
+            const prodTitleMatch = html.match(/id=["']productTitle["'][^>]*>([\s\S]*?)<\/span>/i);
+            if (prodTitleMatch?.[1]) {
+                realTitle = prodTitleMatch[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim();
+            }
         }
-    }
 
-    // Intento 2: Selectores clásicos (si JSON falla)
-    if (!price) {
-        const symbol = html.match(/class=["']a-price-symbol["'][^>]*>([^<]*)</i)?.[1]?.trim() || '€';
-        const whole = html.match(/class=["']a-price-whole["'][^>]*>([^<]*)</i)?.[1]?.replace(/\.\s*/g, '') || '';
-        const fraction = (html.match(/class=["']a-price-fraction["'][^>]*>([^<]*)</i)?.[1] || '00').padEnd(2, '0').slice(0, 2);
+        // ==================== PRECIO ====================
+        let price = null;
+        const toNumber = (str) => parseFloat(String(str).replace(/[^0-9,]/g, '').replace(',', '.')) || 0;
 
-        if (whole && toNumber(whole) > 10) {
-            price = `${symbol}${whole},${fraction}`;
+        // Intento 1: JSON embebido
+        let priceFromJson = null;
+        const jsonCandidates = html.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi);
+        for (const match of jsonCandidates) {
+            try {
+                const json = JSON.parse(match[1]);
+                const candidate = json?.offers?.price || json?.offers?.lowPrice || json?.offers?.highPrice;
+                if (candidate && toNumber(candidate) > 5) {
+                    priceFromJson = candidate;
+                    break;
+                }
+            } catch {}
         }
-    }
 
-    // Intento 3: Offscreen prices (último recurso)
-    if (!price) {
-        const offscreenPrices = [...html.matchAll(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)</gi)]
-            .map(m => m[1].trim())
-            .filter(txt => {
-                const val = toNumber(txt);
-                const text = txt.toLowerCase();
-                return (
-                    txt.includes('€') &&
-                    val > 15 &&
-                    !text.includes('ahorro') &&
-                    !text.includes('cupón') &&
-                    !text.includes('descuento') &&
-                    !text.includes('envío') &&
-                    !text.includes('gastos de envío') &&
-                    !text.includes('prime') &&
-                    !text.includes('suscríbete y ahorra')
-                );
-            });
+        if (priceFromJson) {
+            let num = toNumber(priceFromJson);
+            if (num > 5) {
+                price = num.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+            }
+        }
 
-        if (offscreenPrices.length > 0) {
-            const sorted = offscreenPrices.sort((a, b) => toNumber(a) - toNumber(b));
-            const lowestTxt = sorted[0];
-            const lowestVal = toNumber(lowestTxt);
-            if (lowestVal > 15) {
+        // Intento 2: Selectores clásicos
+        if (!price) {
+            const symbol = html.match(/class=["']a-price-symbol["'][^>]*>([^<]*)</i)?.[1]?.trim() || '€';
+            const whole = html.match(/class=["']a-price-whole["'][^>]*>([^<]*)</i)?.[1]?.replace(/\.\s*/g, '') || '';
+            const fraction = (html.match(/class=["']a-price-fraction["'][^>]*>([^<]*)</i)?.[1] || '00').padEnd(2, '0').slice(0, 2);
+
+            if (whole && toNumber(whole) > 5) {
+                price = `${whole},${fraction} ${symbol}`;
+            }
+        }
+
+        // Intento 3: Offscreen prices
+        if (!price) {
+            const offscreenPrices = [...html.matchAll(/<span[^>]+class=["'][^"']*a-offscreen[^"']*["'][^>]*>([^<]+)</gi)]
+                .map(m => m[1].trim())
+                .filter(txt => {
+                    const val = toNumber(txt);
+                    const text = txt.toLowerCase();
+                    return txt.includes('€') && val > 5 && !text.includes('ahorro') && !text.includes('cupón') && !text.includes('descuento');
+                });
+
+            if (offscreenPrices.length > 0) {
+                const lowestTxt = offscreenPrices.sort((a, b) => toNumber(a) - toNumber(b))[0];
                 price = lowestTxt;
             }
         }
-    }
 
-    // Formateo bonito del precio (español)
-    if (price) {
-        let numericPart = price.replace(/[^0-9,.]/g, '').trim();
-
-        if (numericPart.includes(',') && numericPart.includes('.')) {
-            numericPart = numericPart.replace(/\./g, '');
-        } else if (numericPart.includes('.')) {
-            numericPart = numericPart.replace('.', ',');
-        }
-
-        if (!numericPart || parseFloat(numericPart.replace(',', '.')) < 1) {
-            price = null;
-        } else {
+        // Formateo final del precio
+        if (price) {
+            let numericPart = price.replace(/[^0-9,.]/g, '').trim();
+            if (numericPart.includes(',') && numericPart.includes('.')) numericPart = numericPart.replace(/\./g, '');
+            else if (numericPart.includes('.')) numericPart = numericPart.replace('.', ',');
             const [whole, decimal = ''] = numericPart.split(',');
             const formattedWhole = parseInt(whole || '0').toLocaleString('es-ES');
             const formattedDecimal = decimal.padEnd(2, '0').slice(0, 2);
             price = `${formattedWhole},${formattedDecimal} €`;
         }
-    } else {
-        price = null;
-    }
 
-    // ==================== ACTUALIZAR HISTORIAL ====================
-    const now = new Date().toISOString();
-    const history = getHistory();
+        // ==================== RECOMENDACIONES ====================
+        let recommended = [];
 
-    const updatedHistory = history.map(h => {
-        if (h.asin === entry.asin && h.domain === entry.domain) {
-            let newPrices = [...(h.prices || [])];
-
-            if (price && (!newPrices.length || newPrices[newPrices.length - 1].price !== price)) {
-                newPrices.push({ timestamp: now, price });
-            }
-
-            let finalTitle = h.productTitle;
-            const isDefaultTitle = h.productTitle.startsWith("Producto ") || h.productTitle.length < 10;
-            const isGoodNewTitle = realTitle && realTitle.length > 10 && realTitle.length <= 120;
-
-            if (isDefaultTitle && isGoodNewTitle) {
-                finalTitle = realTitle;
-            }
-
-            return {
-                ...h,
-                productTitle: finalTitle,
-                price: price || h.price,
-                originalPrice: h.originalPrice || price,
-                prices: newPrices,
-                lastUpdate: now,
-            };
-        }
-        return h;
-    });
-
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
-    window.dispatchEvent(new Event('amazon-history-updated'));
-
-    // Guardar título en caché
-    if (realTitle.length > 5) {
-        const cache = getTitleCache();
-        cache[entry.asin] = realTitle.slice(0, 120);
-        saveTitleCache(cache);
-    }
-
-    // ==================== RECOMENDACIONES ====================
-    let recommended = [];
-
-    // 1. Sponsored products (muy frecuente: data-asin + title en contenedores)
-    const sponsoredRegex = /data-asin=["']([A-Z0-9]{10})["'][^>]*?title=["']([^"']{10,250})[^"']*["']/gi;
-    let match;
-    while ((match = sponsoredRegex.exec(html)) !== null) {
-        const asin = match[1];
-        let title = match[2]
-            .replace(/&quot;|&#039;|&amp;/g, "'")
-            .replace(/\s+/g, ' ')
-            .trim();
-        if (
-            asin !== entry.asin &&
-            title.length > 15 &&
-            !recommended.some(r => r.asin === asin) &&
-            !/patrocinado|sponsored|ad|anuncio|prime/i.test(title.toLowerCase())
-        ) {
-            recommended.push({ asin, title: title.slice(0, 120) });
-        }
-    }
-
-    // 2. Carruseles "Customers also viewed", "Related", "Frequently bought together" (más moderno 2025-2026)
-    const carouselRegex = /<div[^>]*data-asin=["']([A-Z0-9]{10})["'][^>]*?>([\s\S]*?)<(?:img|span)[^>]*alt=["']([^"']{10,250})[^"']*["']|title=["']([^"']{10,250})[^"']*["']/gi;
-    for (const m of html.matchAll(carouselRegex)) {
-        const asin = m[1];
-        let title = (m[3] || m[4] || '').replace(/&quot;|&#039;|&amp;/g, "'").replace(/\s+/g, ' ').trim();
-
-        if (
-            asin !== entry.asin &&
-            title.length > 15 &&
-            !recommended.some(r => r.asin === asin) &&
-            !/patrocinado|sponsored|ad|anuncio|prime|oferta/i.test(title.toLowerCase())
-        ) {
-            recommended.push({ asin, title: title.slice(0, 120) });
-            if (recommended.length >= 10) break;  // Límite razonable
-        }
-    }
-
-    // 3. Fallback amplio: cualquier data-asin con alt en img (muchos carruseles usan esto)
-    if (recommended.length < 4) {
-        const fallbackRegex = /data-asin=["']([A-Z0-9]{10})["'].*?alt=["']([^"']{10,250})[^"']*["']/gi;
-        for (const m of html.matchAll(fallbackRegex)) {
-            const asin = m[1];
-            let title = m[2]
+        // Sponsored products
+        const sponsoredRegex = /data-asin=["']([A-Z0-9]{10})["'][^>]*?title=["']([^"']{10,250})[^"']*["']/gi;
+        let match;
+        while ((match = sponsoredRegex.exec(html)) !== null) {
+            const recAsin = match[1];
+            let recTitle = match[2]
                 .replace(/&quot;|&#039;|&amp;/g, "'")
                 .replace(/\s+/g, ' ')
                 .trim();
-
             if (
-                asin !== entry.asin &&
-                title.length > 15 &&
-                !recommended.some(r => r.asin === asin) &&
-                !/patrocinado|sponsored|ad|anuncio|prime|oferta/i.test(title.toLowerCase())
+                recAsin !== asin &&
+                recTitle.length > 15 &&
+                !recommended.some(r => r.asin === recAsin) &&
+                !/patrocinado|sponsored|ad|anuncio|prime/i.test(recTitle.toLowerCase())
             ) {
-                recommended.push({ asin, title: title.slice(0, 120) });
-                if (recommended.length >= 8) break;
+                recommended.push({ asin: recAsin, title: recTitle.slice(0, 120) });
             }
         }
-    }
 
-    // 4. Limpieza final: eliminar duplicados y basura
-    recommended = [...new Map(recommended.map(item => [item.asin, item])).values()]
-        .filter(r => r.title && r.title.length > 15);  // Refiltro por longitud mínima
+        // Carruseles
+        const carouselRegex = /<div[^>]*data-asin=["']([A-Z0-9]{10})["'][^>]*?>([\s\S]*?)<(?:img|span)[^>]*alt=["']([^"']{10,250})[^"']*["']|title=["']([^"']{10,250})[^"']*["']/gi;
+        for (const m of html.matchAll(carouselRegex)) {
+            const recAsin = m[1];
+            let recTitle = (m[3] || m[4] || '').replace(/&quot;|&#039;|&amp;/g, "'").replace(/\s+/g, ' ').trim();
 
-    // Guardar solo si hay algo útil
-    if (recommended.length > 0) {
-        const finalHistory = getHistory().map(h =>
-            h.asin === entry.asin && h.domain === entry.domain
-                ? { ...h, recommended: recommended.slice(0, 8) }  // Máximo 8 para no saturar
-                : h
-        );
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(finalHistory));
+            if (
+                recAsin !== asin &&
+                recTitle.length > 15 &&
+                !recommended.some(r => r.asin === recAsin) &&
+                !/patrocinado|sponsored|ad|anuncio|prime|oferta/i.test(recTitle.toLowerCase())
+            ) {
+                recommended.push({ asin: recAsin, title: recTitle.slice(0, 120) });
+                if (recommended.length >= 10) break;
+            }
+        }
+
+        // Fallback
+        if (recommended.length < 4) {
+            const fallbackRegex = /data-asin=["']([A-Z0-9]{10})["'].*?alt=["']([^"']{10,250})[^"']*["']/gi;
+            for (const m of html.matchAll(fallbackRegex)) {
+                const recAsin = m[1];
+                let recTitle = m[2]
+                    .replace(/&quot;|&#039;|&amp;/g, "'")
+                    .replace(/\s+/g, ' ')
+                    .trim();
+
+                if (
+                    recAsin !== asin &&
+                    recTitle.length > 15 &&
+                    !recommended.some(r => r.asin === recAsin) &&
+                    !/patrocinado|sponsored|ad|anuncio|prime|oferta/i.test(recTitle.toLowerCase())
+                ) {
+                    recommended.push({ asin: recAsin, title: recTitle.slice(0, 120) });
+                    if (recommended.length >= 8) break;
+                }
+            }
+        }
+
+        // Limpieza final
+        recommended = [...new Map(recommended.map(item => [item.asin, item])).values()]
+            .filter(r => r.title && r.title.length > 15);
+
+        // ==================== ACTUALIZAR HISTORIAL ====================
+        const now = new Date().toISOString();
+        const history = getHistory();
+
+        const updatedHistory = history.map(h => {
+            if (h.asin === asin && h.domain === entry.domain) {
+                let newPrices = [...(h.prices || [])];
+
+                if (price && (!newPrices.length || newPrices[newPrices.length - 1].price !== price)) {
+                    newPrices.push({ timestamp: now, price });
+                }
+
+                let finalTitle = h.productTitle;
+                const isDefaultTitle = h.productTitle.startsWith("Producto ") || h.productTitle.length < 10;
+                const isGoodNewTitle = realTitle && realTitle.length > 10 && realTitle.length <= 120;
+
+                if (isDefaultTitle && isGoodNewTitle) {
+                    finalTitle = realTitle;
+                }
+
+                return {
+                    ...h,
+                    productTitle: finalTitle.slice(0, 120),
+                    price: price || h.price,
+                    originalPrice: h.originalPrice || price || h.price,
+                    prices: newPrices,
+                    lastUpdate: now,
+                    recommended: recommended.slice(0, 8),  // ¡Esto hace que RecommendedProducts funcione!
+                };
+            }
+            return h;
+        });
+
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
         window.dispatchEvent(new Event('amazon-history-updated'));
+
+        console.log(`[Proxy Vercel OK] ASIN ${asin}: ${realTitle} → ${price || 'sin precio'} | ${recommended.length} recomendaciones`);
+
+        // Cachear título
+        if (realTitle.length > 5) {
+            const cache = getTitleCache();
+            cache[asin] = realTitle.slice(0, 120);
+            saveTitleCache(cache);
+        }
+
+    } catch (err) {
+        console.error(`[fetchRealData ERROR] ASIN ${asin}: ${err.message}`);
     }
 };
 
@@ -769,7 +680,7 @@ export const updateOutdatedPricesManually = async () => {
         return { status: "up_to_date", message: "Todos los precios están al día" };
     }
 
-    const toUpdate = outdated.slice(0, 10);
+    const toUpdate = outdated.slice(0, 3);
 
     let realSuccessCount = 0;
     let attemptedCount = 0;

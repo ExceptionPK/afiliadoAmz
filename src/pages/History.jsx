@@ -219,7 +219,6 @@ const HistoryItem = ({
             message = customMessage.trim();
         }
 
-        // Priorizamos shortLink si existe, si no → generamos uno ahora
         let linkToShare = propItem.shortLink;
 
         if (!linkToShare) {
@@ -406,7 +405,6 @@ const HistoryItem = ({
             NUNCA uses tercera persona.`;
             }
 
-
             const savedMessages = await getSavedMessages(10);
 
             let savedExamples = '';
@@ -426,19 +424,19 @@ const HistoryItem = ({
             Reglas OBLIGATORIAS:
             - Empieza casi siempre con un saludo directo o nombre si se identifica uno (Hola Teresa, Oye mamá, Mira Juan, Ey Laura…)
             - Habla SIEMPRE en PRIMERA PERSONA: "te paso", "mira lo que he visto", "he pensado en ti", etc.
-            - Prohibido hablar en tercera persona sobre el destinatario
-            - Español natural de España, coloquial pero no infantil
-            - Puedes usar contracciones: q, xq, pa, tq, etc. cuando sea natural
-            - Máximo 3–5 líneas cortas
-            - Sin emojis ni signos de exclamación exagerados
-            - Termina invitando a mirar el enlace de forma suave
-            - No inventes características del producto
-            - Suena como un mensaje real de WhatsApp entre conocidos
+            - Prohibido hablar en tercera persona sobre el destinatario.
+            - Español natural de España, coloquial pero no infantil.
+            - Puedes usar contracciones: q, xq, pa, tq, etc. cuando sea natural.
+            - Máximo 3 a 5 líneas cortas.
+            - Sin emojis ni signos de exclamación exagerados.
+            - Termina invitando a mirar el enlace de forma suave.
+            - No inventes características del producto.
+            - Suena como un mensaje real de WhatsApp entre conocidos.
                     
             Ejemplos de lo que SÍ quieres (varía mucho):
-            Hola Teresa, mira lo que he pillado, creo que te vendría genial para los peques
+            Hola Teresa, mira lo que he pillado, creo que te vendría genial para los peques.
             Oye mamá, he visto esto y me he acordado de ti, ¿qué te parece?
-            Mira Juan, está bastante bien de precio, te lo paso por si te interesa
+            Mira Juan, está bastante bien de precio, te lo paso por si te interesa.
                     
             Genera SOLO el texto del mensaje WhatsApp, nada más.`;
 
@@ -498,7 +496,7 @@ const HistoryItem = ({
                     ? 'editing-mode'
                     : ''
                 }
-    `}
+        `}
             draggable={editingId !== propItem.id && editingPriceId !== propItem.id}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
@@ -541,11 +539,10 @@ const HistoryItem = ({
 
                                         const updatedEntry = { ...propItem, productTitle: newText };
 
-                                        // 1. Guardar en Supabase si está autenticado
                                         if (isAuthenticated) {
                                             await updateHistoryItem(updatedEntry);
                                         }
-                                        // 2. Guardar en localStorage si no está autenticado
+
                                         else {
                                             const history = getHistory();
                                             const updated = history.map(h =>
@@ -555,13 +552,11 @@ const HistoryItem = ({
                                             window.dispatchEvent(new Event('amazon-history-updated'));
                                         }
 
-                                        // 3. Actualizar estado local del componente
                                         setLocalTitle(newText);
                                         setHistory(prev => prev.map(h =>
                                             h.id === propItem.id ? updatedEntry : h
                                         ));
 
-                                        // 4. Guardar en caché de títulos
                                         try {
                                             const cache = getTitleCache();
                                             cache[propItem.asin] = newText;
@@ -760,9 +755,9 @@ const HistoryItem = ({
                                                     {propItem.originalPrice}
                                                 </span>
                                                 <span className={`
-                    font-bold
-                    ${isLower ? 'text-emerald-600' : isHigher ? 'text-red-600' : 'text-emerald-600'}
-                `}>
+                                                    font-bold
+                                                    ${isLower ? 'text-emerald-600' : isHigher ? 'text-red-600' : 'text-emerald-600'}
+                                                `}>
                                                     {propItem.price}
                                                     {isLower && <span className="text-xs text-emerald-500 ml-1">↓</span>}
                                                     {isHigher && <span className="text-xs text-red-500 ml-1">↑</span>}
@@ -799,7 +794,6 @@ const HistoryItem = ({
                         onClick={() => {
                             markAsVisited(propItem.asin, propItem.domain);
 
-                            // Opcional: actualizar UI inmediatamente (optimista)
                             setHistory(prev =>
                                 prev.map(it =>
                                     it.id === propItem.id
@@ -1017,7 +1011,6 @@ const HistoryItem = ({
                                                     return;
                                                 }
 
-                                                // Llamada a la función de guardado simple que ya tienes o acabas de crear
                                                 const success = await saveSimpleMessage(trimmed);
 
                                                 if (success) {
@@ -1040,7 +1033,6 @@ const HistoryItem = ({
                             </div>
                         </div>
 
-
                         {/* Botones de acción */}
                         <div className="flex gap-3 -mt-2 p-3 border-t border-slate-200 bg-slate-50">
                             <button
@@ -1061,8 +1053,6 @@ const HistoryItem = ({
                 </div>,
                 document.body
             )}
-
-
         </div>
     );
 };
@@ -1087,7 +1077,6 @@ export default function HistoryPage() {
     const undoTimeoutRef = useRef(null);
     const lastDeletedRef = useRef(null);
 
-    // 1. Detectar si hay sesión activa
     useEffect(() => {
         const checkAuth = async () => {
             const { data: { user } } = await supabase.auth.getUser();
@@ -1095,7 +1084,6 @@ export default function HistoryPage() {
         };
         checkAuth();
 
-        // Escuchar cambios de auth en tiempo real
         const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
             setIsAuthenticated(!!session?.user);
         });
@@ -1123,7 +1111,6 @@ export default function HistoryPage() {
         }
     }, [showExportModal]);
 
-    // 2. Cargar historial usando la función unificada
     useEffect(() => {
         console.log("[HISTORY LOAD] useEffect disparado. isAuthenticated =", isAuthenticated);
 
@@ -1140,7 +1127,7 @@ export default function HistoryPage() {
             } catch (err) {
                 console.error("[HISTORY LOAD] ERROR CRÍTICO:", err);
                 toast.error("Error al cargar historial. Refresca manualmente.");
-                setHistory([]); // Forzamos vacío en caso de fallo
+                setHistory([]);
             } finally {
                 setIsLoading(false);
             }
@@ -1160,7 +1147,6 @@ export default function HistoryPage() {
         };
     }, [isAuthenticated]);
 
-    // Añade este useEffect nuevo (puede ir justo después del useEffect principal de carga)
     useEffect(() => {
         const handleWindowFocus = () => {
             console.log("[WINDOW FOCUS] Volviste a la pestaña → recargando historial si autenticado");
@@ -1193,7 +1179,7 @@ export default function HistoryPage() {
         return () => {
             window.removeEventListener('focus', handleWindowFocus);
         };
-    }, [isAuthenticated]);  // Dependencia importante
+    }, [isAuthenticated]);
 
     useEffect(() => {
         if (showConfirmModal) {
@@ -1270,17 +1256,15 @@ export default function HistoryPage() {
             (str || "")
                 .toLowerCase()
                 .normalize("NFD")
-                .replace(/[\u0300-\u036f]/g, "")           // quita acentos
-                .replace(/[^a-z0-9\s-]/g, "")              // solo letras, números, espacios y guiones
-                .replace(/\s+/g, " ")                      // colapsa espacios
+                .replace(/[\u0300-\u036f]/g, "")
+                .replace(/[^a-z0-9\s-]/g, "")
+                .replace(/\s+/g, " ")
                 .trim();
 
         const searchNormalized = normalize(search);
 
-        // Si la búsqueda es muy corta → permitimos coincidencias en ASIN, dominio, url
         const isShortSearch = searchNormalized.length <= 3;
 
-        // Reemplazos comunes (solo aplicamos si no es búsqueda muy corta)
         const commonReplacements = {
             xiomi: "xiaomi",
             xioami: "xiaomi",
@@ -1306,12 +1290,10 @@ export default function HistoryPage() {
             const domainNorm = item.domain?.toLowerCase() || "";
             const urlNorm = item.originalUrl?.toLowerCase() || "";
 
-            // Coincidencia principal → en el título
             if (titleNorm.includes(enhancedSearch)) {
                 return true;
             }
 
-            // Si la búsqueda es muy corta → permitimos también ASIN, dominio o URL
             if (isShortSearch) {
                 return (
                     asinNorm.includes(searchNormalized) ||
@@ -1320,7 +1302,6 @@ export default function HistoryPage() {
                 );
             }
 
-            // Búsquedas normales → solo título + búsqueda mejorada
             return titleNorm.includes(searchNormalized);
         });
     }, [history, search]);
@@ -1565,7 +1546,6 @@ export default function HistoryPage() {
 
         const blob = new Blob([content], { type: mimeType + ";charset=utf-8" });
 
-        // Intentar usar File System Access API (mejor experiencia en Chrome/Edge)
         if ("showSaveFilePicker" in window) {
             try {
                 const handle = await window.showSaveFilePicker({
@@ -1588,7 +1568,6 @@ export default function HistoryPage() {
             }
         }
 
-        // Fallback clásico: descarga mediante enlace
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -1600,7 +1579,6 @@ export default function HistoryPage() {
         setExportFilename("");
         setExportFormat(null);
     };
-
 
     const moveItem = async (fromIndex, toIndex) => {
         if (fromIndex === toIndex) return;
@@ -1617,7 +1595,6 @@ export default function HistoryPage() {
             return;
         }
 
-        // Obtenemos el usuario directamente aquí
         const { data: { user } } = await supabase.auth.getUser();
 
         if (!user?.id) {
@@ -2002,13 +1979,13 @@ export default function HistoryPage() {
                             ) : filtered.length === 0 ? (
                                 <div
                                     className={`
-      bg-white border border-slate-200 contenedorCosas noResultado p-8 text-center text-slate-500
-      transition-all duration-700
-      ${history.length === 0 || !isLoading
-                                            ? 'opacity-100 translate-y-0'
-                                            : 'opacity-0 translate-y-8'
-                                        }
-    `}
+                                  bg-white border border-slate-200 contenedorCosas noResultado p-8 text-center text-slate-500
+                                  transition-all duration-700
+                                  ${history.length === 0 || !isLoading
+                                                                        ? 'opacity-100 translate-y-0'
+                                                                        : 'opacity-0 translate-y-8'
+                                                                    }
+                                `}
                                     style={{
                                         animation: history.length === 0 || !isLoading
                                             ? 'fadeInUp 0.7s ease-out forwards'
@@ -2075,7 +2052,7 @@ export default function HistoryPage() {
                                 ? 'translate-y-0 opacity-100'
                                 : 'translate-y-12 opacity-0 pointer-events-none'
                             }
-            `}
+                `}
                     >
                         <button
                             onClick={async () => {
