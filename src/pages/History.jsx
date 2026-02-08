@@ -121,7 +121,7 @@ const HistoryItem = ({
             return;
         }
 
-        const updatedEntry = { ...propItem, productTitle: newTitle };
+        const updatedEntry = { ...propItem, productTitle: newTitle, title_is_custom: true };
 
         if (isAuthenticated) {
             await updateHistoryItem(updatedEntry);
@@ -537,7 +537,7 @@ const HistoryItem = ({
                                             return;
                                         }
 
-                                        const updatedEntry = { ...propItem, productTitle: newText };
+                                        const updatedEntry = { ...propItem, productTitle: newText, title_is_custom: true };
 
                                         if (isAuthenticated) {
                                             await updateHistoryItem(updatedEntry);
@@ -1076,6 +1076,49 @@ export default function HistoryPage() {
     const [deletedItem, setDeletedItem] = useState(null);
     const undoTimeoutRef = useRef(null);
     const lastDeletedRef = useRef(null);
+    const [progress, setProgress] = useState(0);
+    const [processedCount, setProcessedCount] = useState(0);
+    const [totalImported, setTotalImported] = useState(0);
+    const [isImporting, setIsImporting] = useState(false);
+    const [isMounted, setIsMounted] = useState(false);
+    const [isHistoryFullyLoaded, setIsHistoryFullyLoaded] = useState(false);
+
+    useEffect(() => {
+        const timer = setTimeout(() => setIsMounted(true), 100);
+        return () => clearTimeout(timer);
+    }, []);
+
+    useEffect(() => {
+        if (!isLoading) {
+            const timer = setTimeout(() => {
+                setIsHistoryFullyLoaded(true);
+            }, 500);
+            return () => clearTimeout(timer);
+        } else {
+            setIsHistoryFullyLoaded(false);
+        }
+    }, [isLoading]);
+
+    useEffect(() => {
+        const handleImportProgress = (event) => {
+            setProgress(event.detail.percent);
+            setProcessedCount(event.detail.processed);
+            setTotalImported(event.detail.total);
+        };
+
+        window.addEventListener('import-progress', handleImportProgress);
+
+        return () => {
+            window.removeEventListener('import-progress', handleImportProgress);
+        };
+    }, []);
+
+    // Opcional: resetear progreso cuando termina la importación
+    useEffect(() => {
+        if (!isImporting) {
+            setProgress(0);
+        }
+    }, [isImporting]);
 
     useEffect(() => {
         const checkAuth = async () => {
@@ -1445,28 +1488,33 @@ export default function HistoryPage() {
         const file = e.target.files[0];
         if (!file) return;
 
+        setIsImporting(true);           // ← activamos loader
+
         importHistory(file, (success, message, useInfoToast = false) => {
             if (success) {
-                setHistory(getHistory());
-                setAnimatedItems(new Set());
+                // Forzamos recarga desde la fuente correcta
+                const reload = async () => {
+                    const fresh = await getUserHistory(500);
+                    setHistory(fresh || []);
+                    setAnimatedItems(new Set()); // reseteamos animaciones si quieres
+                };
+                reload();
 
                 const longDuration = 5000;
-
                 if (useInfoToast) {
                     toast.info(message, { duration: longDuration });
                 } else {
                     toast.success(message, { duration: longDuration });
                 }
-
-                if (fileInputRef.current) {
-                    fileInputRef.current.value = null;
-                }
             } else {
                 toast.error(message || "Archivo inválido", { duration: 6000 });
-                if (fileInputRef.current) {
-                    fileInputRef.current.value = null;
-                }
             }
+
+            if (fileInputRef.current) {
+                fileInputRef.current.value = null;
+            }
+
+            setIsImporting(false);     // ← ocultamos loader
         });
     };
 
@@ -1776,7 +1824,17 @@ export default function HistoryPage() {
                         </div>
                         <div className="grid grid-cols-3 gap-3 w-full md:w-auto md:flex md:gap-3">
                             {/* Importar */}
-                            <label className="botonesImportarExportar cursor-pointer">
+                            <label
+                                className={`botonesImportarExportar cursor-pointer transition-all flex items-center justify-center gap-2
+                                ${isLoading || !isHistoryFullyLoaded
+                                        ? 'opacity-50 cursor-not-allowed'
+                                        : 'hover:bg-violet-600 active:bg-violet-700'}`}
+                                title={
+                                    isLoading || !isHistoryFullyLoaded
+                                        ? "Cargando historial..."
+                                        : "Importar archivo"
+                                }
+                            >
                                 <Upload className="w-4 h-4" />
                                 Importar
                                 <input
@@ -1786,19 +1844,26 @@ export default function HistoryPage() {
                                     onChange={handleImport}
                                     className="hidden"
                                     ref={fileInputRef}
+                                    disabled={isLoading || !isHistoryFullyLoaded || isImporting}
                                 />
                             </label>
 
                             {/* Exportar */}
                             <div className="relative">
                                 <button
-                                    onClick={() => history.length > 0 && setShowExportMenu(!showExportMenu)}
-                                    disabled={history.length === 0}
-                                    className={`botonesImportarExportar w-full flex items-center justify-center gap-2 transition-all ${history.length === 0
-                                        ? 'opacity-60 cursor-not-allowed'
-                                        : 'hover:bg-[#8575da]'
-                                        }`}
-                                    title={history.length === 0 ? "No hay enlaces para exportar" : "Exportar en varios formatos"}
+                                    onClick={() => isHistoryFullyLoaded && history.length > 0 && setShowExportMenu(!showExportMenu)}
+                                    disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
+                                    className={`botonesImportarExportar w-full flex items-center justify-center gap-2 transition-all
+                                    ${!isHistoryFullyLoaded || isLoading || history.length === 0
+                                            ? 'opacity-60 cursor-not-allowed'
+                                            : 'hover:bg-[#8575da] active:bg-violet-700'}`}
+                                    title={
+                                        !isHistoryFullyLoaded || isLoading
+                                            ? "Cargando historial..."
+                                            : history.length === 0
+                                                ? "No hay enlaces para exportar"
+                                                : "Exportar en varios formatos"
+                                    }
                                     ref={exportButtonRef}
                                 >
                                     <Download className="w-4 h-4" />
@@ -1947,13 +2012,19 @@ export default function HistoryPage() {
 
                             {/* Vaciar */}
                             <button
-                                onClick={handleClear}
-                                disabled={history.length === 0}
-                                className={`borrarTodo w-full flex items-center justify-center gap-2 transition-all ${history.length === 0
-                                    ? 'opacity-60 cursor-not-allowed'
-                                    : 'hover:bg-[#fecaca]'
-                                    }`}
-                                title={history.length === 0 ? "No hay enlaces para borrar" : "Borrar todo el historial"}
+                                onClick={() => isHistoryFullyLoaded && history.length > 0 && handleClear()}
+                                disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
+                                className={`borrarTodo w-full flex items-center justify-center gap-2 transition-all
+                                ${!isHistoryFullyLoaded || isLoading || history.length === 0
+                                        ? 'opacity-60 cursor-not-allowed'
+                                        : 'hover:bg-[#fecaca] active:bg-red-200'}`}
+                                title={
+                                    !isHistoryFullyLoaded || isLoading
+                                        ? "Cargando historial..."
+                                        : history.length === 0
+                                            ? "No hay enlaces para borrar"
+                                            : "Borrar todo el historial"
+                                }
                             >
                                 <Trash2 className="w-4 h-4" />
                                 Vaciar
@@ -1963,108 +2034,144 @@ export default function HistoryPage() {
 
                     {/* List */}
                     <div className="w-full">
-                        <div className="space-y-3">
-                            {isLoading ? (
+                        {!isImporting && (
+                            <>
                                 <div className="space-y-3">
-                                    {[...Array(6)].map((_, i) => (
-                                        <div
-                                            key={i}
-                                            className="bg-white border border-slate-200 contenedorCosas p-6 animate-pulse"
-                                        >
-                                            <div className="h-4 bg-slate-200 contenedorCosas w-3/4 mb-3"></div>
-                                            <div className="h-3 bg-slate-200 contenedorCosas w-1/2"></div>
+                                    {isLoading ? (
+                                        <div className="space-y-3">
+                                            {[...Array(6)].map((_, i) => (
+                                                <div
+                                                    key={i}
+                                                    className="bg-white border border-slate-200 contenedorCosas p-6 animate-pulse"
+                                                >
+                                                    <div className="h-4 bg-slate-200 contenedorCosas w-3/4 mb-3"></div>
+                                                    <div className="h-3 bg-slate-200 contenedorCosas w-1/2"></div>
+                                                </div>
+                                            ))}
                                         </div>
-                                    ))}
-                                </div>
-                            ) : filtered.length === 0 ? (
-                                <div
-                                    className={`
+                                    ) : filtered.length === 0 ? (
+                                        <div
+                                            className={`
                                   bg-white border border-slate-200 contenedorCosas noResultado p-8 text-center text-slate-500
                                   transition-all duration-700
                                   ${history.length === 0 || !isLoading
-                                            ? 'opacity-100 translate-y-0'
-                                            : 'opacity-0 translate-y-8'
-                                        }
+                                                    ? 'opacity-100 translate-y-0'
+                                                    : 'opacity-0 translate-y-8'
+                                                }
                                 `}
-                                    style={{
-                                        animation: history.length === 0 || !isLoading
-                                            ? 'fadeInUp 0.7s ease-out forwards'
-                                            : 'none'
-                                    }}
-                                >
-                                    <div className="max-w-sm mx-auto space-y-4">
-                                        <div className="mx-auto w-16 h-16 bg-slate-100 contenedorCosas flex items-center justify-center">
-                                            <Package className="w-8 h-8 text-slate-400" />
+                                            style={{
+                                                animation: history.length === 0 || !isLoading
+                                                    ? 'fadeInUp 0.7s ease-out forwards'
+                                                    : 'none'
+                                            }}
+                                        >
+                                            <div className="max-w-sm mx-auto space-y-4">
+                                                <div className="mx-auto w-16 h-16 bg-slate-100 contenedorCosas flex items-center justify-center">
+                                                    <Package className="w-8 h-8 text-slate-400" />
+                                                </div>
+                                                <p className="text-lg font-medium text-slate-600">
+                                                    {search ? "No se encontraron resultados" : "Aún no hay enlaces en el historial"}
+                                                </p>
+                                            </div>
                                         </div>
-                                        <p className="text-lg font-medium text-slate-600">
-                                            {search ? "No se encontraron resultados" : "Aún no hay enlaces en el historial"}
-                                        </p>
-                                    </div>
+                                    ) : (
+                                        filtered.map((item, index) => (
+                                            <div
+                                                key={item.id}
+                                                className={`transition-all duration-500 ${!animatedItems.has(item.id)
+                                                    ? "opacity-0 translate-y-4"
+                                                    : "opacity-100 translate-y-0"
+                                                    }`}
+                                                ref={(el) => {
+                                                    if (el && !animatedItems.has(item.id)) {
+                                                        el.getBoundingClientRect();
+                                                        markAsAnimated(item.id);
+                                                    }
+                                                }}
+                                                style={{
+                                                    transitionDelay: `${0.5 + index * 0.1}s`, // Suave escalonado
+                                                }}
+                                            >
+                                                <HistoryItem
+                                                    item={item}
+                                                    onDelete={handleDelete}
+                                                    setHistory={setHistory}
+                                                    index={index}
+                                                    moveItem={moveItem}
+                                                    isAuthenticated={isAuthenticated}
+                                                />
+                                            </div>
+                                        ))
+                                    )}
+
                                 </div>
-                            ) : (
-                                filtered.map((item, index) => (
-                                    <div
-                                        key={item.id}
-                                        className={`transition-all duration-500 ${!animatedItems.has(item.id)
-                                            ? "opacity-0 translate-y-4"
-                                            : "opacity-100 translate-y-0"
-                                            }`}
-                                        ref={(el) => {
-                                            if (el && !animatedItems.has(item.id)) {
-                                                el.getBoundingClientRect();
-                                                markAsAnimated(item.id);
-                                            }
-                                        }}
-                                        style={{
-                                            transitionDelay: `${0.5 + index * 0.1}s`, // Suave escalonado
-                                        }}
-                                    >
-                                        <HistoryItem
-                                            item={item}
-                                            onDelete={handleDelete}
-                                            setHistory={setHistory}
-                                            index={index}
-                                            moveItem={moveItem}
-                                            isAuthenticated={isAuthenticated}
+                            </>
+                        )}
+                        {/* Loader centrado durante la importación */}
+                        {isImporting && (
+                            <div className="py-32 flex flex-col items-center justify-center min-h-[60vh] gap-12">
+                                {/* Contenedor principal del loader – centrado */}
+                                <div className="import-cube-wrapper">
+                                    <div className="import-cube">
+                                        <div className="cube-face front"></div>
+                                        <div className="cube-face back"></div>
+                                        <div className="cube-face right"></div>
+                                        <div className="cube-face left"></div>
+                                        <div className="cube-face top"></div>
+                                        <div className="cube-face bottom"></div>
+                                    </div>
+                                    <div className="cube-particles"></div>
+                                </div>
+
+                                {/* Texto debajo */}
+                                <div className="text-center space-y-3 mt-10">
+                                    <p className="text-2xl font-bold text-violet-700 tracking-tight">
+                                        Construyendo tu historial...
+                                    </p>
+                                    <p className="text-base text-slate-600 font-medium">
+                                        Estamos procesando los productos
+                                    </p>
+                                </div>
+
+                                <div className="w-80 max-w-[90%] mt-0">
+                                    <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-violet-600 via-indigo-500 to-violet-600 rounded-full transition-all duration-200 ease-out"
+                                            style={{ width: `${progress}%` }}
                                         />
                                     </div>
-                                ))
-                            )}
-                        </div>
+                                    <p className="text-sm text-slate-600 mt-3 text-center font-medium">
+                                        {progress}% completado • {processedCount} de {totalImported || '?'} productos
+                                    </p>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>
             {(() => {
-                const [isMounted, setIsMounted] = useState(false);
-
-                useEffect(() => {
-                    // Pequeño retraso para forzar la animación incluso al navegar entre páginas
-                    const timer = setTimeout(() => setIsMounted(true), 100);
-                    return () => clearTimeout(timer);
-                }, []);
+                // Visibilidad: solo cuando todo está listo
+                const shouldShowRefresh = isMounted && isHistoryFullyLoaded && history.length > 0;
 
                 return (
                     <div
                         className={`
                 fixed bottom-6 right-6 z-40
                 transition-all duration-700 ease-out
-                ${isMounted && history.length > 0
-                                ? 'translate-y-0 opacity-100'
+                ${shouldShowRefresh
+                                ? 'translate-y-0 opacity-100 pointer-events-auto'
                                 : 'translate-y-12 opacity-0 pointer-events-none'
                             }
-                `}
+            `}
                     >
                         <button
                             onClick={async () => {
-                                if (isUpdatingPrices || history.length === 0) return;
+                                if (isUpdatingPrices || history.length === 0 || isLoading) return;
                                 setIsUpdatingPrices(true);
 
                                 let hasShownEarlyWarning = false;
-
                                 const earlyWarningTimer = setTimeout(() => {
-                                    toast.error("Problemas con proxies...", {
-                                        duration: 8000
-                                    });
+                                    toast.error("Problemas con proxies...", { duration: 8000 });
                                     hasShownEarlyWarning = true;
                                 }, 15000);
 
@@ -2097,24 +2204,28 @@ export default function HistoryPage() {
                                 setIsUpdatingPrices(false);
                                 window.dispatchEvent(new Event('amazon-history-updated'));
                             }}
-                            disabled={isUpdatingPrices || history.length === 0}
+                            disabled={isUpdatingPrices || history.length === 0 || isLoading}
                             className={`
-                                bg-violet-500 text-white
-                                w-12 h-12 rounded-full
-                                transition-all duration-300
-                                shadow-lg flex items-center justify-center
-                              hover:bg-violet-700 hover:scale-110 active:scale-95
-                                ${isUpdatingPrices
-                                    ? 'animate-pulse'
+                    bg-violet-500 text-white
+                    w-12 h-12 rounded-full
+                    transition-all duration-300
+                    shadow-lg flex items-center justify-center
+                    hover:bg-violet-700 hover:scale-110 active:scale-95
+                    ${isUpdatingPrices || isLoading
+                                    ? 'animate-pulse opacity-70 cursor-not-allowed'
                                     : 'shadow-violet-500/50 hover:shadow-xl hover:shadow-violet-600/60'
                                 }
-                                ${history.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}
-                                `}
-                            title={history.length === 0
-                                ? "No hay productos para actualizar"
-                                : isUpdatingPrices
-                                    ? "Actualizando precios..."
-                                    : "Actualizar todos los precios"}
+                    ${history.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}
+                `}
+                            title={
+                                isLoading
+                                    ? "Cargando historial..."
+                                    : history.length === 0
+                                        ? "No hay productos para actualizar"
+                                        : isUpdatingPrices
+                                            ? "Actualizando precios..."
+                                            : "Actualizar todos los precios"
+                            }
                             aria-label="Actualizar precios"
                         >
                             <RefreshCw

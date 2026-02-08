@@ -1,11 +1,103 @@
 const STORAGE_KEY = 'amazon-affiliate-history';
 const TITLE_CACHE_KEY = 'amazon-title-cache';
 
-const apiKey = import.meta.env.VITE_WEBSCRAPINGAPI_KEY;
-
 import { supabase } from './supabaseClient';
-import { saveToHistory } from './supabaseStorage';
-import { getUserHistory } from './supabaseStorage';
+import { saveToHistory, updateHistoryPositions, getUserHistory } from './supabaseStorage';
+
+
+const API_KEYS = [
+  import.meta.env.VITE_WEBSCRAPINGAPI_KEY_1?.trim(),
+  import.meta.env.VITE_WEBSCRAPINGAPI_KEY_2?.trim(),
+  // puedes añadir más después: VITE_WEBSCRAPINGAPI_KEY_3 etc.
+].filter(Boolean);
+
+if (API_KEYS.length === 0) {
+  console.error("No se encontró NINGUNA API key de WebScrapingAPI en las variables de entorno");
+}
+
+// Opcional: recordar cuál clave funcionó la última vez (mejora la eficiencia)
+const LAST_GOOD_KEY_INDEX = 'wsa_last_good_key_index';
+
+const getLastGoodKeyIndex = () => {
+  const val = localStorage.getItem(LAST_GOOD_KEY_INDEX);
+  const idx = val ? parseInt(val, 10) : 0;
+  return (idx >= 0 && idx < API_KEYS.length) ? idx : 0;
+};
+
+const setLastGoodKeyIndex = (idx) => {
+  localStorage.setItem(LAST_GOOD_KEY_INDEX, idx.toString());
+};
+
+/**
+ * Intenta fetch con rotación de keys en caso de error de cuota (401 o 429)
+ * @param {string} targetUrl - la URL de Amazon a scrapear
+ * @returns {Promise<string>} HTML obtenido
+ * @throws Error si todas las keys fallan
+ */
+async function fetchWithFallback(targetUrl) {
+  if (API_KEYS.length === 0) {
+    throw new Error("No hay claves configuradas para WebScrapingAPI");
+  }
+
+  let startIdx = getLastGoodKeyIndex();
+  let lastError = null;
+
+  for (let i = 0; i < API_KEYS.length; i++) {
+    const keyIdx = (startIdx + i) % API_KEYS.length;
+    const key = API_KEYS[keyIdx];
+
+    const scraperUrl = `https://api.webscrapingapi.com/v2?api_key=${key}&url=${encodeURIComponent(targetUrl)}&render_js=0`;
+
+    console.log(`[fetchRealData] Probando clave #${keyIdx + 1} para ${targetUrl}`);
+
+    try {
+      const res = await fetch(scraperUrl, {
+        headers: { 'Accept': 'text/html' },
+      });
+
+      if (res.ok) {
+        // ¡Éxito! Recordamos esta clave como buena
+        setLastGoodKeyIndex(keyIdx);
+        return await res.text();
+      }
+
+      // Leemos el cuerpo para logs (no siempre necesario, pero ayuda a debug)
+      let errText = '';
+      try {
+        errText = await res.text();
+      } catch {}
+
+      const status = res.status;
+
+      // Casos de cuota agotada o no autorizado → probamos siguiente clave
+      const isQuotaError =
+        status === 401 ||                 // Unauthorized → muy común en WebScrapingAPI cuando no hay créditos
+        status === 429 ||                 // Too Many Requests (rate limit temporal)
+        (status === 402) ||               // Payment Required (a veces usado para quota)
+        errText.toLowerCase().includes('quota') ||
+        errText.toLowerCase().includes('limit') ||
+        errText.toLowerCase().includes('exceeded') ||
+        errText.toLowerCase().includes('monthly');
+
+      if (isQuotaError) {
+        console.warn(`[WebScrapingAPI] Clave #${keyIdx + 1} → cuota agotada o límite alcanzado (${status})`);
+        lastError = new Error(`Cuota agotada en clave #${keyIdx + 1} (${status})`);
+        continue; // ← clave siguiente
+      }
+
+      // Otro error (400, 500, etc.) → lo lanzamos directamente
+      throw new Error(`WebScrapingAPI error ${status}: ${errText.slice(0, 180)}`);
+
+    } catch (err) {
+      lastError = err;
+      console.warn(`[fetchRealData] Fallo con clave #${keyIdx + 1}: ${err.message}`);
+    }
+  }
+
+  // Si llegamos aquí → ninguna clave sirvió
+  throw lastError || new Error("Todas las claves de WebScrapingAPI fallaron (cuota agotada o error persistente)");
+}
+/*-------------------------------------------------------------------------------------------------------------------*/
 
 const getTitleCache = () => {
     try {
@@ -21,6 +113,14 @@ const saveTitleCache = (cache) => {
         localStorage.setItem(TITLE_CACHE_KEY, JSON.stringify(cache));
     } catch { }
 };
+
+let isMassImportInProgress = false;
+
+export const setMassImportInProgress = (value) => {
+    isMassImportInProgress = !!value;
+};
+
+export const getMassImportInProgress = () => isMassImportInProgress;
 
 export const getHistory = () => {
     try {
@@ -95,142 +195,217 @@ export const addToHistory = async (entry) => {
 };
 
 
-// FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS (versión mejorada 2026)
+// FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS
+// FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS
 export const fetchRealData = async (entry) => {
-    // Verificar que existe la clave API
-    if (!apiKey) {
-        console.error("Error: No se encontró VITE_WEBSCRAPINGAPI_KEY en .env.local");
+    if (getMassImportInProgress()) {
+        console.log(`[fetchRealData] SKIPPED - importación masiva en curso - ASIN ${entry.asin}`);
         return;
     }
 
-    const asin = entry.asin;
+    const asin = entry.asin?.trim();
     if (!asin || asin.length !== 10) {
-        console.warn("ASIN inválido o ausente:", entry.asin);
+        console.warn("Invalid ASIN:", entry.asin);
         return;
     }
 
-    // Limpieza robusta del dominio
     let domainPart = (entry.domain || 'amazon.es')
-        .replace(/^(https?:\/\/)?(www\.)?/i, '')     // quita protocolo y www.
-        .replace(/^amazon\./i, '')                   // quita amazon. si ya está
-        .split('.')[0]                               // toma solo la parte del país (es, com, de...)
+        .replace(/^(https?:\/\/)?(www\.)?/i, '')
+        .replace(/^amazon\./i, '')
+        .split('.')[0]
         .toLowerCase();
 
-    // Forzamos valores válidos conocidos si algo sale raro
     if (!['es', 'com', 'de', 'fr', 'it', 'co.uk', 'ca', 'com.mx', 'com.br', 'in', 'jp'].includes(domainPart)) {
-        domainPart = 'es'; // fallback seguro a amazon.es
+        domainPart = 'es';
     }
 
-    const amazonDomain = `amazon.${domainPart}`;
+    const targetUrl = `https://www.amazon.${domainPart}/dp/${asin}`;
 
-    const scraperUrl = `https://ecom.webscrapingapi.com/v1?api_key=${apiKey}&engine=amazon&type=product&product_id=${asin}&amazon_domain=${amazonDomain}`;
-
-    console.log(`[fetchRealData] Intentando obtener datos para ASIN ${asin} → ${amazonDomain}`);
-    console.log(`URL generada: ${scraperUrl}`);
+    console.log(`[fetchRealData] Intentando scrape para ASIN ${asin} → ${targetUrl}`);
 
     try {
-        const res = await fetch(scraperUrl, {
-            headers: {
-                'Accept': 'application/json',
-            },
-        });
+        // ── USAMOS LA FUNCIÓN CON FALLBACK ENTRE CLAVES ──
+        const html = await fetchWithFallback(targetUrl);
 
-        if (!res.ok) {
-            const errorData = await res.json().catch(() => ({}));
-            const errorMsg = errorData.error || errorData.message || `HTTP ${res.status}`;
-            throw new Error(`WebScrapingAPI falló: ${errorMsg}`);
-        }
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
 
-        const data = await res.json();
+        // Título real extraído de la página
+        let realTitle =
+            doc.querySelector('#productTitle')?.textContent?.trim() ||
+            doc.querySelector('title')?.textContent?.split('|')[0]?.trim() ||
+            entry.productTitle ||
+            `Producto ${asin}`;
 
-        if (!data?.product_results) {
-            console.warn("Respuesta sin 'product_results'", data);
-            return;
-        }
-
-        const product = data.product_results;
-
-        // Título
-        let realTitle = product.title?.trim()
-            || product.name?.trim()
-            || entry.productTitle
-            || `Producto ${asin}`;
-
-        // Limpieza opcional del título (puedes quitar o ajustar)
         realTitle = realTitle
-            .replace(/\s*\([^)]{5,}\)$/g, '')     // quita paréntesis largos al final
-            .replace(/\s*[-–—]\s*Amazon\.es/gi, '') // quita " - Amazon.es" si aparece
-            .trim();
+            .replace(/\s*\([^)]{5,}\)$/g, '')
+            .replace(/\s*[-–—]\s*Amazon\.[a-z.]+/gi, '')
+            .trim()
+            .slice(0, 120);
 
-        // Precio principal
         let price = null;
-        if (product.price?.value) {
-            const numeric = parseFloat(product.price.value);
-            const currency = product.price.symbol || product.price.currency || '€';
 
-            if (!isNaN(numeric)) {
-                price = numeric.toLocaleString('es-ES', {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2
-                }) + ` ${currency}`;
+        // ── Extracción de precio (sin cambios) ──
+        // 1. Input displayString
+        const priceDisplayInput = doc.querySelector('input[name="items[0.base][customerVisiblePrice][displayString]"]');
+        if (priceDisplayInput?.value?.trim()) {
+            price = priceDisplayInput.value.trim();
+        }
+
+        // 2. Input amount
+        if (!price) {
+            const priceAmountInput = doc.querySelector('input[name="items[0.base][customerVisiblePrice][amount]"]');
+            if (priceAmountInput?.value) {
+                const numeric = parseFloat(priceAmountInput.value);
+                if (!isNaN(numeric)) {
+                    price = numeric.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+                }
             }
         }
 
-        // Fallback: precio desde buybox si el principal falla
-        if (!price && data.buybox?.price?.value) {
-            const buyboxNumeric = parseFloat(data.buybox.price.value);
-            if (!isNaN(buyboxNumeric)) {
-                price = buyboxNumeric.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + ' €';
+        // 3. Span visible
+        if (!price) {
+            const priceSpan = doc.querySelector('.a-price .a-offscreen') ||
+                doc.querySelector('span.a-offscreen') ||
+                doc.querySelector('.a-price-whole');
+            if (priceSpan?.textContent) {
+                let text = priceSpan.textContent.trim().replace(/\s+/g, '');
+                const numeric = parseFloat(text.replace(/[^0-9.,]/g, '').replace(',', '.'));
+                if (!isNaN(numeric)) {
+                    price = numeric.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+                }
             }
         }
 
-        // Disponibilidad (opcional, para log o futuro uso)
-        const availability = product.availability_description ||
-            (product.available ? 'En stock' : 'No disponible');
+        // 4. Regex fallback
+        if (!price) {
+            const regex = /(\d{1,3}(?:[.,\s]?\d{3})*[.,]\d{2})\s*€?/;
+            const match = html.match(regex);
+            if (match) {
+                price = match[1].replace(/\s/g, '').replace(',', '.') + ' €';
+            }
+        }
 
-        // ── Actualizar historial ──
+        // ── Detectar sesión ──
+        const { data: { user } } = await supabase.auth.getUser();
+        const isLoggedIn = !!user?.id;
+
         const now = new Date().toISOString();
-        const history = getHistory();
+        const domain = entry.domain || domainPart;
 
-        const updatedHistory = history.map(h => {
-            if (h.asin === asin && h.domain === entry.domain) {
-                let newPrices = [...(h.prices || [])];
+        if (isLoggedIn) {
+            // ── Actualizar en Supabase ──
+            try {
+                // Obtenemos el registro actual incluyendo title_is_custom
+                const { data: current, error: fetchErr } = await supabase
+                    .from('affiliate_history')
+                    .select('prices_history, original_price, product_title, title_is_custom')
+                    .eq('user_id', user.id)
+                    .eq('asin', asin)
+                    .eq('dominio', domain)
+                    .single();
 
-                if (price && (!newPrices.length || newPrices[newPrices.length - 1].price !== price)) {
-                    newPrices.push({ timestamp: now, price });
+                if (fetchErr && fetchErr.code !== 'PGRST116') {
+                    throw fetchErr;
                 }
 
-                let finalTitle = h.productTitle;
-                const isDefaultTitle = h.productTitle.startsWith("Producto ") || h.productTitle.length < 10;
+                let pricesHistory = current?.prices_history || [];
 
-                if (isDefaultTitle && realTitle.length > 10) {
-                    finalTitle = realTitle;
+                // Solo añadimos si el precio es nuevo o diferente
+                if (price && (!pricesHistory.length || pricesHistory[pricesHistory.length - 1]?.price !== price)) {
+                    pricesHistory = [...pricesHistory, { timestamp: now, price }];
                 }
 
-                return {
-                    ...h,
-                    productTitle: finalTitle.slice(0, 120),
-                    price: price || h.price,
-                    originalPrice: h.originalPrice || price || h.price,
-                    prices: newPrices,
-                    lastUpdate: now,
-                    // Opcional: puedes guardar más si lo necesitas después
-                    // availability,
-                    // mainImage: product.main_image,
-                    // rating: product.rating,
+                // ── Lógica de título protegido ──
+                let shouldUpdateTitle = false;
+                let newTitleValue = undefined;
+
+                if (realTitle.length > 10) {
+                    const currentTitle = current?.product_title || entry.productTitle || "";
+
+                    // Si ya está marcado como custom → NO tocamos
+                    if (current?.title_is_custom === true) {
+                        shouldUpdateTitle = false;
+                    }
+                    // Si parece título por defecto / automático → SÍ actualizamos (primera vez)
+                    else if (
+                        !currentTitle ||
+                        currentTitle.startsWith("Producto ") ||
+                        currentTitle.length <= 12 ||
+                        currentTitle.trim() === "" ||
+                        /amazon|oferta|descuento|prime/i.test(currentTitle) ||
+                        currentTitle === `p-${asin.toLowerCase()}`
+                    ) {
+                        shouldUpdateTitle = true;
+                        newTitleValue = realTitle;
+                    }
+                }
+
+                const updateData = {
+                    // Título: solo si decidimos actualizarlo
+                    product_title: shouldUpdateTitle ? newTitleValue : undefined,
+
+                    // Siempre actualizamos precio y related fields
+                    price: price || null,
+                    original_price: current?.original_price || entry.originalPrice || price || null,
+                    prices_history: pricesHistory,
+                    last_update: now,
+
+                    // Importante: marcamos como protegido después de actualizar con título real
+                    title_is_custom: shouldUpdateTitle ? true : (current?.title_is_custom ?? false),
                 };
-            }
-            return h;
-        });
 
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+                const { error: updateErr } = await supabase
+                    .from('affiliate_history')
+                    .update(updateData)
+                    .eq('user_id', user.id)
+                    .eq('asin', asin)
+                    .eq('dominio', domain);
+
+                if (updateErr) throw updateErr;
+
+                console.log(`[fetchRealData] ÉXITO Supabase ${asin}: título ${shouldUpdateTitle ? 'actualizado' : 'protegido'}, precio → ${price || 'sin precio'}`);
+
+            } catch (supErr) {
+                console.error(`[fetchRealData] Error Supabase ${asin}:`, supErr.message);
+                toast.error("No se pudo actualizar precio en la nube");
+            }
+        } else {
+            // ── Actualizar en localStorage ── (sin cambios importantes aquí)
+            const history = getHistory();
+            const updatedHistory = history.map(h => {
+                if (h.asin === asin && h.domain === domain) {
+                    let newPrices = [...(h.prices || [])];
+                    if (price && (!newPrices.length || newPrices[newPrices.length - 1].price !== price)) {
+                        newPrices.push({ timestamp: now, price });
+                    }
+
+                    let finalTitle = h.productTitle;
+                    const isDefault = h.productTitle.startsWith("Producto ") || h.productTitle.length < 10;
+                    if (isDefault && realTitle.length > 10) {
+                        finalTitle = realTitle;
+                    }
+
+                    return {
+                        ...h,
+                        productTitle: finalTitle,
+                        price: price || h.price,
+                        originalPrice: h.originalPrice || price || h.price,
+                        prices: newPrices,
+                        lastUpdate: now,
+                    };
+                }
+                return h;
+            });
+
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+            console.log(`[fetchRealData] ÉXITO local ${asin}: ${realTitle} → ${price || 'sin precio'}`);
+        }
+
         window.dispatchEvent(new Event('amazon-history-updated'));
 
-        console.log(`[fetchRealData] ÉXITO ${asin}: ${realTitle} → ${price || 'sin precio'} (${availability})`);
-
     } catch (err) {
-        console.error(`[fetchRealData] ERROR para ${asin}:`, err.message);
-        // Opcional: podrías marcar el entry como "fallido" o reintentar más tarde
+        console.error(`[fetchRealData] ERROR general para ${asin}:`, err.message);
     }
 };
 
@@ -256,23 +431,22 @@ export const exportHistory = () => {
     URL.revokeObjectURL(url);
 };
 
-// utils/storage.js → FUNCIÓN importHistory MEJORADA CON NOMBRE DE ARCHIVO EN TOAST
 export const importHistory = async (file, callback) => {
     const reader = new FileReader();
 
     reader.onload = async (e) => {
         const content = e.target.result.trim();
 
-        // Obtenemos el nombre del archivo sin extensión para mostrarlo bonito
+        // Nombre bonito para mensajes
         const fileName = file.name.replace(/\.(json|csv)$/i, '').trim();
         const displayName = fileName || "archivo importado";
 
         try {
+            setMassImportInProgress(true);
+
             let importedItems = [];
 
-            // -------------------------------------------------
             // 1. INTENTAR COMO JSON
-            // -------------------------------------------------
             if (
                 file.type === "application/json" ||
                 file.name.endsWith(".json") ||
@@ -287,13 +461,14 @@ export const importHistory = async (file, callback) => {
                         id: item.id || Date.now() + Math.random(),
                         timestamp: item.timestamp || new Date().toISOString(),
                         productTitle: item.productTitle || `Producto ${item.asin || "sin ASIN"}`,
+                        title_is_custom: true,
                         price: item.price || null,
                         originalPrice: item.originalPrice || item.price || null,
                         prices: Array.isArray(item.prices) ? item.prices : (
                             item.price ? [{ timestamp: item.timestamp || new Date().toISOString(), price: item.price }] : []
                         ),
                         lastUpdate: item.lastUpdate || (item.price ? item.timestamp || new Date().toISOString() : null),
-                        domain: item.domain || "amazon.es",
+                        domain: item.domain || item.dominio || "amazon.es",
                         affiliateUrl: item.affiliateUrl || "",
                         originalUrl: item.originalUrl || item.affiliateUrl || "",
                         asin: item.asin || "UNKNOWN",
@@ -301,9 +476,7 @@ export const importHistory = async (file, callback) => {
                 }
             }
 
-            // -------------------------------------------------
-            // 2. CSV (tu lógica original intacta)
-            // -------------------------------------------------
+            // 2. CSV (lógica original mantenida)
             if (importedItems.length === 0) {
                 const lines = content.split(/\r\n|\n|\r/).map(l => l.trim()).filter(Boolean);
                 if (lines.length === 0) throw new Error("Archivo vacío");
@@ -382,6 +555,7 @@ export const importHistory = async (file, callback) => {
                         })(),
                         productTitle: (titulo || `Producto ${asin}`).slice(0, 120),
                         price: precioActual && precioActual.trim() ? precioActual.trim() : null,
+                        title_is_custom: true,
                         originalPrice: precioOriginal && precioOriginal.trim()
                             ? precioOriginal.trim()
                             : (precioActual && precioActual.trim() ? precioActual.trim() : null),
@@ -414,27 +588,37 @@ export const importHistory = async (file, callback) => {
 
             if (importedItems.length === 0) throw new Error("No se encontraron enlaces válidos");
 
-            // Detectar sesión
+            // ── ASIGNAMOS POSICIÓN SEGÚN ORDEN EN EL ARCHIVO ──
+            const orderedImported = importedItems.map((item, idx) => ({
+                ...item,
+                position: idx + 1,  // 1, 2, 3... según aparecen en el archivo
+            }));
+
+            const totalItems = orderedImported.length;
+            let processed = 0;
+
+            window.dispatchEvent(new CustomEvent('import-progress', {
+                detail: { processed: 0, total: totalItems, percent: 0 }
+            }));
+
             const { data: { user } } = await supabase.auth.getUser();
-            const isLoggedIn = !!user;
+            const isLoggedIn = !!user?.id;
 
             let addedCount = 0;
             let updatedCount = 0;
             let skippedCount = 0;
 
-            // Declaramos antes para que estén disponibles en los mensajes
-            let currentHistory = [];
-            let currentItems = [];
-
             if (isLoggedIn) {
-                currentItems = await getUserHistory(1000); // límite alto para no perder items
+                // ── SUPABASE ───────────────────────────────────────────────
+                const currentItems = await getUserHistory(1000);
                 const historyMap = new Map();
                 currentItems.forEach(item => {
                     const key = `${item.asin}-${item.domain}`;
                     historyMap.set(key, item);
                 });
 
-                for (const newItem of importedItems) {
+                // Fase 1: guardar/actualizar items
+                for (const newItem of orderedImported) {
                     const key = `${newItem.asin}-${newItem.domain}`;
                     const existing = historyMap.get(key);
 
@@ -447,77 +631,126 @@ export const importHistory = async (file, callback) => {
                                 ...existing,
                                 ...newItem,
                                 timestamp: newItem.timestamp,
-                                id: existing.id // mantenemos el ID de Supabase
+                                id: existing.id,
+                                position: newItem.position   // ← respetamos orden del import
                             });
                             updatedCount++;
                         } else {
                             skippedCount++;
                         }
                     } else {
-                        await saveToHistory(newItem);
+                        await saveToHistory({
+                            ...newItem,
+                            position: newItem.position
+                        });
                         addedCount++;
                     }
+
+                    processed++;
+                    const percent = Math.min(100, Math.round((processed / totalItems) * 100));
+                    window.dispatchEvent(new CustomEvent('import-progress', {
+                        detail: { processed, total: totalItems, percent }
+                    }));
                 }
+
+                // Fase 2: reordenar TODO el historial final
+                const freshAfterImport = await getUserHistory(1000);
+
+                const desiredPosition = new Map();
+                orderedImported.forEach(imp => {
+                    const key = `${imp.asin}-${imp.domain}`;
+                    desiredPosition.set(key, imp.position);
+                });
+
+                const positionsToUpdate = freshAfterImport.map(item => {
+                    const key = `${item.asin}-${item.domain}`;
+                    const wantedPos = desiredPosition.get(key);
+                    return {
+                        asin: item.asin,
+                        dominio: item.domain || item.dominio || 'amazon.es',
+                        position: wantedPos ?? (10000 + freshAfterImport.indexOf(item)) // items no importados → muy al final
+                    };
+                });
+
+                if (positionsToUpdate.length > 0) {
+                    await updateHistoryPositions(user.id, positionsToUpdate);
+                }
+
             } else {
-                currentHistory = getHistory();
+                // ── LOCALSTORAGE ───────────────────────────────────────────
+                let currentHistory = getHistory();
                 const historyMap = new Map();
                 currentHistory.forEach(item => {
                     historyMap.set(`${item.asin}-${item.domain}`, item);
                 });
 
-                const mergedHistory = [...currentHistory];
+                const merged = [];
 
-                importedItems.forEach(newItem => {
+                // Primero los del import (en su orden original)
+                for (const newItem of orderedImported) {
                     const key = `${newItem.asin}-${newItem.domain}`;
 
                     if (historyMap.has(key)) {
-                        const existingIndex = mergedHistory.findIndex(h => `${h.asin}-${h.domain}` === key);
-                        const existing = mergedHistory[existingIndex];
-
+                        const existing = historyMap.get(key);
                         const existingTime = new Date(existing.timestamp).getTime();
                         const newTime = new Date(newItem.timestamp).getTime();
 
                         if (newTime > existingTime) {
-                            mergedHistory[existingIndex] = {
+                            merged.push({
                                 ...existing,
                                 ...newItem,
                                 timestamp: newItem.timestamp,
-                                id: existing.id
-                            };
+                                id: existing.id,
+                                position: newItem.position
+                            });
                             updatedCount++;
+                            historyMap.delete(key); // ya procesado
                         } else {
                             skippedCount++;
+                            merged.push(existing);
+                            historyMap.delete(key);
                         }
                     } else {
-                        mergedHistory.unshift({
+                        merged.push({
                             ...newItem,
                             id: Date.now() + '-' + Math.random().toString(36).substring(2, 9),
-                            originalPrice: newItem.originalPrice || newItem.price || null,
-                            prices: newItem.prices || (newItem.price ? [{ timestamp: newItem.timestamp, price: newItem.price }] : []),
-                            lastUpdate: newItem.lastUpdate || newItem.timestamp,
+                            position: newItem.position
                         });
                         addedCount++;
                     }
+                }
+
+                // Luego los que ya estaban y NO venían en el import
+                historyMap.forEach(existing => {
+                    merged.push({
+                        ...existing,
+                        position: merged.length + 1
+                    });
                 });
 
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(mergedHistory));
+                // Ordenamos explícitamente por position
+                merged.sort((a, b) => (a.position || 999999) - (b.position || 999999));
+
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
             }
 
-            // Mensaje final - natural, bonito y con tu texto preferido para la primera vez
+            // Pequeño margen para que terminen las escrituras
+            await new Promise(r => setTimeout(r, 1200));
+
+            setMassImportInProgress(false);
+
             let toastMessage = "";
             let useInfoToast = false;
 
             const totalChanges = addedCount + updatedCount;
-            const wasEmpty = (isLoggedIn ? currentItems.length : currentHistory.length) === 0;
+            const wasEmpty = (isLoggedIn ? (await getUserHistory(1)).length : getHistory().length) === 0;
 
             if (totalChanges === 0) {
                 toastMessage = `Nada nuevo de «${displayName}».`;
                 useInfoToast = true;
             } else if (wasEmpty) {
-                // Primera importación (historial vacío)
                 toastMessage = `Se ha importado «${displayName}»`;
             } else {
-                // Importaciones posteriores
                 if (addedCount > 0 && updatedCount === 0) {
                     toastMessage = `+${addedCount} producto${addedCount === 1 ? '' : 's'} nuevo${addedCount === 1 ? '' : 's'} de «${displayName}»`;
                 } else if (addedCount === 0 && updatedCount > 0) {
@@ -531,17 +764,31 @@ export const importHistory = async (file, callback) => {
 
             window.dispatchEvent(new Event('amazon-history-updated'));
 
+            window.dispatchEvent(new CustomEvent('import-progress', {
+                detail: { processed: totalItems, total: totalItems, percent: 100 }
+            }));
+
         } catch (err) {
+            setMassImportInProgress(false);
             console.error("Error importando archivo:", err);
             callback(false, "Error al leer el archivo");
+
+            window.dispatchEvent(new CustomEvent('import-progress', {
+                detail: { processed: 0, total: 0, percent: 0 }
+            }));
         }
     };
 
-    reader.onerror = () => callback(false, "Error leyendo el archivo");
+    reader.onerror = () => {
+        setMassImportInProgress(false);
+        callback(false, "Error leyendo el archivo");
+        window.dispatchEvent(new CustomEvent('import-progress', {
+            detail: { processed: 0, total: 0, percent: 0 }
+        }));
+    };
+
     reader.readAsText(file, "UTF-8");
 };
-
-
 
 // === FUNCIÓN PARA ACTUALIZACIÓN MANUAL DE PRECIOS (SOLO CUENTA ÉXITOS CON PRECIO NUEVO) ===
 export const updateOutdatedPricesManually = async () => {
@@ -711,4 +958,3 @@ export const shortenWithShortGy = async (longUrl, customSlug = null) => {
         return longUrl
     }
 }
-

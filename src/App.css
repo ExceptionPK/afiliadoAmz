@@ -279,6 +279,74 @@ html, body {
 .animate-shine-fast {
   animation: shine-fast 3s ease-in-out infinite;
 }
+
+/*ANIMACION PERSPECTIVA LOADER HISTORIAL*/
+.perspective-\[1200px\] {
+  perspective: 1200px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.import-cube-wrapper {
+  position: relative;
+  width: 180px;
+  height: 180px;
+  perspective: 1000px;
+  margin: 0 auto;
+}
+
+.import-cube {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  transform-style: preserve-3d;
+  animation: rotateCube 14s linear infinite;
+}
+
+.cube-face {
+  position: absolute;
+  width: 180px;
+  height: 180px;
+  background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%);
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  
+  box-shadow: 
+    0 6px 16px rgba(0, 0, 0, 0.22),
+    inset 0 0 28px rgba(255, 255, 255, 0.28);
+
+  opacity: 0.94;
+  backface-visibility: hidden;
+}
+
+.front  { transform: translateZ(90px); }
+.back   { transform: rotateY(180deg) translateZ(90px); }
+.right  { transform: rotateY(90deg)  translateZ(90px); }
+.left   { transform: rotateY(-90deg) translateZ(90px); }
+.top    { transform: rotateX(90deg)  translateZ(90px); }
+.bottom { transform: rotateX(-90deg) translateZ(90px); }
+
+@keyframes rotateCube {
+  0%   { transform: rotateX(0deg)  rotateY(0deg);   }
+  100% { transform: rotateX(360deg) rotateY(360deg); }
+}
+
+/* Partículas de fondo sutiles */
+.cube-particles {
+  position: absolute;
+  inset: -40px;
+  pointer-events: none;
+  background: 
+    radial-gradient(circle at 30% 40%, rgba(124, 58, 237, 0.18) 0%, transparent 40%),
+    radial-gradient(circle at 70% 60%, rgba(79, 70, 229, 0.15) 0%, transparent 45%);
+  animation: pulseGlow 6s ease-in-out infinite;
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.12); }
+}
 /*----------------------------------------- NAVBAR ESTILOS */
 .nav-container {
   display: flex;

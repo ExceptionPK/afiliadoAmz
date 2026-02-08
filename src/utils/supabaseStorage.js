@@ -5,6 +5,7 @@ import {
   addToHistory as addToLocal,
   removeFromHistory as removeFromLocal,
   clearHistory as clearLocal,
+  fetchRealData   // ← Importamos fetchRealData para usarlo cuando estamos autenticados
 } from './storage';
 
 import { toast } from 'sonner';
@@ -20,8 +21,8 @@ const getCurrentUser = async () => {
 
 /**
  * Guarda (o actualiza) un elemento en el historial
- * - Si hay usuario autenticado → guarda en Supabase (con UPSERT)
- * - Si no → usa el almacenamiento local
+ * - Si hay usuario autenticado → guarda en Supabase (con UPSERT) + lanza fetchRealData
+ * - Si no → usa el almacenamiento local (que ya incluye el fetchRealData internamente)
  *
  * @param {Object} entry
  * @returns {Promise<void>}
@@ -52,7 +53,7 @@ export const saveToHistory = async (entry) => {
     last_update: entry.lastUpdate || now,
     recommended: entry.recommended ? entry.recommended : [],
     created_at: entry.timestamp || now,
-    position: entry.position ?? 0,  // Si viene con posición, la respetamos; si no → 0 (se ajustará después)
+    position: entry.position !== undefined ? entry.position : 0, // Si viene con posición, la respetamos; si no → 0 (se ajustará después)
   };
 
   try {
@@ -69,8 +70,21 @@ export const saveToHistory = async (entry) => {
       return;
     }
 
+    console.log(`[saveToHistory] Guardado/actualizado en Supabase → ASIN ${entry.asin}`);
+
     // Disparar evento para actualizar UI
     window.dispatchEvent(new Event('amazon-history-updated'));
+
+    // Lanzamos el scraping de precio y título real después de guardar
+    console.log(`[saveToHistory] Iniciando fetchRealData para ASIN ${entry.asin} en 800ms`);
+
+    setTimeout(() => {
+      try {
+        fetchRealData(entry);
+      } catch (fetchErr) {
+        console.error(`[saveToHistory → fetchRealData] Error al lanzar para ${entry.asin}:`, fetchErr);
+      }
+    }, 800);  // 800 ms para dar tiempo a que el evento se procese y Supabase refleje el cambio
 
   } catch (err) {
     console.error('Excepción al intentar guardar en Supabase:', err);
@@ -143,13 +157,13 @@ export const updateHistoryItem = async (updatedEntry) => {
     asin: updatedEntry.asin,
     dominio: updatedEntry.domain || updatedEntry.dominio,
     product_title: updatedEntry.productTitle,
+    title_is_custom: updatedEntry.title_is_custom ?? true,
     price: updatedEntry.price && updatedEntry.price.trim() ? updatedEntry.price : null,
     original_price: updatedEntry.originalPrice,
     prices_history: updatedEntry.prices || [],
     last_update: new Date().toISOString(),
     short_link: updatedEntry.shortLink,
     recommended: updatedEntry.recommended || [],
-    // Mantenemos la posición actual (no la tocamos aquí)
   };
 
   try {
@@ -167,6 +181,16 @@ export const updateHistoryItem = async (updatedEntry) => {
     }
 
     window.dispatchEvent(new Event('amazon-history-updated'));
+
+    // Opcional: también refrescar datos reales después de una actualización manual
+    console.log(`[updateHistoryItem] Actualización en Supabase → lanzando fetchRealData para ${updatedEntry.asin}`);
+    setTimeout(() => {
+      try {
+        fetchRealData(updatedEntry);
+      } catch (fetchErr) {
+        console.error(`[updateHistoryItem → fetchRealData] Error:`, fetchErr);
+      }
+    }, 1200);
 
   } catch (err) {
     console.error('Error actualizando:', err);
@@ -254,7 +278,7 @@ export const getUserHistory = async (limit = 50) => {
       .from('affiliate_history')
       .select('*')
       .eq('user_id', user.id)
-      .order('position', { ascending: true })
+      .order('position', { ascending: true, nullsLast: true })
       .limit(limit);
 
     if (error) {
@@ -273,6 +297,7 @@ export const getUserHistory = async (limit = 50) => {
       affiliateUrl: item.affiliate_url,
       shortLink: item.short_link,
       productTitle: item.product_title,
+      title_is_custom: item.title_is_custom ?? false,
       price: item.price,
       originalPrice: item.original_price,
       prices: item.prices_history || [],
@@ -317,8 +342,6 @@ export const syncLocalToSupabase = async () => {
     // localStorage.removeItem('amazon-affiliate-history');
   }
 };
-
-// utils/supabaseStorage.js
 
 export const saveSimpleMessage = async (messageText) => {
   if (!messageText?.trim()) {
