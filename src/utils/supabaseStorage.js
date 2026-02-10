@@ -137,6 +137,7 @@ export const updateHistoryPositions = async (userId, positions) => {
  * @param {Object} updatedEntry 
  * @returns {Promise<void>}
  */
+
 export const updateHistoryItem = async (updatedEntry) => {
   const user = await getCurrentUser();
 
@@ -161,7 +162,7 @@ export const updateHistoryItem = async (updatedEntry) => {
     price: updatedEntry.price && updatedEntry.price.trim() ? updatedEntry.price : null,
     original_price: updatedEntry.originalPrice,
     prices_history: updatedEntry.prices || [],
-    last_update: new Date().toISOString(),
+    // ← QUITA ESTO: last_update: new Date().toISOString(),  // No resetear en ediciones manuales
     short_link: updatedEntry.shortLink,
     recommended: updatedEntry.recommended || [],
   };
@@ -181,16 +182,6 @@ export const updateHistoryItem = async (updatedEntry) => {
     }
 
     window.dispatchEvent(new Event('amazon-history-updated'));
-
-    // Opcional: también refrescar datos reales después de una actualización manual
-    console.log(`[updateHistoryItem] Actualización en Supabase → lanzando fetchRealData para ${updatedEntry.asin}`);
-    setTimeout(() => {
-      try {
-        fetchRealData(updatedEntry);
-      } catch (fetchErr) {
-        console.error(`[updateHistoryItem → fetchRealData] Error:`, fetchErr);
-      }
-    }, 1200);
 
   } catch (err) {
     console.error('Error actualizando:', err);

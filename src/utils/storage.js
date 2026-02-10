@@ -6,26 +6,26 @@ import { saveToHistory, updateHistoryPositions, getUserHistory } from './supabas
 
 
 const API_KEYS = [
-  import.meta.env.VITE_WEBSCRAPINGAPI_KEY_1?.trim(),
-  import.meta.env.VITE_WEBSCRAPINGAPI_KEY_2?.trim(),
-  // puedes añadir más después: VITE_WEBSCRAPINGAPI_KEY_3 etc.
+    import.meta.env.VITE_WEBSCRAPINGAPI_KEY_1?.trim(),
+    import.meta.env.VITE_WEBSCRAPINGAPI_KEY_2?.trim(),
+    // puedes añadir más después: VITE_WEBSCRAPINGAPI_KEY_3 etc.
 ].filter(Boolean);
 
 if (API_KEYS.length === 0) {
-  console.error("No se encontró NINGUNA API key de WebScrapingAPI en las variables de entorno");
+    console.error("No se encontró NINGUNA API key de WebScrapingAPI en las variables de entorno");
 }
 
 // Opcional: recordar cuál clave funcionó la última vez (mejora la eficiencia)
 const LAST_GOOD_KEY_INDEX = 'wsa_last_good_key_index';
 
 const getLastGoodKeyIndex = () => {
-  const val = localStorage.getItem(LAST_GOOD_KEY_INDEX);
-  const idx = val ? parseInt(val, 10) : 0;
-  return (idx >= 0 && idx < API_KEYS.length) ? idx : 0;
+    const val = localStorage.getItem(LAST_GOOD_KEY_INDEX);
+    const idx = val ? parseInt(val, 10) : 0;
+    return (idx >= 0 && idx < API_KEYS.length) ? idx : 0;
 };
 
 const setLastGoodKeyIndex = (idx) => {
-  localStorage.setItem(LAST_GOOD_KEY_INDEX, idx.toString());
+    localStorage.setItem(LAST_GOOD_KEY_INDEX, idx.toString());
 };
 
 /**
@@ -35,67 +35,67 @@ const setLastGoodKeyIndex = (idx) => {
  * @throws Error si todas las keys fallan
  */
 async function fetchWithFallback(targetUrl) {
-  if (API_KEYS.length === 0) {
-    throw new Error("No hay claves configuradas para WebScrapingAPI");
-  }
-
-  let startIdx = getLastGoodKeyIndex();
-  let lastError = null;
-
-  for (let i = 0; i < API_KEYS.length; i++) {
-    const keyIdx = (startIdx + i) % API_KEYS.length;
-    const key = API_KEYS[keyIdx];
-
-    const scraperUrl = `https://api.webscrapingapi.com/v2?api_key=${key}&url=${encodeURIComponent(targetUrl)}&render_js=0`;
-
-    console.log(`[fetchRealData] Probando clave #${keyIdx + 1} para ${targetUrl}`);
-
-    try {
-      const res = await fetch(scraperUrl, {
-        headers: { 'Accept': 'text/html' },
-      });
-
-      if (res.ok) {
-        // ¡Éxito! Recordamos esta clave como buena
-        setLastGoodKeyIndex(keyIdx);
-        return await res.text();
-      }
-
-      // Leemos el cuerpo para logs (no siempre necesario, pero ayuda a debug)
-      let errText = '';
-      try {
-        errText = await res.text();
-      } catch {}
-
-      const status = res.status;
-
-      // Casos de cuota agotada o no autorizado → probamos siguiente clave
-      const isQuotaError =
-        status === 401 ||                 // Unauthorized → muy común en WebScrapingAPI cuando no hay créditos
-        status === 429 ||                 // Too Many Requests (rate limit temporal)
-        (status === 402) ||               // Payment Required (a veces usado para quota)
-        errText.toLowerCase().includes('quota') ||
-        errText.toLowerCase().includes('limit') ||
-        errText.toLowerCase().includes('exceeded') ||
-        errText.toLowerCase().includes('monthly');
-
-      if (isQuotaError) {
-        console.warn(`[WebScrapingAPI] Clave #${keyIdx + 1} → cuota agotada o límite alcanzado (${status})`);
-        lastError = new Error(`Cuota agotada en clave #${keyIdx + 1} (${status})`);
-        continue; // ← clave siguiente
-      }
-
-      // Otro error (400, 500, etc.) → lo lanzamos directamente
-      throw new Error(`WebScrapingAPI error ${status}: ${errText.slice(0, 180)}`);
-
-    } catch (err) {
-      lastError = err;
-      console.warn(`[fetchRealData] Fallo con clave #${keyIdx + 1}: ${err.message}`);
+    if (API_KEYS.length === 0) {
+        throw new Error("No hay claves configuradas para WebScrapingAPI");
     }
-  }
 
-  // Si llegamos aquí → ninguna clave sirvió
-  throw lastError || new Error("Todas las claves de WebScrapingAPI fallaron (cuota agotada o error persistente)");
+    let startIdx = getLastGoodKeyIndex();
+    let lastError = null;
+
+    for (let i = 0; i < API_KEYS.length; i++) {
+        const keyIdx = (startIdx + i) % API_KEYS.length;
+        const key = API_KEYS[keyIdx];
+
+        const scraperUrl = `https://api.webscrapingapi.com/v2?api_key=${key}&url=${encodeURIComponent(targetUrl)}&render_js=0`;
+
+        console.log(`[fetchRealData] Probando clave #${keyIdx + 1} para ${targetUrl}`);
+
+        try {
+            const res = await fetch(scraperUrl, {
+                headers: { 'Accept': 'text/html' },
+            });
+
+            if (res.ok) {
+                // ¡Éxito! Recordamos esta clave como buena
+                setLastGoodKeyIndex(keyIdx);
+                return await res.text();
+            }
+
+            // Leemos el cuerpo para logs (no siempre necesario, pero ayuda a debug)
+            let errText = '';
+            try {
+                errText = await res.text();
+            } catch { }
+
+            const status = res.status;
+
+            // Casos de cuota agotada o no autorizado → probamos siguiente clave
+            const isQuotaError =
+                status === 401 ||                 // Unauthorized → muy común en WebScrapingAPI cuando no hay créditos
+                status === 429 ||                 // Too Many Requests (rate limit temporal)
+                (status === 402) ||               // Payment Required (a veces usado para quota)
+                errText.toLowerCase().includes('quota') ||
+                errText.toLowerCase().includes('limit') ||
+                errText.toLowerCase().includes('exceeded') ||
+                errText.toLowerCase().includes('monthly');
+
+            if (isQuotaError) {
+                console.warn(`[WebScrapingAPI] Clave #${keyIdx + 1} → cuota agotada o límite alcanzado (${status})`);
+                lastError = new Error(`Cuota agotada en clave #${keyIdx + 1} (${status})`);
+                continue; // ← clave siguiente
+            }
+
+            // Otro error (400, 500, etc.) → lo lanzamos directamente
+            throw new Error(`WebScrapingAPI error ${status}: ${errText.slice(0, 180)}`);
+
+        } catch (err) {
+            lastError = err;
+            console.warn(`[fetchRealData] Fallo con clave #${keyIdx + 1}: ${err.message}`);
+        }
+    }
+
+    // Si llegamos aquí → ninguna clave sirvió
+    throw lastError || new Error("Todas las claves de WebScrapingAPI fallaron (cuota agotada o error persistente)");
 }
 /*-------------------------------------------------------------------------------------------------------------------*/
 
@@ -195,6 +195,7 @@ export const addToHistory = async (entry) => {
 };
 
 
+
 // FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS
 // FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS
 export const fetchRealData = async (entry) => {
@@ -224,13 +225,12 @@ export const fetchRealData = async (entry) => {
     console.log(`[fetchRealData] Intentando scrape para ASIN ${asin} → ${targetUrl}`);
 
     try {
-        // ── USAMOS LA FUNCIÓN CON FALLBACK ENTRE CLAVES ──
         const html = await fetchWithFallback(targetUrl);
 
         const parser = new DOMParser();
         const doc = parser.parseFromString(html, 'text/html');
 
-        // Título real extraído de la página
+        // Título real
         let realTitle =
             doc.querySelector('#productTitle')?.textContent?.trim() ||
             doc.querySelector('title')?.textContent?.split('|')[0]?.trim() ||
@@ -243,9 +243,9 @@ export const fetchRealData = async (entry) => {
             .trim()
             .slice(0, 120);
 
+        // ── Extracción de precio (sin cambios) ──
         let price = null;
 
-        // ── Extracción de precio (sin cambios) ──
         // 1. Input displayString
         const priceDisplayInput = doc.querySelector('input[name="items[0.base][customerVisiblePrice][displayString]"]');
         if (priceDisplayInput?.value?.trim()) {
@@ -286,75 +286,105 @@ export const fetchRealData = async (entry) => {
             }
         }
 
-        // ── Detectar sesión ──
         const { data: { user } } = await supabase.auth.getUser();
         const isLoggedIn = !!user?.id;
-
         const now = new Date().toISOString();
         const domain = entry.domain || domainPart;
 
+        // ───────────────────────────────────────────────────────────────
+        // OBTENEMOS EL ESTADO ANTERIOR (muy importante)
+        // ───────────────────────────────────────────────────────────────
+        let previousPrice = null;
+        let previousPricesHistory = [];
+        let previousOriginalPrice = null;
+        let previousTitle = entry.productTitle;
+        let titleIsCustom = false;
+
         if (isLoggedIn) {
-            // ── Actualizar en Supabase ──
-            try {
-                // Obtenemos el registro actual incluyendo title_is_custom
-                const { data: current, error: fetchErr } = await supabase
-                    .from('affiliate_history')
-                    .select('prices_history, original_price, product_title, title_is_custom')
-                    .eq('user_id', user.id)
-                    .eq('asin', asin)
-                    .eq('dominio', domain)
-                    .single();
+            const { data: current, error: fetchErr } = await supabase
+                .from('affiliate_history')
+                .select('price, original_price, prices_history, product_title, title_is_custom')
+                .eq('user_id', user.id)
+                .eq('asin', asin)
+                .eq('dominio', domain)
+                .single();
 
-                if (fetchErr && fetchErr.code !== 'PGRST116') {
-                    throw fetchErr;
-                }
+            if (!fetchErr) {
+                previousPrice = current?.price || null;
+                previousOriginalPrice = current?.original_price || null;
+                previousPricesHistory = current?.prices_history || [];
+                previousTitle = current?.product_title || previousTitle;
+                titleIsCustom = current?.title_is_custom ?? false;
+            }
+        } else {
+            const history = getHistory();
+            const existing = history.find(h => h.asin === asin && h.domain === domain);
+            if (existing) {
+                previousPrice = existing.price || null;
+                previousOriginalPrice = existing.originalPrice || null;
+                previousPricesHistory = existing.prices || [];
+                previousTitle = existing.productTitle || previousTitle;
+                titleIsCustom = existing.title_is_custom ?? false;
+            }
+        }
 
-                let pricesHistory = current?.prices_history || [];
+        // ───────────────────────────────────────────────────────────────
+        // LÓGICA DE ACTUALIZACIÓN SELECTIVA
+        // ───────────────────────────────────────────────────────────────
+        let updateData = {};
 
-                // Solo añadimos si el precio es nuevo o diferente
-                if (price && (!pricesHistory.length || pricesHistory[pricesHistory.length - 1]?.price !== price)) {
-                    pricesHistory = [...pricesHistory, { timestamp: now, price }];
-                }
+        // Título: solo si no es custom y conseguimos uno mejor
+        let shouldUpdateTitle = false;
+        let newTitleValue = undefined;
 
-                // ── Lógica de título protegido ──
-                let shouldUpdateTitle = false;
-                let newTitleValue = undefined;
+        if (realTitle.length > 10 && !titleIsCustom) {
+            if (
+                !previousTitle ||
+                previousTitle.startsWith("Producto ") ||
+                previousTitle.length <= 12 ||
+                previousTitle.trim() === "" ||
+                /amazon|oferta|descuento|prime/i.test(previousTitle) ||
+                previousTitle === `p-${asin.toLowerCase()}`
+            ) {
+                shouldUpdateTitle = true;
+                newTitleValue = realTitle;
+            }
+        }
 
-                if (realTitle.length > 10) {
-                    const currentTitle = current?.product_title || entry.productTitle || "";
+        if (shouldUpdateTitle) {
+            updateData.product_title = newTitleValue;
+            updateData.title_is_custom = true;
+        }
 
-                    // Si ya está marcado como custom → NO tocamos
-                    if (current?.title_is_custom === true) {
-                        shouldUpdateTitle = false;
-                    }
-                    // Si parece título por defecto / automático → SÍ actualizamos (primera vez)
-                    else if (
-                        !currentTitle ||
-                        currentTitle.startsWith("Producto ") ||
-                        currentTitle.length <= 12 ||
-                        currentTitle.trim() === "" ||
-                        /amazon|oferta|descuento|prime/i.test(currentTitle) ||
-                        currentTitle === `p-${asin.toLowerCase()}`
-                    ) {
-                        shouldUpdateTitle = true;
-                        newTitleValue = realTitle;
-                    }
-                }
+        // Precio: SOLO actualizamos si conseguimos precio NUEVO y VÁLIDO
+        let shouldUpdatePrice = false;
+        let newPricesHistory = [...previousPricesHistory];
 
-                const updateData = {
-                    // Título: solo si decidimos actualizarlo
-                    product_title: shouldUpdateTitle ? newTitleValue : undefined,
+        if (price && price.trim() !== '') {
+            // Comparamos con el último precio conocido
+            const lastKnownPrice = previousPricesHistory.length > 0
+                ? previousPricesHistory[previousPricesHistory.length - 1]?.price
+                : previousPrice;
 
-                    // Siempre actualizamos precio y related fields
-                    price: price || null,
-                    original_price: current?.original_price || entry.originalPrice || price || null,
-                    prices_history: pricesHistory,
-                    last_update: now,
+            if (lastKnownPrice !== price) {
+                shouldUpdatePrice = true;
+                newPricesHistory.push({ timestamp: now, price });
+            }
+        }
 
-                    // Importante: marcamos como protegido después de actualizar con título real
-                    title_is_custom: shouldUpdateTitle ? true : (current?.title_is_custom ?? false),
-                };
+        if (shouldUpdatePrice) {
+            updateData.price = price;
+            updateData.original_price = previousOriginalPrice || price; // preservamos original si ya existía
+            updateData.prices_history = newPricesHistory;
+            updateData.last_update = now;
+        }
+        // ← Si NO hay precio nuevo → NO tocamos price, original_price, prices_history ni last_update
 
+        // ───────────────────────────────────────────────────────────────
+        // Guardamos SOLO si hay algo que actualizar
+        // ───────────────────────────────────────────────────────────────
+        if (Object.keys(updateData).length > 0) {
+            if (isLoggedIn) {
                 const { error: updateErr } = await supabase
                     .from('affiliate_history')
                     .update(updateData)
@@ -364,48 +394,43 @@ export const fetchRealData = async (entry) => {
 
                 if (updateErr) throw updateErr;
 
-                console.log(`[fetchRealData] ÉXITO Supabase ${asin}: título ${shouldUpdateTitle ? 'actualizado' : 'protegido'}, precio → ${price || 'sin precio'}`);
+                console.log(`[fetchRealData] ÉXITO Supabase ${asin}: título ${shouldUpdateTitle ? 'actualizado' : 'mantenido'}, precio ${shouldUpdatePrice ? 'actualizado → ' + price : 'mantenido'}`);
+            } else {
+                // localStorage
+                const history = getHistory();
+                const updatedHistory = history.map(h => {
+                    if (h.asin === asin && h.domain === domain) {
+                        let final = { ...h };
 
-            } catch (supErr) {
-                console.error(`[fetchRealData] Error Supabase ${asin}:`, supErr.message);
-                toast.error("No se pudo actualizar precio en la nube");
+                        if (shouldUpdateTitle) {
+                            final.productTitle = newTitleValue;
+                            final.title_is_custom = true;
+                        }
+
+                        if (shouldUpdatePrice) {
+                            final.price = price;
+                            final.originalPrice = previousOriginalPrice || price;
+                            final.prices = newPricesHistory;
+                            final.lastUpdate = now;
+                        }
+
+                        return final;
+                    }
+                    return h;
+                });
+
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
+                console.log(`[fetchRealData] ÉXITO local ${asin}: título ${shouldUpdateTitle ? 'actualizado' : 'mantenido'}, precio ${shouldUpdatePrice ? 'actualizado → ' + price : 'mantenido'}`);
             }
+
+            window.dispatchEvent(new Event('amazon-history-updated'));
         } else {
-            // ── Actualizar en localStorage ── (sin cambios importantes aquí)
-            const history = getHistory();
-            const updatedHistory = history.map(h => {
-                if (h.asin === asin && h.domain === domain) {
-                    let newPrices = [...(h.prices || [])];
-                    if (price && (!newPrices.length || newPrices[newPrices.length - 1].price !== price)) {
-                        newPrices.push({ timestamp: now, price });
-                    }
-
-                    let finalTitle = h.productTitle;
-                    const isDefault = h.productTitle.startsWith("Producto ") || h.productTitle.length < 10;
-                    if (isDefault && realTitle.length > 10) {
-                        finalTitle = realTitle;
-                    }
-
-                    return {
-                        ...h,
-                        productTitle: finalTitle,
-                        price: price || h.price,
-                        originalPrice: h.originalPrice || price || h.price,
-                        prices: newPrices,
-                        lastUpdate: now,
-                    };
-                }
-                return h;
-            });
-
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
-            console.log(`[fetchRealData] ÉXITO local ${asin}: ${realTitle} → ${price || 'sin precio'}`);
+            console.log(`[fetchRealData] ${asin} → sin cambios relevantes`);
         }
-
-        window.dispatchEvent(new Event('amazon-history-updated'));
 
     } catch (err) {
         console.error(`[fetchRealData] ERROR general para ${asin}:`, err.message);
+        // ← Aquí NO tocamos nada → el precio anterior se mantiene
     }
 };
 
