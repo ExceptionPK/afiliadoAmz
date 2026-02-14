@@ -2164,7 +2164,7 @@ export default function HistoryPage() {
                 return (
                     <div
                         className={`
-                fixed bottom-6 right-6 z-40
+                fixed bottom-6 left-6 z-40
                 transition-all duration-700 ease-out
                 ${shouldShowRefresh
                                 ? 'translate-y-0 opacity-100 pointer-events-auto'

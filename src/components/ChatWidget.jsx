@@ -1,16 +1,74 @@
 // components/ChatWidget.jsx
 import { useState, useRef, useEffect } from 'react';
-import { MessageSquare, X, Send, Bot } from 'lucide-react';
+import { MessageSquare, X, Send, User, Bot } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import FeedbackFormContent from './FeedbackFormContent';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
+function MessageContent({ text, isUser }) {
+  const components = {
+    // Personalizamos los enlaces
+    a: ({ node, children, ...props }) => {
+      // Truncamos visualmente si es muy largo (pero el href real queda completo)
+      const displayText = typeof children === 'string' && children.length > 60
+        ? children.slice(0, 40) + '...' + children.slice(-10)
+        : children;
+
+      return (
+        <a
+          {...props}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`
+            underline transition-colors
+            ${isUser
+              ? 'text-violet-100 hover:text-white'
+              : 'text-violet-600 hover:text-violet-800'}
+          `}
+        >
+          {displayText}
+        </a>
+      );
+    },
+    p: ({ children }) => <p className="mb-1 last:mb-0">{children}</p>,
+    strong: ({ children }) => <strong className="font-semibold">{children}</strong>,
+    em: ({ children }) => <em className="italic">{children}</em>,
+    ul: ({ children }) => <ul className="list-disc pl-5 mb-1.5 space-y-0.5">{children}</ul>,
+    ol: ({ children }) => <ol className="list-decimal pl-5 mb-1.5 space-y-0.5">{children}</ol>,
+    li: ({ children }) => <li className="mb-0.5">{children}</li>,
+    code: ({ inline, children }) =>
+      inline ? (
+        <code className="bg-slate-200/70 px-1 py-0.5 rounded text-xs font-mono">{children}</code>
+      ) : (
+        <pre className="bg-slate-800/90 text-slate-100 p-2 rounded my-1.5 text-xs overflow-x-auto">
+          <code>{children}</code>
+        </pre>
+      ),
+  };
+
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+      {text}
+    </ReactMarkdown>
+  );
+}
+
 export default function ChatWidget() {
   const [isOpen, setIsOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState('chat');
   const [messages, setMessages] = useState([
-    { id: 1, text: "¡Hola! ¿En qué te puedo ayudar hoy?", sender: 'bot' },
+    {
+      id: 1,
+      text: "¡Hola! ¿En qué te puedo ayudar?",
+      sender: 'bot',
+      timestamp: Date.now(),
+    },
   ]);
   const [input, setInput] = useState('');
+  const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -18,58 +76,112 @@ export default function ChatWidget() {
   };
 
   useEffect(() => {
-    if (isOpen) scrollToBottom();
-  }, [messages, isOpen]);
+    if (isOpen && activeTab === 'chat') {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+      setTimeout(scrollToBottom, 50);
+    }
+  }, [messages, isTyping, isOpen, activeTab]);
+
+  useEffect(() => {
+    if (isOpen && activeTab === 'chat') {
+      const timer = setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+        setTimeout(scrollToBottom, 80);
+      }, 180);
+
+      return () => clearTimeout(timer);
+    }
+  }, [activeTab, isOpen]);
+
+  const formatTime = (timestamp) => {
+    if (!timestamp) return "";
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
 
   const handleSend = async () => {
     if (!input.trim()) return;
 
-    // Mensaje del usuario
-    const userMsg = { id: Date.now(), text: input.trim(), sender: 'user' };
-    setMessages(prev => [...prev, userMsg]);
-    setInput('');
+    const now = Date.now();
+    const userMsg = {
+      id: now,
+      text: input.trim(),
+      sender: 'user',
+      timestamp: now,
+    };
 
-    // Llamada real a Groq (basado en History.jsx)
+    setMessages((prev) => [...prev, userMsg]);
+    setInput('');
+    setIsTyping(true);
+
     try {
-      const prompt = `Eres un asistente útil y amigable. Responde de forma concisa y natural en español. Pregunta del usuario: "${input.trim()}"`;
+      const history = messages.map((msg) => ({
+        role: msg.sender === 'bot' ? 'assistant' : 'user',
+        content: msg.text,
+      }));
+
+      history.push({ role: 'user', content: input.trim() });
+
+      const systemPrompt = {
+        role: 'system',
+        content: `Eres un amigo que ayuda con cosas de Amazon, hablas de forma normal y relajada como una persona real, nada de lenguaje de robot ni muy formal. 
+Cuando te pido que generes un mensaje para alguien (por ejemplo "generame un mensaje para Teresa"), escribe exactamente un mensaje corto y natural como si lo estuviera mandando yo por WhatsApp o Instagram, sin sonar a vendedor profesional, sin exagerar, sin inventarte ofertas ni precios que no sepas, y sin poner emojis.
+
+Si te pido recomendaciones, búsquedas o filtrados de productos, responde de manera clara y directa con lo que sabes de verdad, sin inventarte nada. Si no tienes información suficiente o actualizada, dilo sin rodeos.
+
+Recuerda y haz referencia a lo que hablamos antes. 
+No empieces conversaciones de cero si ya hemos hablado del tema.
+Mantén el contexto de la conversación. Sé breve cuando no haga falta alargar. Usa alguna expresión coloquial de vez en cuando, como "pues mira", "la verdad es que", "no sé si te servirá pero...", pero sin pasarte.`,
+      };
 
       const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${GROQ_API_KEY}`,
-          "Content-Type": "application/json"
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           model: "llama-3.1-8b-instant",
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.9,
-          max_tokens: 140,
-          top_p: 0.92
-        })
+          messages: [systemPrompt, ...history],
+          temperature: 0.7,
+          max_tokens: 300,
+          top_p: 0.92,
+        }),
       });
 
-      if (!response.ok) throw new Error("Error en Groq");
+      if (!response.ok) throw new Error("Error en Groq API");
 
       const data = await response.json();
       let generated = data.choices?.[0]?.message?.content?.trim() || "Lo siento, hubo un error.";
 
-      generated = generated
-        .replace(/^"(.+)"$/, '$1')
-        .trim();
+      generated = generated.replace(/^"(.+)"$/, '$1').trim();
 
-      const botMsg = { id: Date.now() + 1, text: generated, sender: 'bot' };
-      setMessages(prev => [...prev, botMsg]);
+      const botMsg = {
+        id: Date.now() + 1,
+        text: generated,
+        sender: 'bot',
+        timestamp: Date.now(),
+      };
+
+      setMessages((prev) => [...prev, botMsg]);
     } catch (err) {
-      console.error("Error generando respuesta:", err);
-      const botMsg = { id: Date.now() + 1, text: "Lo siento, hubo un error al procesar tu mensaje. Intenta de nuevo.", sender: 'bot' };
-      setMessages(prev => [...prev, botMsg]);
+      console.error(err);
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: Date.now() + 1,
+          text: "Lo siento, hubo un error al procesar tu mensaje. Intenta de nuevo.",
+          sender: 'bot',
+          timestamp: Date.now(),
+        },
+      ]);
+    } finally {
+      setIsTyping(false);
     }
-
-    scrollToBottom();
   };
 
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter' && !e.shiftKey && activeTab === 'chat') {
       e.preventDefault();
       handleSend();
     }
@@ -77,130 +189,204 @@ export default function ChatWidget() {
 
   return (
     <>
-      {/* Botón flotante – movido más arriba: bottom-20 en lugar de bottom-6 */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={`
-          fixed bottom-20 right-6 z-50
-          w-14 h-14 rounded-full 
-          bg-violet-600 hover:bg-violet-700 
-          text-white shadow-xl
-          flex items-center justify-center
+          fixed bottom-6 right-6 z-50
+          w-12 h-12 rounded-full bg-violet-500 text-white
+          flex items-center justify-center shadow-lg
+          hover:bg-violet-700 hover:scale-110 active:scale-95
           transition-all duration-300
-          hover:scale-110 active:scale-95
-          shadow-violet-500/40 hover:shadow-violet-600/60
+          shadow-violet-500/50 hover:shadow-violet-600/60
         `}
-        aria-label={isOpen ? "Cerrar chat" : "Abrir chat"}
+        aria-label={isOpen ? "Cerrar" : "Abrir chat / sugerencias"}
       >
         <AnimatePresence mode="wait">
           {isOpen ? (
             <motion.div
-              key="close"
+              key="x"
               initial={{ rotate: -90, opacity: 0 }}
               animate={{ rotate: 0, opacity: 1 }}
               exit={{ rotate: 90, opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <X className="w-7 h-7" />
+              <X className="w-5 h-5" />
             </motion.div>
           ) : (
             <motion.div
-              key="chat"
-              initial={{ scale: 0.5, opacity: 0 }}
+              key="msg"
+              initial={{ scale: 0.6, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.5, opacity: 0 }}
+              exit={{ scale: 0.6, opacity: 0 }}
               transition={{ duration: 0.2 }}
             >
-              <MessageSquare className="w-7 h-7" />
+              <MessageSquare className="w-5 h-5" />
             </motion.div>
           )}
         </AnimatePresence>
       </button>
 
-      {/* Ventana de chat – ajustada para que no se solape con el botón */}
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={{ opacity: 0, y: 30, scale: 0.94 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
-            transition={{ duration: 0.25, ease: "easeOut" }}
+            exit={{ opacity: 0, y: 30, scale: 0.94 }}
             className={`
-              fixed bottom-36 right-6 z-50
-              w-80 sm:w-96 h-[500px] max-h-[80vh]
-              bg-white contenedorCosas shadow-2xl
-              border border-slate-200 overflow-hidden
-              flex flex-col
+              fixed bottom-24 right-6 z-40
+              w-80 sm:w-96 h-[520px] max-h-[82vh]
+              bg-white shadow-2xl border border-slate-200
+              rounded-2xl overflow-hidden flex flex-col
+              contenedorCosas
             `}
           >
-            {/* Header */}
-            <div className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white px-5 py-4 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Bot className="w-6 h-6" />
-                <div>
-                  <h3 className="font-semibold">Asistente DKS</h3>
-                </div>
-              </div>
-              <button 
-                onClick={() => setIsOpen(false)}
-                className="text-white/80 hover:text-white"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Mensajes */}
-            <div className="flex-1 text-slate-900 text-left p-4 overflow-y-auto bg-slate-50/70 space-y-4">
-              {messages.map(msg => (
-                <div
-                  key={msg.id}
-                  className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-                >
-                  <div
-                    className={`
-                      max-w-[80%] px-4 py-3 contenedorCosas text-sm
-                      ${msg.sender === 'user'
-                        ? 'bg-violet-600 text-white contenedorCosas'
-                        : 'bg-white shadow-sm contenedorCosas border'
-                      }
-                    `}
-                  >
-                    {msg.text}
-                  </div>
-                </div>
-              ))}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input */}
-            <div className="border-t border-slate-200 p-4 bg-white">
-              <div className="relative flex items-center">
-                <textarea
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  placeholder="Escribe tu mensaje..."
-                  rows={1}
-                  className="
-                    w-full px-4 py-3 pr-12 text-sm border border-slate-300 bg-white text-slate-900 contenedorCosas
-                    focus:outline-none focus:border-violet-500 resize-none
-                    min-h-[48px] max-h-32
-                  "
-                />
+            <div className="bg-gradient-to-r from-violet-600 to-indigo-600 text-white">
+              <div className="px-0 pt-2 flex items-center justify-between"></div>
+              <div className="flex border-b border-white/20 px-2">
                 <button
-                  onClick={handleSend}
-                  disabled={!input.trim()}
+                  onClick={() => setActiveTab('chat')}
                   className={`
-                    absolute right-2 p-2 contenedorCosas
-                    ${input.trim()
-                      ? 'text-violet-600 hover:bg-violet-50'
-                      : 'text-slate-300 cursor-not-allowed'
-                    }
+                    flex-1 py-2.5 text-sm font-medium transition-colors
+                    ${activeTab === 'chat' ? 'text-white border-b-2 border-white' : 'text-white/70 hover:text-white/90'}
                   `}
                 >
-                  <Send className="w-5 h-5" />
+                  Chat
+                </button>
+                <button
+                  onClick={() => setActiveTab('suggestions')}
+                  className={`
+                    flex-1 py-2.5 text-sm font-medium transition-colors
+                    ${activeTab === 'suggestions' ? 'text-white border-b-2 border-white' : 'text-white/70 hover:text-white/90'}
+                  `}
+                >
+                  Sugerencias
                 </button>
               </div>
+            </div>
+
+            <div className="flex-1 flex flex-col bg-slate-50/70 overflow-hidden text-slate-900">
+              <AnimatePresence mode="wait">
+                {activeTab === 'chat' ? (
+                  <motion.div
+                    key="chat"
+                    initial={{ opacity: 0, x: -10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: 10 }}
+                    transition={{ duration: 0.18 }}
+                    className="flex flex-col min-h-0 flex-1"
+                  >
+                    <div className="flex-1 text-left overflow-y-auto px-4 pt-4 pb-0 space-y-3 scrollbar-thin scrollbar-thumb-slate-300">
+                      {messages.map((msg) => {
+                        const isUser = msg.sender === 'user';
+
+                        return (
+                          <div
+                            key={msg.id}
+                            className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} gap-0.5`}
+                          >
+                            {/* Mensaje primero */}
+                            <div className="max-w-[75%]">
+                              <div
+                                className={`
+            px-4 py-3 text-sm rounded-xl leading-relaxed shadow-sm
+            ${isUser
+                                    ? 'bg-violet-600 text-white rounded-br-none'
+                                    : 'bg-white border border-slate-200 text-slate-900 rounded-bl-none'}
+          `}
+                              >
+                                <MessageContent text={msg.text} isUser={isUser} />
+                              </div>
+                            </div>
+
+                            {/* Avatar + hora ABAJO, alineado según el lado */}
+                            <div className={`flex items-center gap-2 ${isUser ? 'justify-end' : 'justify-start'}`}>
+                              {isUser ? (
+                                <>
+                                  <span className="text-[9px] text-slate-500 font-light opacity-80">
+                                    {formatTime(msg.timestamp)}
+                                  </span>
+                                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br overflow-hidden border-2 border-white shadow-sm">
+                                    <User className="w-full h-full p-1 text-violet-600 bg-violet-100" />
+                                  </div>
+                                </>
+                              ) : (
+                                <>
+                                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gradient-to-br overflow-hidden border-2 border-white shadow-sm">
+                                    <Bot className="w-full h-full p-1 text-indigo-600 bg-indigo-100" />
+                                  </div>
+                                  <span className="text-[9px] text-slate-500 font-light opacity-80">
+                                    {formatTime(msg.timestamp)}
+                                  </span>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {isTyping && (
+                        <div className="flex items-start gap-2 justify-start">
+                          <div className="flex flex-col items-center">
+                            <div className="flex-shrink-0 w-8 h-8 rounded-full bg-gradient-to-br from-indigo-100 to-purple-100 overflow-hidden border-2 border-white shadow-sm">
+                              <Bot className="w-full h-full p-1.5 text-indigo-600" />
+                            </div>
+                          </div>
+                          <div className="max-w-[75%] px-4 py-3 text-sm rounded-2xl leading-relaxed bg-white border border-slate-200 shadow-sm">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-2 h-2 bg-violet-500 rounded-full animate-bounce" style={{ animationDelay: '0s' }}></div>
+                              <div className="w-2 h-2 bg-violet-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                              <div className="w-2 h-2 bg-violet-500 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div ref={messagesEndRef} className="min-h-[1px]" />
+                    </div>
+
+                    <div className="shrink-0 pl-4 pr-4 pt-4 pb-3 border-t border-slate-200 bg-white">
+                      <div className="relative">
+                        <textarea
+                          value={input}
+                          onChange={(e) => setInput(e.target.value)}
+                          onKeyDown={handleKeyDown}
+                          placeholder="Escribe tu mensaje..."
+                          rows={1}
+                          className="
+                            w-full px-4 py-2.5 pr-12 text-sm border border-slate-300 rounded-full
+                            focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-300
+                            resize-none min-h-[44px] max-h-[120px] overflow-hidden
+                            text-slate-900 bg-slate-100 placeholder-slate-500 contenedorCosas
+                          "
+                        />
+                        <button
+                          onClick={handleSend}
+                          disabled={!input.trim() || isTyping}
+                          className={`
+                            absolute right-3 top-6 -translate-y-1/2 p-1.5 rounded-full transition-colors
+                            ${input.trim() && !isTyping
+                              ? 'text-violet-600 hover:text-violet-800 hover:bg-violet-50'
+                              : 'text-slate-400 cursor-not-allowed'}
+                          `}
+                        >
+                          <Send className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="suggestions"
+                    initial={{ opacity: 0, x: 10 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -10 }}
+                    transition={{ duration: 0.18 }}
+                    className="flex-1 overflow-y-auto"
+                  >
+                    <FeedbackFormContent onClose={() => setIsOpen(false)} />
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         )}

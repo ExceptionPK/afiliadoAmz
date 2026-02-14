@@ -347,6 +347,7 @@ html, body {
   0%, 100% { opacity: 0.5; transform: scale(1); }
   50%      { opacity: 0.85; transform: scale(1.12); }
 }
+
 /*----------------------------------------- NAVBAR ESTILOS */
 .nav-container {
   display: flex;

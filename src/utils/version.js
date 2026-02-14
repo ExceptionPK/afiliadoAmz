@@ -1,10 +1,9 @@
 // src/utils/version.js
-export const APP_VERSION = "v15";
+export const APP_VERSION = "v16";
 export const CHANGELOG = [
-  "Optimización en renderización del historial.",
-  "Fix de error donde el nombre se actualizaba automaticamente al refrescar precios.",
-  "Fix de error que rompia el diseño de historial al importar listas largas.",
-  "Fix de importación donde no se respetaba el orden de los productos al ser importados.",
+  "Fix de parpadeo de botones mientras se cargaba el historial.",
+  "Añadido chat-bot en etapa de desarrollo en la esquina inferior derecha.",
+  "Apartado de sugerencias desplazado en una pestaña disponible en la pestaña al abrir el chat-bot.",
+  "Refresco de precios y titulos en Historial desplazado a la esquina inferior izquierda.",
   "Mejoras en rendimiento general.",
-  "Mejoras en el scraping y en proxies."
 ];

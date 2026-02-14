@@ -66,7 +66,7 @@ function App() {
         }}
       />
 
-      {/* <ChatWidget /> */}
+      <ChatWidget />
 
       {/* Solo mostramos Navbar si NO estamos en la página de auth */}
       {!isAuthPage && <Navbar session={session} />}
