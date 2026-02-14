@@ -1831,14 +1831,16 @@ export default function HistoryPage() {
                         <div className="grid grid-cols-3 gap-3 w-full md:w-auto md:flex md:gap-3">
                             {/* Importar */}
                             <label
-                                className={`botonesImportarExportar cursor-pointer transition-all flex items-center justify-center gap-2
-                                ${isLoading || !isHistoryFullyLoaded
+                                className={`botonesImportarExportar flex items-center justify-center gap-2 transition-all
+                            ${(isLoading || !isHistoryFullyLoaded || isImporting)
                                         ? 'opacity-50 cursor-not-allowed'
-                                        : 'hover:bg-violet-600 active:bg-violet-700'}`}
+                                        : 'cursor-pointer hover:bg-violet-600 active:bg-violet-700'}`}
                                 title={
-                                    isLoading || !isHistoryFullyLoaded
-                                        ? "Cargando historial..."
-                                        : "Importar archivo"
+                                    isImporting
+                                        ? "Importación en curso... espera a que termine"
+                                        : isLoading || !isHistoryFullyLoaded
+                                            ? "Cargando historial..."
+                                            : "Importar archivo"
                                 }
                             >
                                 <Upload className="w-4 h-4" />
