@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import FeedbackFormContent from './FeedbackFormContent';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { useLocation } from 'react-router-dom';
 
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
@@ -70,6 +71,9 @@ export default function ChatWidget() {
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef(null);
+
+  const location = useLocation();
+  const isAuthPage = location.pathname === '/auth';
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -189,9 +193,10 @@ Mantén el contexto de la conversación. Sé breve cuando no haga falta alargar.
 
   return (
     <>
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className={`
+      {!isAuthPage && (
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className={`
           fixed bottom-6 right-6 z-50
           w-12 h-12 rounded-full bg-violet-500 text-white
           flex items-center justify-center shadow-lg
@@ -199,33 +204,33 @@ Mantén el contexto de la conversación. Sé breve cuando no haga falta alargar.
           transition-all duration-300
           shadow-violet-500/50 hover:shadow-violet-600/60
         `}
-        aria-label={isOpen ? "Cerrar" : "Abrir chat / sugerencias"}
-      >
-        <AnimatePresence mode="wait">
-          {isOpen ? (
-            <motion.div
-              key="x"
-              initial={{ rotate: -90, opacity: 0 }}
-              animate={{ rotate: 0, opacity: 1 }}
-              exit={{ rotate: 90, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <X className="w-5 h-5" />
-            </motion.div>
-          ) : (
-            <motion.div
-              key="msg"
-              initial={{ scale: 0.6, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.6, opacity: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <MessageSquare className="w-5 h-5" />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </button>
-
+          aria-label={isOpen ? "Cerrar" : "Abrir chat / sugerencias"}
+        >
+          <AnimatePresence mode="wait">
+            {isOpen ? (
+              <motion.div
+                key="x"
+                initial={{ rotate: -90, opacity: 0 }}
+                animate={{ rotate: 0, opacity: 1 }}
+                exit={{ rotate: 90, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <X className="w-5 h-5" />
+              </motion.div>
+            ) : (
+              <motion.div
+                key="msg"
+                initial={{ scale: 0.6, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.6, opacity: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                <MessageSquare className="w-5 h-5" />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </button>
+      )}
       <AnimatePresence>
         {isOpen && (
           <motion.div
