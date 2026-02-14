@@ -6,6 +6,7 @@ import Dashboard from './pages/Home';
 import History from './pages/History';
 import Chat from './pages/Chat';
 import Auth from './pages/Auth';
+import ChatWidget from './components/ChatWidget';
 import LoadingScreen from './components/LoadingScreen';
 import { supabase } from './utils/supabaseClient';
 import { useState, useEffect } from 'react';
@@ -64,6 +65,8 @@ function App() {
           }
         }}
       />
+
+      <ChatWidget />
 
       {/* Solo mostramos Navbar si NO estamos en la página de auth */}
       {!isAuthPage && <Navbar session={session} />}

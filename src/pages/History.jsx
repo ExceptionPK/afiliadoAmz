@@ -1080,6 +1080,7 @@ export default function HistoryPage() {
     const [processedCount, setProcessedCount] = useState(0);
     const [totalImported, setTotalImported] = useState(0);
     const [isImporting, setIsImporting] = useState(false);
+    const [ignoreUpdatesDuringImport, setIgnoreUpdatesDuringImport] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
     const [isHistoryFullyLoaded, setIsHistoryFullyLoaded] = useState(false);
 
@@ -1176,10 +1177,15 @@ export default function HistoryPage() {
             }
         };
 
-        loadHistory();
+        loadHistory();  // carga inicial
 
         const handleUpdate = () => {
-            console.log("[HISTORY EVENT] amazon-history-updated recibido → recargando");
+            if (isImporting || ignoreUpdatesDuringImport) {
+                console.log("[EVENTO] amazon-history-updated → IGNORADO (importación en curso)");
+                return;
+            }
+
+            console.log("[EVENTO] amazon-history-updated recibido → recargando");
             loadHistory();
         };
 
@@ -1188,7 +1194,7 @@ export default function HistoryPage() {
         return () => {
             window.removeEventListener('amazon-history-updated', handleUpdate);
         };
-    }, [isAuthenticated]);
+    }, [isAuthenticated, isImporting, ignoreUpdatesDuringImport]);
 
     useEffect(() => {
         const handleWindowFocus = () => {
@@ -1488,17 +1494,16 @@ export default function HistoryPage() {
         const file = e.target.files[0];
         if (!file) return;
 
-        setIsImporting(true);           // ← activamos loader
+        setIsImporting(true);
+        setIgnoreUpdatesDuringImport(true);
 
-        importHistory(file, (success, message, useInfoToast = false) => {
+        importHistory(file, async (success, message, useInfoToast = false) => {
+            await new Promise(resolve => setTimeout(resolve, 300));
+
             if (success) {
-                // Forzamos recarga desde la fuente correcta
-                const reload = async () => {
-                    const fresh = await getUserHistory(500);
-                    setHistory(fresh || []);
-                    setAnimatedItems(new Set()); // reseteamos animaciones si quieres
-                };
-                reload();
+                const fresh = await getUserHistory(500);
+                setHistory(fresh || []);
+                setAnimatedItems(new Set());
 
                 const longDuration = 5000;
                 if (useInfoToast) {
@@ -1514,7 +1519,8 @@ export default function HistoryPage() {
                 fileInputRef.current.value = null;
             }
 
-            setIsImporting(false);     // ← ocultamos loader
+            setIsImporting(false);
+            setIgnoreUpdatesDuringImport(false);
         });
     };
 
@@ -1861,7 +1867,7 @@ export default function HistoryPage() {
                                         !isHistoryFullyLoaded || isLoading
                                             ? "Cargando historial..."
                                             : history.length === 0
-                                                ? "No hay enlaces para exportar"
+                                                ? "No hay elementos para exportar"
                                                 : "Exportar en varios formatos"
                                     }
                                     ref={exportButtonRef}
@@ -2022,7 +2028,7 @@ export default function HistoryPage() {
                                     !isHistoryFullyLoaded || isLoading
                                         ? "Cargando historial..."
                                         : history.length === 0
-                                            ? "No hay enlaces para borrar"
+                                            ? "No hay elementos para borrar"
                                             : "Borrar todo el historial"
                                 }
                             >
