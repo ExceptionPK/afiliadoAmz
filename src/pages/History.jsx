@@ -2179,9 +2179,9 @@ export default function HistoryPage() {
 
                                 let hasShownEarlyWarning = false;
                                 const earlyWarningTimer = setTimeout(() => {
-                                    toast.error("Problemas con proxies...", { duration: 8000 });
+                                    toast.error("Problemas con proxies...", { duration: 4000 });
                                     hasShownEarlyWarning = true;
-                                }, 15000);
+                                }, 30000);
 
                                 const result = await updateOutdatedPricesManually();
 

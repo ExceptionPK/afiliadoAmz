@@ -6,17 +6,16 @@ import { saveToHistory, updateHistoryPositions, getUserHistory } from './supabas
 
 
 const API_KEYS = [
-    import.meta.env.VITE_WEBSCRAPINGAPI_KEY_1?.trim(),
-    import.meta.env.VITE_WEBSCRAPINGAPI_KEY_2?.trim(),
-    // puedes añadir más después: VITE_WEBSCRAPINGAPI_KEY_3 etc.
+    import.meta.env.VITE_SCRAPERAPI_KEY_1?.trim(),
+    import.meta.env.VITE_SCRAPERAPI_KEY_2?.trim(),
+    // puedes añadir más
 ].filter(Boolean);
 
 if (API_KEYS.length === 0) {
-    console.error("No se encontró NINGUNA API key de WebScrapingAPI en las variables de entorno");
+    console.error("No se encontró NINGUNA API key de ScraperAPI en las variables de entorno");
 }
 
-// Opcional: recordar cuál clave funcionó la última vez (mejora la eficiencia)
-const LAST_GOOD_KEY_INDEX = 'wsa_last_good_key_index';
+const LAST_GOOD_KEY_INDEX = 'scraperapi_last_good_key_index';
 
 const getLastGoodKeyIndex = () => {
     const val = localStorage.getItem(LAST_GOOD_KEY_INDEX);
@@ -36,7 +35,7 @@ const setLastGoodKeyIndex = (idx) => {
  */
 async function fetchWithFallback(targetUrl) {
     if (API_KEYS.length === 0) {
-        throw new Error("No hay claves configuradas para WebScrapingAPI");
+        throw new Error("No hay claves configuradas para ScraperAPI");
     }
 
     let startIdx = getLastGoodKeyIndex();
@@ -46,9 +45,11 @@ async function fetchWithFallback(targetUrl) {
         const keyIdx = (startIdx + i) % API_KEYS.length;
         const key = API_KEYS[keyIdx];
 
-        const scraperUrl = `https://api.webscrapingapi.com/v2?api_key=${key}&url=${encodeURIComponent(targetUrl)}&render_js=0`;
+        // Endpoint CORRECTO de ScraperAPI – sin render_js, por defecto no renderiza JS (1 crédito)
+        // Si algún día necesitas JS: añade &render=true (cuesta 10 créditos)
+        const scraperUrl = `https://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(targetUrl)}`;
 
-        console.log(`[fetchRealData] Probando clave #${keyIdx + 1} para ${targetUrl}`);
+        console.log(`[fetchRealData] Probando clave ScraperAPI #${keyIdx + 1} → ${targetUrl}`);
 
         try {
             const res = await fetch(scraperUrl, {
@@ -56,46 +57,46 @@ async function fetchWithFallback(targetUrl) {
             });
 
             if (res.ok) {
-                // ¡Éxito! Recordamos esta clave como buena
                 setLastGoodKeyIndex(keyIdx);
-                return await res.text();
+                const html = await res.text();
+                console.log(`[ScraperAPI] Éxito con clave #${keyIdx + 1} - longitud HTML: ${html.length}`);
+                return html;
             }
 
-            // Leemos el cuerpo para logs (no siempre necesario, pero ayuda a debug)
             let errText = '';
             try {
                 errText = await res.text();
-            } catch { }
+            } catch {}
 
             const status = res.status;
 
-            // Casos de cuota agotada o no autorizado → probamos siguiente clave
-            const isQuotaError =
-                status === 401 ||                 // Unauthorized → muy común en WebScrapingAPI cuando no hay créditos
-                status === 429 ||                 // Too Many Requests (rate limit temporal)
-                (status === 402) ||               // Payment Required (a veces usado para quota)
+            // Errores típicos de ScraperAPI (basado en su documentación actual)
+            const isQuotaOrAuthError =
+                status === 401 ||           // clave inválida o sin créditos
+                status === 429 ||           // rate limit
+                status === 403 ||           // forbidden (p.ej. costo excedido si usas max_cost, o bloqueo temporal)
+                errText.toLowerCase().includes('credit') ||
                 errText.toLowerCase().includes('quota') ||
-                errText.toLowerCase().includes('limit') ||
                 errText.toLowerCase().includes('exceeded') ||
-                errText.toLowerCase().includes('monthly');
+                errText.toLowerCase().includes('limit') ||
+                errText.toLowerCase().includes('no credits');
 
-            if (isQuotaError) {
-                console.warn(`[WebScrapingAPI] Clave #${keyIdx + 1} → cuota agotada o límite alcanzado (${status})`);
-                lastError = new Error(`Cuota agotada en clave #${keyIdx + 1} (${status})`);
-                continue; // ← clave siguiente
+            if (isQuotaOrAuthError) {
+                console.warn(`[ScraperAPI] Clave #${keyIdx + 1} → problema de cuota/autorización (${status}) - ${errText.slice(0,120)}`);
+                lastError = new Error(`Problema con clave #${keyIdx + 1}: ${status}`);
+                continue;
             }
 
-            // Otro error (400, 500, etc.) → lo lanzamos directamente
-            throw new Error(`WebScrapingAPI error ${status}: ${errText.slice(0, 180)}`);
+            // Otros errores → lanzamos directamente
+            throw new Error(`ScraperAPI error ${status}: ${errText.slice(0, 180)}`);
 
         } catch (err) {
             lastError = err;
-            console.warn(`[fetchRealData] Fallo con clave #${keyIdx + 1}: ${err.message}`);
+            console.warn(`[fetchRealData] Fallo con clave ScraperAPI #${keyIdx + 1}: ${err.message}`);
         }
     }
 
-    // Si llegamos aquí → ninguna clave sirvió
-    throw lastError || new Error("Todas las claves de WebScrapingAPI fallaron (cuota agotada o error persistente)");
+    throw lastError || new Error("Todas las claves de ScraperAPI fallaron (cuota agotada, clave inválida u otro error persistente)");
 }
 /*-------------------------------------------------------------------------------------------------------------------*/
 
