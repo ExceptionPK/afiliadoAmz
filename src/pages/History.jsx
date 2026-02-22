@@ -1863,7 +1863,7 @@ export default function HistoryPage() {
                 document.body
             )}
             <div className="min-h-screen bg-gradient-to-b separacionArriba max-w-[1200px] mx-auto">
-                <div className="flex flex-col md:flex-row gap-4 px-4 pt-4">
+                <div className="flex flex-col md:flex-row gap-4 pt-4">
                     {/* Sidebar for filters - hidden on mobile, shown on md+ */}
                     <div className={`
                     hidden
@@ -2224,7 +2224,7 @@ export default function HistoryPage() {
                                                 <span className="text-lg font-semibold text-slate-800">Filtros</span>
                                                 <button
                                                     onClick={() => setShowMobileSidebar(false)}
-                                                    className="p-2 text-slate-600 hover:text-slate-900"
+                                                    className="p-0 text-slate-600 hover:text-slate-900"
                                                 >
                                                     <X className="w-6 h-6" />
                                                 </button>
