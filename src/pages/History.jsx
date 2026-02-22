@@ -5,7 +5,6 @@ import MagicParticles from "../components/MagicParticles";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { Send } from "lucide-react";
-
 import {
     Search,
     ExternalLink,
@@ -20,16 +19,21 @@ import {
     RefreshCw,
     Check,
     Bot,
-    Save
+    Save,
+    Tag,
+    ChevronDown,
+    Percent,
+    Plus,
+    Euro,
+    Sliders
 } from "lucide-react";
 import {
     getHistory,
     removeFromHistory,
     fetchRealData,
-    updateOutdatedPricesManually,
-    importHistory
+    importHistory,
+    updateSelectedPrices
 } from "../utils/storage";
-
 import {
     getUserHistory,
     updateHistoryItem,
@@ -40,8 +44,41 @@ import {
     saveSimpleMessage,
     getSavedMessages
 } from "../utils/supabaseStorage";
-
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
+
+const Accordion = ({ id, title, children, defaultOpen = false }) => {
+    const storageKey = `accordion-open-${id}`;
+
+    const [open, setOpen] = useState(() => {
+        const saved = localStorage.getItem(storageKey);
+        return saved !== null ? JSON.parse(saved) : defaultOpen;
+    });
+
+    useEffect(() => {
+        localStorage.setItem(storageKey, JSON.stringify(open));
+    }, [open, storageKey]);
+
+    return (
+        <div className="border-b border-slate-200">
+            <button
+                onClick={() => setOpen(!open)}
+                className="w-full flex justify-between items-center py-3 px-4 text-left text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+            >
+                <div className="flex items-center gap-2">
+                    {title}
+                </div>
+                <ChevronDown
+                    className={`w-5 h-5 text-slate-400 transition-transform duration-300 ease-in-out ${open ? "rotate-180" : ""}`}
+                />
+            </button>
+            <div
+                className={`overflow-hidden transition-all duration-300 ease-in-out ${open ? "max-h-96 opacity-100" : "max-h-0 opacity-0"}`}
+            >
+                <div className="px-4 pb-4 pt-1">{children}</div>
+            </div>
+        </div>
+    );
+};
 
 const HistoryItem = ({
     item: propItem,
@@ -51,7 +88,9 @@ const HistoryItem = ({
     moveItem,
     isDragging,
     isDragOver,
-    isAuthenticated
+    isAuthenticated,
+    search = "",
+    isUpdating = false,
 }) => {
     const [editingId, setEditingId] = useState(null);
     const [editTitle, setEditTitle] = useState("");
@@ -66,20 +105,16 @@ const HistoryItem = ({
     const [customMessage, setCustomMessage] = useState("");
     const [selectedOption, setSelectedOption] = useState("none");
     const [showQuickDropdown, setShowQuickDropdown] = useState(false);
-
     useEffect(() => {
         setLocalTitle(propItem.productTitle);
     }, [propItem.productTitle]);
-
     useEffect(() => {
         if (showShareModal) {
             const scrollY = window.scrollY;
-
             document.body.style.position = 'fixed';
             document.body.style.top = `-${scrollY}px`;
             document.body.style.width = '100%';
             document.body.style.overflowY = 'scroll';
-
             document.documentElement.style.overflow = 'hidden';
         } else {
             const scrollY = document.body.style.top;
@@ -87,25 +122,76 @@ const HistoryItem = ({
             document.body.style.top = '';
             document.body.style.width = '';
             document.body.style.overflowY = '';
-
             document.documentElement.style.overflow = '';
-
             if (scrollY) {
                 window.scrollTo(0, parseInt(scrollY || '0') * -1);
             }
         }
     }, [showShareModal]);
-
     useEffect(() => {
         if (editingPriceId === propItem.id && priceInputRef.current) {
             const timer = setTimeout(() => {
                 priceInputRef.current.focus();
                 priceInputRef.current.select();
             }, 10);
-
             return () => clearTimeout(timer);
         }
     }, [editingPriceId, propItem.id]);
+
+
+    // Dentro de HistoryItem
+    const highlightMatches = (text, query) => {
+        if (!query?.trim()) return text;
+
+        const normalizedQuery = query
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "")
+            .trim();
+
+        if (!normalizedQuery) return text;
+
+        const parts = [];
+        let lastIndex = 0;
+
+        // Usamos la misma normalización que en el filtro
+        const normalizedText = text
+            .toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+
+        // Buscamos TODAS las palabras de la query (AND)
+        const words = normalizedQuery.split(/\s+/).filter(Boolean);
+
+        // Para cada palabra buscamos sus ocurrencias
+        words.forEach(word => {
+            let index = 0;
+            while ((index = normalizedText.indexOf(word, index)) !== -1) {
+                // Añadimos texto antes de la coincidencia
+                if (index > lastIndex) {
+                    parts.push(text.slice(lastIndex, index));
+                }
+
+                // Añadimos la coincidencia resaltada (usamos el texto original)
+                const matchLength = word.length;
+                parts.push(
+                    <mark key={`${index}-${word}`} className="bg-violet-200 p-0.5 rounded">
+                        {text.slice(index, index + matchLength)}
+                    </mark>
+                );
+
+                lastIndex = index + matchLength;
+                index += matchLength;
+            }
+        });
+
+        // Añadimos el resto del texto
+        if (lastIndex < text.length) {
+            parts.push(text.slice(lastIndex));
+        }
+
+        return parts.length > 0 ? parts : text;
+    };
 
     const startEditing = (e) => {
         e.stopPropagation();
@@ -120,9 +206,7 @@ const HistoryItem = ({
             setEditingId(null);
             return;
         }
-
         const updatedEntry = { ...propItem, productTitle: newTitle, title_is_custom: true };
-
         if (isAuthenticated) {
             await updateHistoryItem(updatedEntry);
         } else {
@@ -134,24 +218,18 @@ const HistoryItem = ({
             localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
             window.dispatchEvent(new Event('amazon-history-updated'));
         }
-
         setLocalTitle(newTitle);
         setHistory(prev => prev.map(h => h.id === propItem.id ? updatedEntry : h));
         setEditingId(null);
     };
-
     const startEditingPrice = (e) => {
         e.stopPropagation();
-
         let priceToEdit = (propItem.price || '').replace(' €', '');
-
         if (priceToEdit.endsWith(',00')) {
             priceToEdit = priceToEdit.replace(',00', '');
         }
-
         setEditPrice(priceToEdit);
         setEditingPriceId(propItem.id);
-
         setTimeout(() => {
             if (priceInputRef.current) {
                 priceInputRef.current.focus();
@@ -159,7 +237,6 @@ const HistoryItem = ({
             }
         }, 50);
     };
-
     const handleKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -169,48 +246,39 @@ const HistoryItem = ({
             setEditTitle("");
         }
     };
-
     const handleDragStart = (e) => {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', index.toString());
         e.currentTarget.classList.add('dragging');
     };
-
     const handleDragEnd = (e) => {
         e.currentTarget.classList.remove('dragging', 'drag-over');
         document.querySelectorAll('.history-item').forEach(el => {
             el.classList.remove('drag-over');
         });
     };
-
     const handleDragOver = (e) => {
         e.preventDefault();
         e.currentTarget.classList.add('drag-over');
     };
-
     const handleDragEnter = (e) => {
         e.preventDefault();
         e.currentTarget.classList.add('drag-over');
     };
-
     const handleDragLeave = (e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) {
             e.currentTarget.classList.remove('drag-over');
         }
     };
-
     const handleDrop = (e) => {
         e.preventDefault();
         e.currentTarget.classList.remove('drag-over');
-
         const fromIndex = parseInt(e.dataTransfer.getData('text/plain'));
         const toIndex = index;
-
         if (fromIndex !== toIndex) {
             moveItem(fromIndex, toIndex);
         }
     };
-
     const handleShare = async () => {
         let message = "";
         if (selectedOption === "quick") {
@@ -218,18 +286,13 @@ const HistoryItem = ({
         } else if (selectedOption === "custom") {
             message = customMessage.trim();
         }
-
         let linkToShare = propItem.shortLink;
-
         if (!linkToShare) {
             try {
                 const { shortenWithShortGy } = await import("../utils/storage");
-
                 const slugBase = propItem.asin.toLowerCase();
                 const customSlug = `p-${slugBase}`;
-
                 linkToShare = await shortenWithShortGy(propItem.affiliateUrl, customSlug);
-
                 const history = getHistory();
                 const updated = history.map(h =>
                     h.id === propItem.id ? { ...h, shortLink: linkToShare } : h
@@ -241,27 +304,21 @@ const HistoryItem = ({
                 linkToShare = propItem.affiliateUrl; // fallback
             }
         }
-
         const text = encodeURIComponent(
             message ? `${message} ${linkToShare}` : linkToShare
         );
         const whatsappUrl = `https://api.whatsapp.com/send?text=${text}`;
         window.open(whatsappUrl, "_blank");
-
         setShowShareModal(false);
         setSelectedOption("none");
         setCustomMessage("");
         setShowQuickDropdown(false);
     };
-
     const formatPrice = (raw) => {
         if (!raw || !raw.trim()) return null;
-
         let cleaned = raw.trim().replace(' €', '').replace(/\s/g, '');
-
         let decimalSeparator = ',';
         let thousandsSeparator = '.';
-
         if (cleaned.includes('.') && cleaned.includes(',')) {
             if (cleaned.lastIndexOf('.') > cleaned.lastIndexOf(',')) {
                 decimalSeparator = '.';
@@ -284,27 +341,20 @@ const HistoryItem = ({
             decimalSeparator = ',';
             thousandsSeparator = null;
         }
-
         if (thousandsSeparator) {
             cleaned = cleaned.replace(new RegExp('\\' + thousandsSeparator, 'g'), '');
         }
-
         if (decimalSeparator && decimalSeparator !== '.') {
             cleaned = cleaned.replace(decimalSeparator, '.');
         }
-
         let num = parseFloat(cleaned);
         if (isNaN(num)) return null;
-
         let parts = num.toFixed(2).split('.');
         let integerPart = parts[0];
         let decimalPart = parts[1];
-
         integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
-
         return integerPart + ',' + decimalPart + ' €';
     };
-
     const updatePriceField = (field, newValue) => {
         const history = getHistory();
         const updated = history.map(h =>
@@ -313,17 +363,14 @@ const HistoryItem = ({
         localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
         setHistory(updated);
     };
-
     const finishPriceEditing = async () => {
         const formattedCurrent = editPrice.trim() ? formatPrice(editPrice) : null;
         const formattedOriginal = editOriginalPrice.trim() ? formatPrice(editOriginalPrice) : null;
-
         const updatedEntry = {
             ...propItem,
             price: formattedCurrent,
             originalPrice: formattedOriginal,
         };
-
         if (isAuthenticated) {
             await updateHistoryItem(updatedEntry);
         } else {
@@ -334,16 +381,13 @@ const HistoryItem = ({
             localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
             window.dispatchEvent(new Event('amazon-history-updated'));
         }
-
         setHistory(prev => prev.map(h => h.id === propItem.id ? updatedEntry : h));
         setEditingPriceId(null);
     };
-
     const markAsVisited = async (asin, domain) => {
         const key = `visited_${asin}_${domain}`;
         const timestamp = Date.now();
         localStorage.setItem(key, timestamp.toString());
-
         const user = await getCurrentUser();
         if (user?.id) {
             supabase
@@ -357,7 +401,6 @@ const HistoryItem = ({
                 });
         }
     };
-
     const wasVisitedRecently = (item) => {
         const key = `visited_${item.asin}_${item.domain}`;
         const localTs = localStorage.getItem(key);
@@ -365,38 +408,28 @@ const HistoryItem = ({
             const ts = parseInt(localTs, 10);
             if (Date.now() - ts < 6 * 60 * 60 * 1000) return true;
         }
-
         if (item.lastVisited) {
             return Date.now() - item.lastVisited < 24 * 60 * 60 * 1000;
         }
-
         return false;
     };
-
     const generateShareMessage = async () => {
         const title = propItem.productTitle?.trim() || "este producto";
         const hasDiscount = propItem.originalPrice && propItem.price &&
             parseFloat(propItem.price.replace(/[^0-9,]/g, '').replace(',', '.')) <
             parseFloat(propItem.originalPrice.replace(/[^0-9,]/g, '').replace(',', '.'));
-
         const priceMention = hasDiscount
             ? `, ahora a un precio más bajo (${propItem.price})`
             : propItem.price
                 ? ` (${propItem.price})`
                 : "";
-
         const userContext = customMessage.trim();
-
         setCustomMessage("Generando mensaje...");
-
         try {
             let contextInstruction = "";
-
             if (userContext) {
                 contextInstruction = `El usuario ha escrito esto en el campo de mensaje: "${userContext}"
-
-            IMPORTANTE: SI el texto escrito por el usuario parece un nombre propio o apodo  (como "Tere", "Teresa", "Mamá", "Juan", "Laura", etc.) o un destinatario claro, DEBES empezar el mensaje dirigiéndote directamente a esa persona con "Hola [nombre]", "Oye [nombre]", "Mira [nombre]", etc.
-
+            IMPORTANTE: SI el texto escrito por el usuario parece un nombre propio o apodo (como "Tere", "Teresa", "Mamá", "Juan", "Laura", etc.) o un destinatario claro, DEBES empezar el mensaje dirigiéndote directamente a esa persona con "Hola [nombre]", "Oye [nombre]", "Mira [nombre]", etc.
             SIEMPRE escribe el mensaje en PRIMERA PERSONA como si TÚ fueras quien lo envía por WhatsApp.
             NUNCA hables en tercera persona ni digas cosas como "creo que a [nombre] le vendría bien", "le puede interesar a [nombre]", etc.
             El mensaje debe sonar como si lo estuvieras enviando directamente a esa persona.`;
@@ -404,23 +437,19 @@ const HistoryItem = ({
                 contextInstruction = `Escribe el mensaje en PRIMERA PERSONA, como si TÚ lo estuvieras enviando por WhatsApp a un amigo o conocido.
             NUNCA uses tercera persona.`;
             }
-
             const savedMessages = await getSavedMessages(10);
-
             let savedExamples = '';
             if (savedMessages.length > 0) {
                 savedExamples = `\n\nEstos son mensajes que el usuario ha guardado porque le gustaron (OBLIGATORIO: intenta imitar su estilo natural, longitud, tono y forma de hablar, pero varía un poco cada vez):\n` +
                     savedMessages.map((msg, i) => `${i + 1}. "${msg}"`).join('\n') +
                     `\n\nOBLIGATORIO: Adapta el nuevo mensaje para que se parezca al estilo de estos ejemplos guardados.`;
             }
-
             const prompt = `Eres una persona real de España que le está mandando un WhatsApp a un amigo, familiar o conocido para recomendarle un producto de Amazon.
-
             Producto: "${title}"${priceMention}.
-                    
+                   
             ${contextInstruction}
             ${savedExamples}
-                    
+                   
             Reglas OBLIGATORIAS:
             - Empieza casi siempre con un saludo directo o nombre si se identifica uno (Hola Teresa, Oye mamá, Mira Juan, Ey Laura…)
             - Habla SIEMPRE en PRIMERA PERSONA: "te paso", "mira lo que he visto", "he pensado en ti", etc.
@@ -432,14 +461,13 @@ const HistoryItem = ({
             - Termina invitando a mirar el enlace de forma suave.
             - No inventes características del producto.
             - Suena como un mensaje real de WhatsApp entre conocidos.
-                    
+                   
             Ejemplos de lo que SÍ quieres (varía mucho):
             Hola Teresa, mira lo que he pillado, creo que te vendría genial para los peques.
             Oye mamá, he visto esto y me he acordado de ti, ¿qué te parece?
             Mira Juan, está bastante bien de precio, te lo paso por si te interesa.
-                    
+                   
             Genera SOLO el texto del mensaje WhatsApp, nada más.`;
-
             const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                 method: "POST",
                 headers: {
@@ -454,17 +482,13 @@ const HistoryItem = ({
                     top_p: 0.92
                 })
             });
-
             if (!response.ok) throw new Error("Error en Groq");
-
             const data = await response.json();
             let generated = data.choices?.[0]?.message?.content?.trim() || "";
-
             generated = generated
                 .replace(/^"(.+)"$/, '$1')
                 .replace(/^(¡|Hola|Oye|Mira|Ey)\s*/i, match => match)
                 .trim();
-
             if (generated.length > 12 && generated.length < 350) {
                 setCustomMessage(generated);
             } else {
@@ -474,7 +498,6 @@ const HistoryItem = ({
                     : "Mira lo que he encontrado, por si te interesa";
                 setCustomMessage(fallback);
             }
-
         } catch (err) {
             console.error("Error generando mensaje:", err);
             setCustomMessage(
@@ -484,11 +507,10 @@ const HistoryItem = ({
             );
         }
     };
-
     return (
         <div
             className={`
-        history-item bg-white border border-slate-200 contenedorCosas p-4 
+        history-item bg-white border border-slate-200 contenedorCosas p-4
         hover:shadow-md transition relative
         ${isDragging ? 'dragging drag-ghost' : ''}
         ${isDragOver ? 'drag-over' : ''}
@@ -516,13 +538,10 @@ const HistoryItem = ({
                     <div className="flex items-center gap-1 text-xs text-slate-500 mb-2">
                         <Package className="w-3 h-3" />
                         <code className="font-mono">{propItem.asin}</code>
-
                         <span className="text-slate-400">·</span>
-
                         <Globe className="w-3 h-3" />
                         <span>{propItem.domain}</span>
                     </div>
-
                     <div className="min-h-6 relative">
                         {editingId === propItem.id ? (
                             window.innerWidth < 768 ? (
@@ -536,13 +555,10 @@ const HistoryItem = ({
                                             setEditingId(null);
                                             return;
                                         }
-
                                         const updatedEntry = { ...propItem, productTitle: newText, title_is_custom: true };
-
                                         if (isAuthenticated) {
                                             await updateHistoryItem(updatedEntry);
                                         }
-
                                         else {
                                             const history = getHistory();
                                             const updated = history.map(h =>
@@ -551,12 +567,10 @@ const HistoryItem = ({
                                             localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
                                             window.dispatchEvent(new Event('amazon-history-updated'));
                                         }
-
                                         setLocalTitle(newText);
                                         setHistory(prev => prev.map(h =>
                                             h.id === propItem.id ? updatedEntry : h
                                         ));
-
                                         try {
                                             const cache = getTitleCache();
                                             cache[propItem.asin] = newText;
@@ -564,7 +578,6 @@ const HistoryItem = ({
                                         } catch (err) {
                                             console.warn("Error actualizando caché", err);
                                         }
-
                                         setEditingId(null);
                                     }}
                                     onKeyDown={(e) => {
@@ -601,14 +614,20 @@ const HistoryItem = ({
                         ) : (
                             <p
                                 onClick={startEditing}
-                                className="title-normal text-left text-sm font-medium text-slate-900 truncate cursor-pointer hover:text-violet-700 transition select-none block w-full"
+                                className={`
+                                title-normal text-left text-sm font-medium text-slate-900 
+                                cursor-pointer hover:text-violet-700 transition select-none block w-full
+                                ${search.trim() ? '' : 'truncate'}
+                                `}
                                 title="Clic para renombrar"
                             >
-                                {localTitle}
+                                {search.trim()
+                                    ? highlightMatches(localTitle, search)
+                                    : localTitle
+                                }
                             </p>
                         )}
                     </div>
-
                     <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1">
                         <span className="flex items-center gap-1 text-xs text-slate-500">
                             <Calendar className="w-3 h-3 -mt-0.5" />
@@ -622,8 +641,21 @@ const HistoryItem = ({
                         </span>
                         <span className="text-slate-400">|</span>
 
-                        {/* === EDICIÓN DE PRECIOS: DOS INPUTS === */}
-                        {editingPriceId === propItem.id ? (
+                        {isUpdating ? (
+                            // Loader mientras se actualiza el precio
+                            <div className="relative flex-1 h-5 flex items-center min-w-[120px]">
+                                <div className="text-xs text-emerald-600 font-medium animate-pulse flex items-center gap-1.5">
+                                    Actualizando...
+                                </div>
+                                {/* Barra estilo "Deshacer" que se encoge infinitamente */}
+                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-200 overflow-hidden rounded-full">
+                                    <div
+                                        className="h-full bg-emerald-500 origin-left animate-shrink"
+                                        style={{ animation: 'shrink 6s linear infinite' }}
+                                    />
+                                </div>
+                            </div>
+                        ) : editingPriceId === propItem.id ? (
                             <div
                                 className="flex items-center gap-3"
                                 onBlur={(e) => {
@@ -651,7 +683,6 @@ const HistoryItem = ({
                                             if (e.key === 'Enter' || e.key === 'Escape') {
                                                 e.preventDefault();
                                                 if (e.key === 'Enter') {
-                                                    // Pasar al siguiente input (opcional)
                                                     priceInputRef.current?.focus();
                                                 } else {
                                                     finishPriceEditing();
@@ -667,7 +698,6 @@ const HistoryItem = ({
                                         placeholder="0,00 €"
                                     />
                                 </div>
-
                                 {/* Precio Actual */}
                                 <div className="flex items-center gap-1">
                                     <span className="text-xs text-slate-500">Actual:</span>
@@ -704,23 +734,19 @@ const HistoryItem = ({
                             <button
                                 onClick={(e) => {
                                     e.stopPropagation();
-
                                     let cleanOriginal = propItem.originalPrice
                                         ? propItem.originalPrice.replace(' €', '').trim()
                                         : '';
                                     let cleanCurrent = propItem.price
                                         ? propItem.price.replace(' €', '').trim()
                                         : '';
-
                                     if (propItem.originalPrice && propItem.price) {
                                         const originalNum = parseFloat(propItem.originalPrice.replace(/[^0-9,]/g, '').replace(',', '.'));
                                         const currentNum = parseFloat(propItem.price.replace(/[^0-9,]/g, '').replace(',', '.'));
-
                                         if (originalNum === currentNum) {
                                             cleanCurrent = '';
                                         }
                                     }
-
                                     setEditOriginalPrice(cleanOriginal);
                                     setEditPrice(cleanCurrent);
                                     setEditFocus('current');
@@ -729,35 +755,29 @@ const HistoryItem = ({
                                 className="text-left text-xs font-bold contenedorCosas transition hover:text-violet-700 cursor-pointer whitespace-nowrap"
                                 title="Editar precios"
                             >
-
                                 {(() => {
                                     const hasOriginal = !!propItem.originalPrice;
                                     const hasCurrent = !!propItem.price;
-
                                     if (!hasOriginal && !hasCurrent) {
                                         return <span className="text-black italic">Sin precio</span>;
                                     }
-
                                     if (hasOriginal && hasCurrent) {
                                         const originalNum = parseFloat(propItem.originalPrice.replace(/[^0-9,]/g, '').replace(',', '.'));
                                         const currentNum = parseFloat(propItem.price.replace(/[^0-9,]/g, '').replace(',', '.'));
-
                                         if (originalNum === currentNum) {
                                             return <span className="text-black">{propItem.originalPrice}</span>;
                                         }
-
                                         const isLower = currentNum < originalNum;
                                         const isHigher = currentNum > originalNum;
-
                                         return (
                                             <>
                                                 <span className="text-black mr-2">
                                                     {propItem.originalPrice}
                                                 </span>
                                                 <span className={`
-                                                    font-bold
-                                                    ${isLower ? 'text-emerald-600' : isHigher ? 'text-red-600' : 'text-emerald-600'}
-                                                `}>
+                font-bold
+                ${isLower ? 'text-emerald-600' : isHigher ? 'text-red-600' : 'text-emerald-600'}
+              `}>
                                                     {propItem.price}
                                                     {isLower && <span className="text-xs text-emerald-500 ml-1">↓</span>}
                                                     {isHigher && <span className="text-xs text-red-500 ml-1">↑</span>}
@@ -765,7 +785,6 @@ const HistoryItem = ({
                                             </>
                                         );
                                     }
-
                                     if (hasCurrent) {
                                         return (
                                             <>
@@ -778,14 +797,12 @@ const HistoryItem = ({
                                             </>
                                         );
                                     }
-
                                     return <span className="text-black">{propItem.originalPrice}</span>;
                                 })()}
                             </button>
                         )}
                     </p>
                 </div>
-
                 <div className="flex gap-2 flex-shrink-0">
                     <a
                         href={propItem.affiliateUrl}
@@ -793,7 +810,6 @@ const HistoryItem = ({
                         rel="noopener noreferrer"
                         onClick={() => {
                             markAsVisited(propItem.asin, propItem.domain);
-
                             setHistory(prev =>
                                 prev.map(it =>
                                     it.id === propItem.id
@@ -840,10 +856,9 @@ const HistoryItem = ({
                         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
                         onClick={() => setShowShareModal(false)}
                     />
-
                     {/* Contenedor del modal */}
                     <div className="relative w-full overflow-hidden max-w-sm bg-white contenedorCosas shadow-2xl animate-in fade-in zoom-in-95 duration-300">
-                        <div className="py-2 border-b border-slate-200 bg-slate-50">
+                        <div className="py-2 border-b border-slate-200 bg-slate-50 bg-gradient-to-r from-green-100">
                             <div className="flex justify-center">
                                 <div className="p-2 bg-[#25D366] contenedorCosas shadow-lg">
                                     <svg className="w-8 h-8 text-white" viewBox="0 0 24 24" fill="currentColor">
@@ -852,7 +867,6 @@ const HistoryItem = ({
                                 </div>
                             </div>
                         </div>
-
                         {/* Opciones */}
                         <div className="p-3 space-y-2">
                             {/* Mensaje rápido - con dropdown flotante toggle */}
@@ -882,7 +896,6 @@ const HistoryItem = ({
                                         </svg>
                                     </div>
                                 </div>
-
                                 {/* Dropdown flotante */}
                                 {showQuickDropdown && selectedOption === "quick" && (
                                     <div className="absolute top-full mt-2.5 z-10 animate-in fade-in slide-in-from-top-2 duration-200">
@@ -916,14 +929,12 @@ const HistoryItem = ({
                                                         } ${idx !== 0 ? "border-t border-slate-100" : ""}`}
                                                 >
                                                     <span className="block truncate">{msg}</span>
-
                                                 </button>
                                             ))}
                                         </div>
                                     </div>
                                 )}
                             </div>
-
                             {/* Sin mensaje */}
                             <div
                                 className={`flex items-center gap-4 px-5 py-4 transition-all duration-200 cursor-pointer contenedorCosas ${selectedOption === "none"
@@ -946,7 +957,6 @@ const HistoryItem = ({
                                     </div>
                                 </div>
                             </div>
-
                             {/* Mensaje personalizado */}
                             <div className="space-y-2.5">
                                 <div
@@ -970,7 +980,6 @@ const HistoryItem = ({
                                         </div>
                                     </div>
                                 </div>
-
                                 {selectedOption === "custom" && (
                                     <div className="px-0 animate-in fade-in slide-in-from-top-2 duration-300 relative">
                                         <textarea
@@ -1004,15 +1013,12 @@ const HistoryItem = ({
                                         <button
                                             onClick={async (e) => {
                                                 e.stopPropagation();
-
                                                 const trimmed = customMessage.trim();
                                                 if (!trimmed) {
                                                     toast.warning("Escribe algo antes de guardar");
                                                     return;
                                                 }
-
                                                 const success = await saveSimpleMessage(trimmed);
-
                                                 if (success) {
                                                     // Opcional: puedes cerrar el modal o limpiar el textarea
                                                     // setShowShareModal(false);
@@ -1032,7 +1038,6 @@ const HistoryItem = ({
                                 )}
                             </div>
                         </div>
-
                         {/* Botones de acción */}
                         <div className="flex gap-3 -mt-2 p-3 border-t border-slate-200 bg-slate-50">
                             <button
@@ -1056,10 +1061,11 @@ const HistoryItem = ({
         </div>
     );
 };
-
 export default function HistoryPage() {
     const [history, setHistory] = useState([]);
-    const [search, setSearch] = useState("");
+    const [search, setSearch] = useState(() => {
+        return localStorage.getItem('historySearch') || '';
+    });
     const [showConfirmModal, setShowConfirmModal] = useState(false);
     const [showExportMenu, setShowExportMenu] = useState(false);
     const exportButtonRef = useRef(null);
@@ -1083,12 +1089,92 @@ export default function HistoryPage() {
     const [ignoreUpdatesDuringImport, setIgnoreUpdatesDuringImport] = useState(false);
     const [isMounted, setIsMounted] = useState(false);
     const [isHistoryFullyLoaded, setIsHistoryFullyLoaded] = useState(false);
+    const [showMobileSidebar, setShowMobileSidebar] = useState(false);
+    const [shouldRenderSidebar, setShouldRenderSidebar] = useState(false);
+    const [showPriceUpdateSelector, setShowPriceUpdateSelector] = useState(false);
+    const [selectedItemsForUpdate, setSelectedItemsForUpdate] = useState(new Set());
+    const [updatingItems, setUpdatingItems] = useState(new Set());
+
+
+    const [filters, setFilters] = useState(() => {
+        const saved = localStorage.getItem('historyFilters');
+        return saved
+            ? JSON.parse(saved)
+            : {
+                priceMin: '',
+                priceMax: '',
+                domains: [],
+                dateFrom: '',
+                dateTo: '',
+                onlyDiscounts: false,
+            };
+    });
+
+    useEffect(() => {
+        if (showPriceUpdateSelector) {
+            // Guardamos la posición actual para restaurarla después
+            const scrollY = window.scrollY;
+
+            // Bloqueamos el body
+            document.body.style.position = 'fixed';
+            document.body.style.top = `-${scrollY}px`;
+            document.body.style.width = '100%';
+            document.body.style.overflow = 'hidden';
+
+            // Opcional: más robusto en algunos navegadores
+            document.documentElement.style.overflow = 'hidden';
+        } else {
+            // Restauramos
+            const scrollY = document.body.style.top;
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
+
+            if (scrollY) {
+                window.scrollTo(0, parseInt(scrollY || '0') * -1);
+            }
+        }
+
+        // Cleanup por si acaso
+        return () => {
+            document.body.style.position = '';
+            document.body.style.top = '';
+            document.body.style.width = '';
+            document.body.style.overflow = '';
+            document.documentElement.style.overflow = '';
+        };
+    }, [showPriceUpdateSelector]);
+
+    useEffect(() => {
+        if (showMobileSidebar) {
+            // Al abrir → renderizamos inmediatamente y animamos entrada
+            setShouldRenderSidebar(true);
+        } else {
+            // Al cerrar → primero animamos salida, luego desmontamos
+            const timer = setTimeout(() => {
+                setShouldRenderSidebar(false);
+            }, 400); // debe coincidir con la duración de animate__slideOutLeft
+
+            return () => clearTimeout(timer);
+        }
+    }, [showMobileSidebar]);
+
+    // Guarda la búsqueda cada vez que cambie
+    useEffect(() => {
+        localStorage.setItem('historySearch', search);
+    }, [search]);
+
+    // Guarda los filtros cada vez que cambien
+    useEffect(() => {
+        localStorage.setItem('historyFilters', JSON.stringify(filters));
+    }, [filters]);
 
     useEffect(() => {
         const timer = setTimeout(() => setIsMounted(true), 100);
         return () => clearTimeout(timer);
     }, []);
-
     useEffect(() => {
         if (!isLoading) {
             const timer = setTimeout(() => {
@@ -1099,53 +1185,42 @@ export default function HistoryPage() {
             setIsHistoryFullyLoaded(false);
         }
     }, [isLoading]);
-
     useEffect(() => {
         const handleImportProgress = (event) => {
             setProgress(event.detail.percent);
             setProcessedCount(event.detail.processed);
             setTotalImported(event.detail.total);
         };
-
         window.addEventListener('import-progress', handleImportProgress);
-
         return () => {
             window.removeEventListener('import-progress', handleImportProgress);
         };
     }, []);
-
     // Opcional: resetear progreso cuando termina la importación
     useEffect(() => {
         if (!isImporting) {
             setProgress(0);
         }
     }, [isImporting]);
-
     useEffect(() => {
         const checkAuth = async () => {
             const { data: { user } } = await supabase.auth.getUser();
             setIsAuthenticated(!!user);
         };
         checkAuth();
-
         const { data: authListener } = supabase.auth.onAuthStateChange((_, session) => {
             setIsAuthenticated(!!session?.user);
         });
-
         return () => {
             authListener?.subscription?.unsubscribe();
         };
     }, []);
-
-
     useEffect(() => {
         const timer = setTimeout(() => {
             isInitialLoad.current = false;
         }, 50);
-
         return () => clearTimeout(timer);
     }, []);
-
     useEffect(() => {
         if (showExportModal && exportInputRef.current) {
             setTimeout(() => {
@@ -1154,15 +1229,12 @@ export default function HistoryPage() {
             }, 100);
         }
     }, [showExportModal]);
-
     useEffect(() => {
         console.log("[HISTORY LOAD] useEffect disparado. isAuthenticated =", isAuthenticated);
-
         const loadHistory = async () => {
             setIsLoading(true);
             console.log("[HISTORY LOAD] Intentando cargar historial... Fuente esperada:",
                 isAuthenticated ? "Supabase" : "localStorage");
-
             try {
                 const data = await getUserHistory(100);
                 console.log("[HISTORY LOAD] Datos obtenidos:",
@@ -1176,36 +1248,28 @@ export default function HistoryPage() {
                 setIsLoading(false);
             }
         };
-
-        loadHistory();  // carga inicial
-
+        loadHistory(); // carga inicial
         const handleUpdate = () => {
             if (isImporting || ignoreUpdatesDuringImport) {
                 console.log("[EVENTO] amazon-history-updated → IGNORADO (importación en curso)");
                 return;
             }
-
             console.log("[EVENTO] amazon-history-updated recibido → recargando");
             loadHistory();
         };
-
         window.addEventListener('amazon-history-updated', handleUpdate);
-
         return () => {
             window.removeEventListener('amazon-history-updated', handleUpdate);
         };
     }, [isAuthenticated, isImporting, ignoreUpdatesDuringImport]);
-
     useEffect(() => {
         const handleWindowFocus = () => {
             console.log("[WINDOW FOCUS] Volviste a la pestaña → recargando historial si autenticado");
-
             if (isAuthenticated) {
                 const reload = async () => {
                     try {
                         const freshData = await getUserHistory(100);
                         console.log("[WINDOW FOCUS] Datos frescos:", freshData?.length || 0, "items");
-
                         setHistory(prev => {
                             if (prev.length === freshData.length &&
                                 prev[0]?.asin === freshData[0]?.asin) {
@@ -1218,27 +1282,21 @@ export default function HistoryPage() {
                         console.error("[WINDOW FOCUS] Error:", err);
                     }
                 };
-
                 reload();
             }
         };
-
         window.addEventListener('focus', handleWindowFocus);
-
         return () => {
             window.removeEventListener('focus', handleWindowFocus);
         };
     }, [isAuthenticated]);
-
     useEffect(() => {
         if (showConfirmModal) {
             const scrollY = window.scrollY;
-
             document.body.style.position = 'fixed';
             document.body.style.top = `-${scrollY}px`;
             document.body.style.width = '100%';
             document.body.style.overflowY = 'scroll';
-
             document.documentElement.style.overflow = 'hidden';
         } else {
             const scrollY = document.body.style.top;
@@ -1246,24 +1304,19 @@ export default function HistoryPage() {
             document.body.style.top = '';
             document.body.style.width = '';
             document.body.style.overflowY = '';
-
             document.documentElement.style.overflow = '';
-
             if (scrollY) {
                 window.scrollTo(0, parseInt(scrollY || '0') * -1);
             }
         }
     }, [showConfirmModal]);
-
     useEffect(() => {
         if (showExportModal) {
             const scrollY = window.scrollY;
-
             document.body.style.position = 'fixed';
             document.body.style.top = `-${scrollY}px`;
             document.body.style.width = '100%';
             document.body.style.overflowY = 'scroll';
-
             document.documentElement.style.overflow = 'hidden';
         } else {
             const scrollY = document.body.style.top;
@@ -1271,36 +1324,35 @@ export default function HistoryPage() {
             document.body.style.top = '';
             document.body.style.width = '';
             document.body.style.overflowY = '';
-
             document.documentElement.style.overflow = '';
-
             if (scrollY) {
                 window.scrollTo(0, parseInt(scrollY || '0') * -1);
             }
         }
     }, [showExportModal]);
-
     const markAsAnimated = (id) => {
         setAnimatedItems(prev => new Set(prev).add(id));
     };
-
     const handleClickOutside = (e) => {
         if (exportButtonRef.current && !exportButtonRef.current.contains(e.target)) {
             setShowExportMenu(false);
         }
     };
-
     useEffect(() => {
         if (!showExportMenu) return;
-
         const handler = (e) => handleClickOutside(e);
         document.addEventListener("click", handler);
         return () => document.removeEventListener("click", handler);
     }, [showExportMenu]);
+    const parsePrice = (str) => {
+        if (!str || !str.trim()) return NaN;
+        let cleaned = str.trim().replace(' €', '').replace(/\s/g, '').replace(',', '.');
+        return parseFloat(cleaned);
+    };
+
+    // Reemplaza todo el bloque de filtered useMemo con esta versión mejorada:
 
     const filtered = useMemo(() => {
-        if (!search.trim()) return history;
-
         const normalize = (str) =>
             (str || "")
                 .toLowerCase()
@@ -1310,51 +1362,72 @@ export default function HistoryPage() {
                 .replace(/\s+/g, " ")
                 .trim();
 
-        const searchNormalized = normalize(search);
+        const searchText = normalize(search);
 
-        const isShortSearch = searchNormalized.length <= 3;
+        // Si no hay búsqueda ni filtros → devolvemos todo
+        if (!searchText && Object.values(filters).every(v => !v || (Array.isArray(v) && v.length === 0))) {
+            return history;
+        }
 
-        const commonReplacements = {
-            xiomi: "xiaomi",
-            xioami: "xiaomi",
-            xaomi: "xiaomi",
-            huawey: "huawei",
-            huwei: "huawei",
-            huaewi: "huawei",
-            samsumg: "samsung",
-            samgsung: "samsung",
-            movil: "móvil",
-            moviles: "móviles",
-            cel: "celular",
-            telefono: "teléfono",
-        };
+        const searchWords = searchText
+            .split(/\s+/)
+            .filter(Boolean)                    // quita strings vacíos
+            .map(w => w.trim());
 
-        const enhancedSearch = isShortSearch
-            ? searchNormalized
-            : (commonReplacements[searchNormalized] || searchNormalized);
+        const priceMinNum = filters.priceMin ? parseFloat(filters.priceMin.replace(',', '.')) : NaN;
+        const priceMaxNum = filters.priceMax ? parseFloat(filters.priceMax.replace(',', '.')) : NaN;
+
+        const fromDate = filters.dateFrom ? new Date(filters.dateFrom) : null;
+        if (fromDate) fromDate.setHours(0, 0, 0, 0);
+
+        const toDate = filters.dateTo ? new Date(filters.dateTo) : null;
+        if (toDate) toDate.setHours(23, 59, 59, 999);
 
         return history.filter((item) => {
             const titleNorm = normalize(item.productTitle);
-            const asinNorm = item.asin?.toLowerCase() || "";
-            const domainNorm = item.domain?.toLowerCase() || "";
-            const urlNorm = item.originalUrl?.toLowerCase() || "";
+            const asinNorm = (item.asin || "").toLowerCase();
+            const domainNorm = (item.domain || "").toLowerCase();
 
-            if (titleNorm.includes(enhancedSearch)) {
-                return true;
-            }
+            // ── BÚSQUEDA POR TEXTO ────────────────────────────────────────
+            let searchMatch = true;
 
-            if (isShortSearch) {
-                return (
-                    asinNorm.includes(searchNormalized) ||
-                    domainNorm.includes(searchNormalized) ||
-                    urlNorm.includes(searchNormalized)
+            if (searchWords.length > 0) {
+                // Todas las palabras deben aparecer (AND)
+                searchMatch = searchWords.every(word =>
+                    titleNorm.includes(word) ||
+                    asinNorm.includes(word) ||
+                    domainNorm.includes(word)
                 );
+
+                // Alternativa más laxa (OR) → descomenta si prefieres:
+                // searchMatch = searchWords.some(word => 
+                //     titleNorm.includes(word) || asinNorm.includes(word) || domainNorm.includes(word)
+                // );
             }
 
-            return titleNorm.includes(searchNormalized);
-        });
-    }, [history, search]);
+            // ── FILTROS ADICIONALES ───────────────────────────────────────
+            const price = parsePrice(item.price) || parsePrice(item.originalPrice) || 0;
+            const priceMatch =
+                (isNaN(priceMinNum) || price >= priceMinNum) &&
+                (isNaN(priceMaxNum) || price <= priceMaxNum);
 
+            const domainMatch = filters.domains.length === 0 || filters.domains.includes(item.domain);
+
+            const itemDate = new Date(item.timestamp);
+            const dateMatch =
+                (!fromDate || itemDate >= fromDate) &&
+                (!toDate || itemDate <= toDate);
+
+            const discountMatch = !filters.onlyDiscounts || (
+                item.price && item.originalPrice &&
+                parsePrice(item.price) < parsePrice(item.originalPrice)
+            );
+
+            return searchMatch && priceMatch && domainMatch && dateMatch && discountMatch;
+        });
+    }, [history, search, filters]);
+
+    const uniqueDomains = useMemo(() => [...new Set(history.map(h => h.domain))].sort(), [history]);
     const stats = useMemo(() => {
         const domains = [...new Set(history.map((h) => h.domain))];
         const last7days = history.filter(
@@ -1362,30 +1435,24 @@ export default function HistoryPage() {
         ).length;
         return { total: history.length, domains: domains.length, last7days };
     }, [history]);
-
     const handleDelete = async (id, asin, domain) => {
         const currentHistory = [...history];
         const itemIndex = currentHistory.findIndex(item => item.id === id);
         const itemToDelete = currentHistory[itemIndex];
-
         if (!itemToDelete) return;
-
         lastDeletedRef.current = {
             item: itemToDelete,
             originalIndex: itemIndex,
             originalHistoryLength: currentHistory.length
         };
-
         try {
             if (isAuthenticated) {
                 await deleteFromHistory(id, asin, domain);
             } else {
                 removeFromHistory(id);
             }
-
             const updatedHistory = await getUserHistory();
             setHistory(updatedHistory);
-
             toast(
                 <div className="relative w-full pt-3 pb-3 px-3">
                     <div className="flex items-center justify-between">
@@ -1394,7 +1461,6 @@ export default function HistoryPage() {
                             onClick={async () => {
                                 const deleted = lastDeletedRef.current;
                                 if (!deleted) return;
-
                                 try {
                                     if (isAuthenticated) {
                                         // Restaurar en Supabase
@@ -1413,11 +1479,9 @@ export default function HistoryPage() {
                                         ];
                                         localStorage.setItem('amazon-affiliate-history', JSON.stringify(newHistory));
                                     }
-
                                     // Recargar el historial actualizado
                                     const refreshed = await getUserHistory();
                                     setHistory(refreshed);
-
                                     lastDeletedRef.current = null;
                                     toast.dismiss("undo-delete");
                                     toast.info("Acción deshecha");
@@ -1493,18 +1557,14 @@ export default function HistoryPage() {
     const handleImport = (e) => {
         const file = e.target.files[0];
         if (!file) return;
-
         setIsImporting(true);
         setIgnoreUpdatesDuringImport(true);
-
         importHistory(file, async (success, message, useInfoToast = false) => {
             await new Promise(resolve => setTimeout(resolve, 300));
-
             if (success) {
                 const fresh = await getUserHistory(500);
                 setHistory(fresh || []);
                 setAnimatedItems(new Set());
-
                 const longDuration = 5000;
                 if (useInfoToast) {
                     toast.info(message, { duration: longDuration });
@@ -1514,11 +1574,9 @@ export default function HistoryPage() {
             } else {
                 toast.error(message || "Archivo inválido", { duration: 6000 });
             }
-
             if (fileInputRef.current) {
                 fileInputRef.current.value = null;
             }
-
             setIsImporting(false);
             setIgnoreUpdatesDuringImport(false);
         });
@@ -1528,9 +1586,7 @@ export default function HistoryPage() {
         const defaultName = format === "csv"
             ? "historialUrlAmazon"
             : "amazon-affiliate-history";
-
         const suggestedName = `${defaultName}_${new Date().toISOString().split('T')[0]}`;
-
         setExportFormat(format);
         setExportFilename(suggestedName);
         setShowExportModal(true);
@@ -1538,14 +1594,8 @@ export default function HistoryPage() {
     };
 
     const performExport = async () => {
-        if (!exportFormat) return;
 
-        let data;
-        if (isAuthenticated) {
-            data = await getUserHistory(1000);
-        } else {
-            data = getHistory();
-        }
+        const data = filtered;
 
         if (!data?.length) {
             toast.error("No hay datos para exportar");
@@ -1555,13 +1605,11 @@ export default function HistoryPage() {
         let content = "";
         let mimeType = "text/plain";
         let extension = exportFormat;
-
         switch (exportFormat) {
             case "json":
                 content = JSON.stringify(data, null, 2);
                 mimeType = "application/json";
                 break;
-
             case "csv":
                 const headers = [
                     "Fecha",
@@ -1572,7 +1620,6 @@ export default function HistoryPage() {
                     "URL Afiliado",
                     "ASIN"
                 ];
-
                 const rows = data.map(item => [
                     new Date(item.timestamp).toLocaleString("es-ES"),
                     `"${(item.productTitle || "").replace(/"/g, '""')}"`,
@@ -1582,24 +1629,19 @@ export default function HistoryPage() {
                     item.affiliateUrl || "",
                     item.asin || ""
                 ]);
-
                 const BOM = "\uFEFF";
                 content = BOM + [headers, ...rows]
                     .map(row => row.join(";"))
                     .join("\r\n");
                 mimeType = "text/csv";
                 break;
-
             default:
                 return;
         }
-
         const filename = exportFilename.trim()
             ? `${exportFilename.trim()}.${extension}`
             : `historial.${extension}`;
-
         const blob = new Blob([content], { type: mimeType + ";charset=utf-8" });
-
         if ("showSaveFilePicker" in window) {
             try {
                 const handle = await window.showSaveFilePicker({
@@ -1621,7 +1663,6 @@ export default function HistoryPage() {
                 }
             }
         }
-
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -1634,53 +1675,78 @@ export default function HistoryPage() {
         setExportFormat(null);
     };
 
-    const moveItem = async (fromIndex, toIndex) => {
-        if (fromIndex === toIndex) return;
+    const moveItem = async (filteredFromIndex, filteredToIndex) => {
+        if (filteredFromIndex === filteredToIndex) return;
 
+        // 1. Obtener los items reales desde filtered
+        const itemFrom = filtered[filteredFromIndex];
+        const itemTo = filtered[filteredToIndex];
+
+        // 2. Encontrar sus índices reales en la lista completa (history)
+        const realFromIndex = history.findIndex(h => h.id === itemFrom.id);
+        const realToIndex = history.findIndex(h => h.id === itemTo.id);
+
+        if (realFromIndex === -1 || realToIndex === -1) {
+            console.warn("No se encontraron items en la lista completa");
+            return;
+        }
+
+        // 3. Crear nueva lista completa reordenada
         const newHistory = [...history];
-        const [movedItem] = newHistory.splice(fromIndex, 1);
-        newHistory.splice(toIndex, 0, movedItem);
+        const [movedItem] = newHistory.splice(realFromIndex, 1);
+        newHistory.splice(realToIndex, 0, movedItem);
 
+        // 4. Actualizar estado visual (para que se vea el cambio inmediatamente)
         setHistory(newHistory);
 
+        // 5. Guardar el nuevo orden real (en Supabase o local)
         if (!isAuthenticated) {
             localStorage.setItem('amazon-affiliate-history', JSON.stringify(newHistory));
-            toast.success("Orden cambiado (local)");
-            return;
-        }
-
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user?.id) {
-            toast.warning("No se detectó sesión activa");
-            return;
-        }
-
-        const positionsToUpdate = newHistory.map((item, idx) => ({
-            asin: item.asin,
-            dominio: item.domain || item.dominio || 'amazon.es',
-            position: idx + 1,
-        }));
-
-        try {
-            const success = await updateHistoryPositions(user.id, positionsToUpdate);
-
-            if (success) {
-                toast.success("Orden guardado");
-            } else {
-                toast.warning("Fallo al reordenar en nube");
+            toast.success("Orden cambiado");
+        } else {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (!user?.id) {
+                toast.warning("No se detectó sesión activa");
+                return;
             }
-        } catch (err) {
-            console.error("Error al guardar nuevo orden:", err);
-            toast.error("No se pudo guardar el nuevo orden");
+
+            const positionsToUpdate = newHistory.map((item, idx) => ({
+                asin: item.asin,
+                dominio: item.domain || item.dominio || 'amazon.es',
+                position: idx + 1,
+            }));
+
+            try {
+                const success = await updateHistoryPositions(user.id, positionsToUpdate);
+                if (success) {
+                    toast.success("Orden guardado");
+                } else {
+                    toast.warning("Fallo al reordenar en nube");
+                }
+            } catch (err) {
+                console.error("Error al guardar nuevo orden:", err);
+                toast.error("No se pudo guardar el nuevo orden");
+            }
         }
+
+        window.dispatchEvent(new Event('amazon-history-updated'));
     };
 
+    const clearFilters = () => {
+        setFilters({
+            priceMin: '',
+            priceMax: '',
+            domains: [],
+            dateFrom: '',
+            dateTo: '',
+            onlyDiscounts: false,
+        });
+        localStorage.removeItem('historyFilters');
+    };
 
     return (
         <>
             <MagicParticles />
-
             {/* === MODAL DE CONFIRMACIÓN DE VACIAR HISTORIAL === */}
             {showConfirmModal && createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1688,17 +1754,15 @@ export default function HistoryPage() {
                         className="absolute inset-0 bg-black/40 backdrop-blur-sm"
                         onClick={cancelClear}
                     />
-
                     {/* Contenedor del modal */}
                     <div className="relative w-full max-w-sm bg-white contenedorCosas shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-                        <div className="py-2 border-b border-slate-200 bg-slate-50">
+                        <div className="py-2 border-b border-slate-200 bg-slate-50 bg-gradient-to-r from-red-100">
                             <div className="flex justify-center">
                                 <div className="p-2 bg-red-600 contenedorCosas shadow-lg">
                                     <Trash2 className="w-7 h-7 text-white" strokeWidth={2.5} />
                                 </div>
                             </div>
                         </div>
-
                         {/* Contenido */}
                         <div className="p-6 space-y-4 text-center">
                             <h3 className="text-lg font-semibold text-slate-900">
@@ -1708,7 +1772,6 @@ export default function HistoryPage() {
                                 Esta acción no se puede deshacer. Se eliminarán todos los enlaces generados.
                             </p>
                         </div>
-
                         {/* Botones de acción */}
                         <div className="flex gap-3 p-3 border-t border-slate-200 bg-slate-50">
                             <button
@@ -1729,7 +1792,6 @@ export default function HistoryPage() {
                 </div>,
                 document.body
             )}
-
             {/* === MODAL PARA NOMBRAR ARCHIVO DE EXPORTACIÓN === */}
             {showExportModal && createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-3">
@@ -1741,7 +1803,6 @@ export default function HistoryPage() {
                             setExportFormat(null);
                         }}
                     />
-
                     <div className="relative w-full max-w-sm bg-white contenedorCosas shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
                         <div className="py-2 border-b border-slate-200 bg-slate-50">
                             <div className="flex justify-center">
@@ -1750,12 +1811,10 @@ export default function HistoryPage() {
                                 </div>
                             </div>
                         </div>
-
                         <div className="p-4 space-y-3">
                             <h3 className="text-lg font-semibold text-center text-slate-900">
                                 Archivo
                             </h3>
-
                             <div className="space-y-4">
                                 <input
                                     type="text"
@@ -1780,7 +1839,6 @@ export default function HistoryPage() {
                                 </p>
                             </div>
                         </div>
-
                         <div className="flex gap-3 p-3 border-t border-slate-200 bg-slate-50">
                             <button
                                 onClick={() => {
@@ -1804,441 +1862,1130 @@ export default function HistoryPage() {
                 </div>,
                 document.body
             )}
+            <div className="min-h-screen bg-gradient-to-b separacionArriba max-w-[1200px] mx-auto">
+                <div className="flex flex-col md:flex-row gap-4 px-4 pt-4">
+                    {/* Sidebar for filters - hidden on mobile, shown on md+ */}
+                    <div className={`
+                    hidden md:block
+                    md:w-64 lg:w-72
+                    bg-white border border-slate-200 contenedorCosas shadow-sm rounded-lg
+                    self-start
+                    fixed
+                    stickyFilter
+                    z-20
+                    max-h-[calc(100vh-3rem)]
+                    overflow-y-auto
+                    animate-fade-in-up
+                    `}>
+                        <div className="p-4 border-b text-lg font-semibold text-slate-800 bg-white sticky top-0 z-10">
+                            Filtros
+                        </div>
 
-            <div className="min-h-screen bg-gradient-to-b separacionArriba max-w-[658px]">
-                <div className="containerHistory mx-auto px-0 max-w-3xl space-y-3">
+                        <div className="space-y-0">
+                            <Accordion
+                                id="precio"
+                                title={
+                                    <div className="flex items-center gap-2">
+                                        <Euro className="w-4 h-4 font-bold" />
+                                        <span className="font-bold">Precio</span>
+                                    </div>
+                                }
+                                defaultOpen={false}
+                            >
+                                <div className="space-y-4 pt-2">
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                            <span className="text-slate-400 text-sm font-medium">Desde</span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder=""
+                                            value={filters.priceMin}
+                                            onChange={(e) => setFilters({ ...filters, priceMin: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
+                                            className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
+                                           text-slate-900 placeholder-slate-400
+                                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
+                                           transition-all duration-200"
+                                        />
+                                        <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                                            <span className="text-slate-400 text-xs">€</span>
+                                        </div>
+                                    </div>
 
-                    {/* Search + Actions */}
-                    <div className=" bg-white contenedorCosas shadow-sm p-4 mb-3 flex flex-col md:flex-row gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
-                        <div className="flex-1 relative min-w-0">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                            <input
-                                type="text"
-                                placeholder="Buscar..."
-                                value={search}
-                                onChange={(e) => setSearch(e.target.value)}
-                                className="input-historial"
-                            />
-                            {search && (
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                            <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                        </div>
+                                        <input
+                                            type="text"
+                                            placeholder=""
+                                            value={filters.priceMax}
+                                            onChange={(e) => setFilters({ ...filters, priceMax: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
+                                            className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
+                                           text-slate-900 placeholder-slate-400
+                                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
+                                             transition-all duration-200"
+                                        />
+                                        <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                                            <span className="text-slate-400 text-xs">€</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </Accordion>
+
+                            <Accordion
+                                id="dominio"
+                                title={
+                                    <div className="flex items-center gap-2">
+                                        <Globe className="w-4 h-4 text-slate-500" />
+                                        <span className="font-bold">Dominio</span>
+                                    </div>
+                                }
+                                defaultOpen={false}
+                            >
+                                <div className="max-h-48 overflow-y-auto">
+                                    {uniqueDomains.map((dom) => (
+                                        <label
+                                            key={dom}
+                                            className="flex items-center justify-between gap-3 py-2.5 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
+                                        >
+                                            {/* Texto + icono a la izquierda */}
+                                            <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                                <span className="text-sm text-slate-700 truncate group-hover:text-violet-700 transition-colors">
+                                                    {dom}
+                                                </span>
+                                            </div>
+
+                                            {/* Checkbox a la derecha */}
+                                            <div className="relative flex items-center justify-center shrink-0">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={filters.domains.includes(dom)}
+                                                    onChange={(e) => {
+                                                        const newDomains = e.target.checked
+                                                            ? [...filters.domains, dom]
+                                                            : filters.domains.filter(d => d !== dom);
+                                                        setFilters({ ...filters, domains: newDomains });
+                                                    }}
+                                                    className="w-5 h-5 contenedorCosas border-2 border-slate-300 
+                                               text-violet-600 
+                                               checked:bg-violet-600 checked:border-violet-600 
+                                               transition-all duration-200 cursor-pointer
+                                               appearance-none
+                                               group-hover:border-violet-400"
+                                                />
+                                                {filters.domains.includes(dom) && (
+                                                    <Check
+                                                        className="absolute w-4 h-4 text-white pointer-events-none"
+                                                        strokeWidth={3}
+                                                    />
+                                                )}
+                                            </div>
+                                        </label>
+                                    ))}
+                                </div>
+                            </Accordion>
+
+                            <Accordion
+                                id="fechas"
+                                title={
+                                    <div className="flex items-center gap-2">
+                                        <Calendar className="w-4 h-4 text-slate-500" />
+                                        <span className="font-bold">Fechas</span>
+                                    </div>
+                                }
+                                defaultOpen={false}
+                            >
+                                <div className="space-y-4 pt-2">
+                                    {/* Desde */}
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                            <span className="text-slate-400 text-sm font-medium">Desde</span>
+                                        </div>
+                                        <input
+                                            type="date"
+                                            value={filters.dateFrom}
+                                            onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                                            className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
+                                           text-slate-900
+                                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
+                                           transition-all duration-200
+                                           [color-scheme:light]"
+                                        />
+                                    </div>
+
+                                    {/* Hasta */}
+                                    <div className="relative">
+                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                            <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                        </div>
+                                        <input
+                                            type="date"
+                                            value={filters.dateTo}
+                                            onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                                            className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
+                                           text-slate-900
+                                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
+                                           transition-all duration-200
+                                           [color-scheme:light]"
+                                        />
+                                    </div>
+                                </div>
+                            </Accordion>
+
+                            <Accordion
+                                id="etiquetas"
+                                title={
+                                    <div className="flex items-center gap-2">
+                                        <Tag className="w-4 h-4 text-slate-500" />
+                                        <span className="font-bold">Etiquetas</span>
+                                    </div>
+                                }
+                                defaultOpen={false}
+                            >
+                                <div className="py-0 flex items-center justify-center">
+                                    <button
+                                        type="button"
+                                        className="
+                                        flex items-center justify-center
+                                        w-10 h-10 contenedorCosas
+                                        bg-violet-100 hover:bg-violet-200
+                                        text-violet-600 hover:text-violet-800
+                                        transition-all duration-200
+                                        shadow-sm hover:shadow
+                                        focus:outline-none
+                                    "
+                                        title="Añadir nueva etiqueta"
+
+                                    >
+                                        <Plus className="w-6 h-6" strokeWidth={2.5} />
+                                    </button>
+                                </div>
+                            </Accordion>
+
+                            <div className="px-4 py-3">
+                                <label className="flex items-center justify-between gap-3 cursor-pointer group select-none">
+                                    {/* Texto + icono a la izquierda */}
+                                    <div className="flex items-center gap-2.5">
+                                        <Percent className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
+                                        <span className="text-sm font-bold text-slate-700 group-hover:text-violet-700 transition-colors">
+                                            Con descuento
+                                        </span>
+                                    </div>
+
+                                    {/* Checkbox a la derecha del todo */}
+                                    <div className="relative flex items-center justify-center">
+                                        <input
+                                            type="checkbox"
+                                            checked={filters.onlyDiscounts || false}
+                                            onChange={(e) => setFilters({ ...filters, onlyDiscounts: e.target.checked })}
+                                            className="w-5 h-5 contenedorCosas border-2 border-slate-300 
+                                           text-violet-600  focus:ring-violet-400
+                                           checked:bg-violet-600 checked:border-violet-600 
+                                           transition-all duration-200 cursor-pointer
+                                           appearance-none
+                                           group-hover:border-violet-400"
+                                        />
+                                        {/* Check personalizado cuando está marcado */}
+                                        {filters.onlyDiscounts && (
+                                            <Check
+                                                className="absolute w-4 h-4 text-white pointer-events-none"
+                                                strokeWidth={3}
+                                            />
+                                        )}
+                                    </div>
+                                </label>
+                            </div>
+
+                            <div className="px-4 pt-4">
                                 <button
-                                    onClick={() => setSearch("")}
-                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    onClick={() => {
+                                        setSelectedItemsForUpdate(new Set());
+                                        setShowPriceUpdateSelector(true);
+                                    }}
+                                    disabled={isUpdatingPrices || history.length === 0 || isLoading}
+                                    className={`
+                                    w-full flex items-center justify-center gap-2
+                                    py-2.5 px-4 contenedorCosas text-sm font-medium
+                                    transition-all duration-200
+                                    bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200
+                                    hover:shadow-sm active:scale-[0.98]
+                                    disabled:opacity-50 disabled:cursor-not-allowed
+                                `}
+                                >
+                                    <RefreshCw className="w-4 h-4" />
+                                    Actualizar precios
+                                </button>
+                            </div>
+
+                            <div className="px-4 py-4">
+                                <button
+                                    onClick={clearFilters}
+                                    disabled={
+                                        !Object.values(filters).some(v =>
+                                            (Array.isArray(v) ? v.length > 0 : !!v)
+                                        )
+                                    }
+                                    className={`
+                                          w-full flex items-center justify-center gap-2
+                                          py-2.5 px-2.5 contenedorCosas text-sm font-medium
+                                          transition-all duration-200
+                                          ${Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))
+                                            ? 'bg-violet-100 text-violet-700 hover:bg-violet-200 border border-violet-200'
+                                            : 'bg-slate-50 text-slate-400 cursor-not-allowed'
+                                        }
+    `}
                                 >
                                     <X className="w-4 h-4" />
+                                    Limpiar filtros
                                 </button>
-                            )}
+                            </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-3 w-full md:w-auto md:flex md:gap-3">
-                            {/* Importar */}
-                            <label
-                                className={`botonesImportarExportar flex items-center justify-center gap-2 transition-all
-                            ${(isLoading || !isHistoryFullyLoaded || isImporting)
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : 'cursor-pointer hover:bg-violet-600 active:bg-violet-700'}`}
-                                title={
-                                    isImporting
-                                        ? "Importación en curso... espera a que termine"
-                                        : isLoading || !isHistoryFullyLoaded
-                                            ? "Cargando historial..."
-                                            : "Importar archivo"
-                                }
-                            >
-                                <Upload className="w-4 h-4" />
-                                Importar
-                                <input
-                                    id="file-input"
-                                    type="file"
-                                    accept=".json,.csv,text/csv,application/json"
-                                    onChange={handleImport}
-                                    className="hidden"
-                                    ref={fileInputRef}
-                                    disabled={isLoading || !isHistoryFullyLoaded || isImporting}
-                                />
-                            </label>
+                    </div>
 
-                            {/* Exportar */}
-                            <div className="relative">
-                                <button
-                                    onClick={() => isHistoryFullyLoaded && history.length > 0 && setShowExportMenu(!showExportMenu)}
-                                    disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
-                                    className={`botonesImportarExportar w-full flex items-center justify-center gap-2 transition-all
+                    {/* Mobile sidebar drawer */}
+                    {shouldRenderSidebar && createPortal(
+                        <div className="fixed inset-0 z-40 md:hidden">
+                            {/* Backdrop con fade */}
+                            <div
+                                className={`absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-400
+                                ${showMobileSidebar ? 'opacity-100' : 'opacity-0'}`}
+                                onClick={() => setShowMobileSidebar(false)}
+                            />
+
+                            {/* Sidebar con animate.css */}
+                            <div
+                                className={`
+                                        absolute top-0 bottom-0 left-0 w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto
+                                        animate__animated
+                                        ${showMobileSidebar
+                                        ? 'animate__slideInLeft'
+                                        : 'animate__slideOutLeft'
+                                    }
+                                       `}
+                                style={{ animationDuration: '0.4s' }} // puedes ajustar aquí
+                            >
+                                {/* Cabecera */}
+                                <div className="p-4 border-b bg-white sticky top-0 z-10 flex justify-between items-center">
+                                    <span className="text-lg font-semibold text-slate-800">Filtros</span>
+                                    <button
+                                        onClick={() => setShowMobileSidebar(false)}
+                                        className="p-2 text-slate-600 hover:text-slate-900"
+                                    >
+                                        <X className="w-6 h-6" />
+                                    </button>
+                                </div>
+                                {/* Contenido idéntico al PC */}
+                                <div className="space-y-0">
+                                    {/* Precio */}
+                                    <Accordion
+                                        id="precio"
+                                        title={
+                                            <div className="flex items-center gap-2">
+                                                <Tag className="w-4 h-4 font-bold" />
+                                                <span className="font-bold">Precio</span>
+                                            </div>
+                                        }
+                                        defaultOpen={true}
+                                    >
+                                        <div className="space-y-4 pt-2">
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-sm font-medium">Desde</span>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder=""
+                                                    value={filters.priceMin}
+                                                    onChange={(e) => setFilters({ ...filters, priceMin: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
+                                                    className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
+                           text-slate-900 placeholder-slate-400
+                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
+                           transition-all duration-200"
+                                                />
+                                                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-xs">€</span>
+                                                </div>
+                                            </div>
+
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder=""
+                                                    value={filters.priceMax}
+                                                    onChange={(e) => setFilters({ ...filters, priceMax: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
+                                                    className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
+                           text-slate-900 placeholder-slate-400
+                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
+                           transition-all duration-200"
+                                                />
+                                                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-xs">€</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Accordion>
+
+                                    {/* Dominio */}
+                                    <Accordion
+                                        id="dominio"
+                                        title={
+                                            <div className="flex items-center gap-2">
+                                                <Globe className="w-4 h-4 text-slate-500" />
+                                                <span className="font-bold">Dominio</span>
+                                            </div>
+                                        }
+                                        defaultOpen={false}
+                                    >
+                                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                                            {uniqueDomains.map((dom) => (
+                                                <label
+                                                    key={dom}
+                                                    className="flex items-center justify-between gap-3 py-2.5 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
+                                                >
+                                                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                                        <span className="text-sm text-slate-700 truncate group-hover:text-violet-700 transition-colors">
+                                                            {dom}
+                                                        </span>
+                                                    </div>
+                                                    <div className="relative flex items-center justify-center shrink-0">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={filters.domains.includes(dom)}
+                                                            onChange={(e) => {
+                                                                const newDomains = e.target.checked
+                                                                    ? [...filters.domains, dom]
+                                                                    : filters.domains.filter(d => d !== dom);
+                                                                setFilters({ ...filters, domains: newDomains });
+                                                            }}
+                                                            className="w-5 h-5 rounded-md border-2 border-slate-300 
+                               text-violet-600 
+                               checked:bg-violet-600 checked:border-violet-600 
+                               transition-all duration-200 cursor-pointer
+                               appearance-none
+                               group-hover:border-violet-400"
+                                                        />
+                                                        {filters.domains.includes(dom) && (
+                                                            <Check
+                                                                className="absolute w-4 h-4 text-white pointer-events-none"
+                                                                strokeWidth={3}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </Accordion>
+
+                                    {/* Fechas */}
+                                    <Accordion
+                                        id="fechas"
+                                        title={
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="w-4 h-4 text-slate-500" />
+                                                <span className="font-bold">Fechas</span>
+                                            </div>
+                                        }
+                                        defaultOpen={false}
+                                    >
+                                        <div className="space-y-4 pt-2">
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-sm font-medium">Desde</span>
+                                                </div>
+                                                <input
+                                                    type="date"
+                                                    value={filters.dateFrom}
+                                                    onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                                                    className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
+                           text-slate-900
+                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
+                           transition-all duration-200 [color-scheme:light]"
+                                                />
+                                            </div>
+
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                                </div>
+                                                <input
+                                                    type="date"
+                                                    value={filters.dateTo}
+                                                    onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                                                    className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
+                           text-slate-900
+                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
+                           transition-all duration-200 [color-scheme:light]"
+                                                />
+                                            </div>
+                                        </div>
+                                    </Accordion>
+
+                                    <Accordion
+                                        id="etiquetas"
+                                        title={
+                                            <div className="flex items-center gap-2">
+                                                <Tag className="w-4 h-4 text-slate-500" />
+                                                <span className="font-bold">Etiquetas</span>
+                                            </div>
+                                        }
+                                        defaultOpen={false}
+                                    >
+                                        <div className="py-0 flex items-center justify-center">
+                                            <button
+                                                type="button"
+                                                className="
+                                        flex items-center justify-center
+                                        w-10 h-10 contenedorCosas
+                                        bg-violet-100 hover:bg-violet-200
+                                        text-violet-600 hover:text-violet-800
+                                        transition-all duration-200
+                                        shadow-sm hover:shadow
+                                        focus:outline-none
+                                    "
+                                                title="Añadir nueva etiqueta"
+
+                                            >
+                                                <Plus className="w-6 h-6" strokeWidth={2.5} />
+                                            </button>
+                                        </div>
+                                    </Accordion>
+
+                                    {/* Con descuento */}
+                                    <div className="px-4 py-3">
+                                        <label className="flex items-center justify-between gap-3 cursor-pointer group select-none py-2.5 transition-all duration-200">
+                                            <div className="flex items-center gap-2.5">
+                                                <Percent className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
+                                                <span className="text-sm font-bold text-slate-700 group-hover:text-violet-700 transition-colors">
+                                                    Con descuento
+                                                </span>
+                                            </div>
+                                            <div className="relative flex items-center justify-center">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={filters.onlyDiscounts || false}
+                                                    onChange={(e) => setFilters({ ...filters, onlyDiscounts: e.target.checked })}
+                                                    className="w-5 h-5 rounded-md border-2 border-slate-300 
+                           text-violet-600 
+                           checked:bg-violet-600 checked:border-violet-600 
+                           transition-all duration-200 cursor-pointer
+                           appearance-none
+                           group-hover:border-violet-400"
+                                                />
+                                                {filters.onlyDiscounts && (
+                                                    <Check
+                                                        className="absolute w-4 h-4 text-white pointer-events-none"
+                                                        strokeWidth={3}
+                                                    />
+                                                )}
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    <div className="px-4 pt-4">
+                                        <button
+                                            onClick={() => {
+                                                setSelectedItemsForUpdate(new Set());
+                                                setShowPriceUpdateSelector(true);
+                                            }}
+                                            disabled={isUpdatingPrices || history.length === 0 || isLoading}
+                                            className={`
+                                    w-full flex items-center justify-center gap-2
+                                    py-2.5 px-4 contenedorCosas text-sm font-medium
+                                    transition-all duration-200
+                                    bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200
+                                    hover:shadow-sm active:scale-[0.98]
+                                    disabled:opacity-50 disabled:cursor-not-allowed
+                                `}
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                            Actualizar precios
+                                        </button>
+                                    </div>
+
+                                    <div className="px-4 py-4">
+                                        <button
+                                            onClick={clearFilters}
+                                            disabled={
+                                                !Object.values(filters).some(v =>
+                                                    (Array.isArray(v) ? v.length > 0 : !!v)
+                                                )
+                                            }
+                                            className={`
+                                          w-full flex items-center justify-center gap-2
+                                          py-2.5 px-2.5 contenedorCosas text-sm font-medium
+                                          transition-all duration-200
+                                          ${Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))
+                                                    ? 'bg-violet-100 text-violet-700 hover:bg-violet-200 border border-violet-200'
+                                                    : 'bg-slate-50 text-slate-400 cursor-not-allowed'
+                                                }
+    `}
+                                        >
+                                            <X className="w-4 h-4" />
+                                            Limpiar filtros
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>,
+                        document.body
+                    )}
+
+                    {/* Main content */}
+                    <div className="flex-1 -mt-4 space-y-3 max-w-[646px]">
+                        {/* Search + Actions */}
+                        <div className=" bg-white contenedorCosas shadow-sm p-2.5 mb-3 flex flex-col md:flex-row gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
+                            <div className="flex-1 relative min-w-0">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar..."
+                                    value={search}
+                                    onChange={(e) => setSearch(e.target.value)}
+                                    className="input-historial"
+                                />
+                                {search && (
+                                    <button
+                                        onClick={() => setSearch("")}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+                                    >
+                                        <X className="w-4 h-4" />
+                                    </button>
+                                )}
+                            </div>
+                            <div className="grid grid-cols-3 gap-3 w-full md:w-auto md:flex md:gap-3">
+                                {/* Importar */}
+                                <label
+                                    className={`botonesImportarExportar flex items-center justify-center gap-2 transition-all
+                            ${(isLoading || !isHistoryFullyLoaded || isImporting)
+                                            ? 'opacity-50 cursor-not-allowed'
+                                            : 'cursor-pointer hover:bg-violet-600 active:bg-violet-700'}`}
+                                    title={
+                                        isImporting
+                                            ? "Importación en curso... espera a que termine"
+                                            : isLoading || !isHistoryFullyLoaded
+                                                ? "Cargando historial..."
+                                                : "Importar archivo"
+                                    }
+                                >
+                                    <Upload className="w-4 h-4" />
+                                    Importar
+                                    <input
+                                        id="file-input"
+                                        type="file"
+                                        accept=".json,.csv,text/csv,application/json"
+                                        onChange={handleImport}
+                                        className="hidden"
+                                        ref={fileInputRef}
+                                        disabled={isLoading || !isHistoryFullyLoaded || isImporting}
+                                    />
+                                </label>
+                                {/* Exportar */}
+                                <div className="relative">
+                                    <button
+                                        onClick={() => isHistoryFullyLoaded && history.length > 0 && setShowExportMenu(!showExportMenu)}
+                                        disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
+                                        className={`botonesImportarExportar w-full flex items-center justify-center gap-2 transition-all
                                     ${!isHistoryFullyLoaded || isLoading || history.length === 0
+                                                ? 'opacity-60 cursor-not-allowed'
+                                                : 'hover:bg-[#8575da] active:bg-violet-700'}`}
+                                        title={
+                                            !isHistoryFullyLoaded || isLoading
+                                                ? "Cargando historial..."
+                                                : history.length === 0
+                                                    ? "No hay elementos para exportar"
+                                                    : "Exportar en varios formatos"
+                                        }
+                                        ref={exportButtonRef}
+                                    >
+                                        <Download className="w-4 h-4" />
+                                        Exportar
+                                    </button>
+                                </div>
+                                {/* === PORTAL: MENÚ FUERA DEL DOM === */}
+                                {showExportMenu && history.length > 0 && createPortal(
+                                    <div
+                                        className="fixed inset-0 z-[9999] pointer-events-none"
+                                        onClick={() => setShowExportMenu(false)}
+                                    >
+                                        <div
+                                            className="absolute bg-white contenedorCosas shadow-xl border border-slate-200 w-48 pointer-events-auto animate-in fade-in zoom-in-95"
+                                            style={{
+                                                top: `${exportButtonRef.current?.getBoundingClientRect().bottom + 8}px`,
+                                                left: `${exportButtonRef.current?.getBoundingClientRect().right - 192}px`, // 48*4 = 192px
+                                                animation: 'modalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards'
+                                            }}
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            {[
+                                                { label: "JSON", format: "json", icon: <Package className="w-4 h-4" /> },
+                                                { label: "CSV", format: "csv", icon: <Copy className="w-4 h-4 text-green-600" /> },
+                                            ].map((opt) => (
+                                                <button
+                                                    key={opt.format}
+                                                    onClick={async () => {
+                                                        setShowExportMenu(false);
+
+                                                        const data = filtered;
+
+                                                        if (!data?.length) {
+                                                            toast.error("No hay datos para exportar");
+                                                            return;
+                                                        }
+                                                        // === EXPORTAR DIRECTO CON FILE SYSTEM ACCESS API (JSON o CSV) ===
+                                                        if ("showSaveFilePicker" in window) {
+                                                            let content = "";
+                                                            let mimeType = "";
+                                                            let defaultExtension = "";
+                                                            let defaultBaseName = "";
+                                                            if (opt.format === "json") {
+                                                                content = JSON.stringify(data, null, 2);
+                                                                mimeType = "application/json";
+                                                                defaultExtension = ".json";
+                                                                defaultBaseName = "amazon-affiliate-history";
+                                                            } else if (opt.format === "csv") {
+                                                                const headers = [
+                                                                    "Fecha",
+                                                                    "Título",
+                                                                    "Precio Original",
+                                                                    "Precio Actual",
+                                                                    "Dominio",
+                                                                    "URL Afiliado",
+                                                                    "ASIN"
+                                                                ];
+                                                                const rows = data.map(item => [
+                                                                    new Date(item.timestamp).toLocaleString("es-ES"),
+                                                                    `"${(item.productTitle || "").replace(/"/g, '""')}"`,
+                                                                    item.originalPrice ? `"${item.originalPrice.replace(/"/g, '""')}"` : '""',
+                                                                    item.price ? `"${item.price.replace(/"/g, '""')}"` : '""',
+                                                                    item.domain || item.dominio || "amazon.es",
+                                                                    item.affiliateUrl || item.affiliate_url || "",
+                                                                    item.asin || ""
+                                                                ]);
+                                                                const BOM = "\uFEFF";
+                                                                content = BOM + [headers, ...rows]
+                                                                    .map(row => row.join(";"))
+                                                                    .join("\r\n");
+                                                                mimeType = "text/csv";
+                                                                defaultExtension = ".csv";
+                                                                defaultBaseName = "historialUrlAmazon";
+                                                            }
+                                                            const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+                                                            const today = new Date().toISOString().split('T')[0];
+                                                            const defaultName = `${defaultBaseName}_${today}${defaultExtension}`;
+                                                            try {
+                                                                const handle = await window.showSaveFilePicker({
+                                                                    suggestedName: defaultName,
+                                                                    types: [{
+                                                                        description: opt.format === "json" ? 'Archivo JSON' : 'Archivo CSV',
+                                                                        accept: { [mimeType]: [defaultExtension] },
+                                                                    }],
+                                                                });
+                                                                const fileName = handle.name;
+                                                                const writable = await handle.createWritable();
+                                                                await writable.write(blob);
+                                                                await writable.close();
+                                                                toast.success(`Guardado como "${fileName}"`, {
+                                                                    duration: 5000
+                                                                });
+                                                            } catch (err) {
+                                                                if (err.name !== 'AbortError') {
+                                                                    console.warn("File System Access API falló", err);
+                                                                    toast.error("No se pudo guardar directamente. Usa descarga normal.");
+                                                                    const suggestedName = `${defaultBaseName}_${today}`;
+                                                                    setExportFormat(opt.format);
+                                                                    setExportFilename(suggestedName.replace(defaultExtension, ''));
+                                                                    setShowExportModal(true);
+                                                                }
+                                                            }
+                                                        } else {
+                                                            const defaultBaseName = opt.format === "csv" ? "historialUrlAmazon" : "amazon-affiliate-history";
+                                                            const suggestedName = `${defaultBaseName}_${new Date().toISOString().split('T')[0]}`;
+                                                            setExportFormat(opt.format);
+                                                            setExportFilename(suggestedName);
+                                                            setShowExportModal(true);
+                                                        }
+                                                    }}
+                                                    className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 transition contenedorCosas
+                                                        ${opt.format === "csv"
+                                                            ? "text-green-700 hover:bg-green-50 hover:text-green-800"
+                                                            : "text-slate-700 hover:bg-violet-50 hover:text-violet-700"
+                                                        }`}
+                                                >
+                                                    {opt.icon}
+                                                    <span>{opt.label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    </div>,
+                                    document.body
+                                )}
+                                {/* Vaciar */}
+                                <button
+                                    onClick={() => isHistoryFullyLoaded && history.length > 0 && handleClear()}
+                                    disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
+                                    className={`borrarTodo w-full flex items-center justify-center gap-2 transition-all
+                                ${!isHistoryFullyLoaded || isLoading || history.length === 0
                                             ? 'opacity-60 cursor-not-allowed'
-                                            : 'hover:bg-[#8575da] active:bg-violet-700'}`}
+                                            : 'hover:bg-[#fecaca] active:bg-red-200'}`}
                                     title={
                                         !isHistoryFullyLoaded || isLoading
                                             ? "Cargando historial..."
                                             : history.length === 0
-                                                ? "No hay elementos para exportar"
-                                                : "Exportar en varios formatos"
+                                                ? "No hay elementos para borrar"
+                                                : "Borrar todo el historial"
                                     }
-                                    ref={exportButtonRef}
                                 >
-                                    <Download className="w-4 h-4" />
-                                    Exportar
+                                    <Trash2 className="w-4 h-4" />
+                                    Vaciar
                                 </button>
                             </div>
-
-                            {/* === PORTAL: MENÚ FUERA DEL DOM === */}
-                            {showExportMenu && history.length > 0 && createPortal(
-                                <div
-                                    className="fixed inset-0 z-[9999] pointer-events-none"
-                                    onClick={() => setShowExportMenu(false)}
-                                >
-                                    <div
-                                        className="absolute bg-white contenedorCosas shadow-xl border border-slate-200 w-48 pointer-events-auto animate-in fade-in zoom-in-95"
-                                        style={{
-                                            top: `${exportButtonRef.current?.getBoundingClientRect().bottom + 8}px`,
-                                            left: `${exportButtonRef.current?.getBoundingClientRect().right - 192}px`, // 48*4 = 192px
-                                            animation: 'modalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards'
-                                        }}
-                                        onClick={(e) => e.stopPropagation()}
-                                    >
-                                        {[
-                                            { label: "JSON", format: "json", icon: <Package className="w-4 h-4" /> },
-                                            { label: "CSV", format: "csv", icon: <Copy className="w-4 h-4 text-green-600" /> },
-                                        ].map((opt) => (
-                                            <button
-                                                key={opt.format}
-                                                onClick={async () => {
-                                                    setShowExportMenu(false);
-
-                                                    let data;
-                                                    try {
-                                                        if (isAuthenticated) {
-                                                            data = await getUserHistory(1000);
-                                                        } else {
-                                                            data = getHistory();
-                                                        }
-                                                    } catch (err) {
-                                                        console.error("Error al obtener datos para exportar:", err);
-                                                        toast.error("No se pudieron cargar los datos para exportar");
-                                                        return;
-                                                    }
-
-                                                    if (!data?.length) {
-                                                        toast.error("No hay datos para exportar");
-                                                        return;
-                                                    }
-
-                                                    // === EXPORTAR DIRECTO CON FILE SYSTEM ACCESS API (JSON o CSV) ===
-                                                    if ("showSaveFilePicker" in window) {
-                                                        let content = "";
-                                                        let mimeType = "";
-                                                        let defaultExtension = "";
-                                                        let defaultBaseName = "";
-
-                                                        if (opt.format === "json") {
-                                                            content = JSON.stringify(data, null, 2);
-                                                            mimeType = "application/json";
-                                                            defaultExtension = ".json";
-                                                            defaultBaseName = "amazon-affiliate-history";
-                                                        } else if (opt.format === "csv") {
-                                                            const headers = [
-                                                                "Fecha",
-                                                                "Título",
-                                                                "Precio Original",
-                                                                "Precio Actual",
-                                                                "Dominio",
-                                                                "URL Afiliado",
-                                                                "ASIN"
-                                                            ];
-                                                            const rows = data.map(item => [
-                                                                new Date(item.timestamp).toLocaleString("es-ES"),
-                                                                `"${(item.productTitle || "").replace(/"/g, '""')}"`,
-                                                                item.originalPrice ? `"${item.originalPrice.replace(/"/g, '""')}"` : '""',
-                                                                item.price ? `"${item.price.replace(/"/g, '""')}"` : '""',
-                                                                item.domain || item.dominio || "amazon.es",
-                                                                item.affiliateUrl || item.affiliate_url || "",
-                                                                item.asin || ""
-                                                            ]);
-                                                            const BOM = "\uFEFF";
-                                                            content = BOM + [headers, ...rows]
-                                                                .map(row => row.join(";"))
-                                                                .join("\r\n");
-                                                            mimeType = "text/csv";
-                                                            defaultExtension = ".csv";
-                                                            defaultBaseName = "historialUrlAmazon";
-                                                        }
-
-                                                        const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
-
-                                                        const today = new Date().toISOString().split('T')[0];
-                                                        const defaultName = `${defaultBaseName}_${today}${defaultExtension}`;
-
-                                                        try {
-                                                            const handle = await window.showSaveFilePicker({
-                                                                suggestedName: defaultName,
-                                                                types: [{
-                                                                    description: opt.format === "json" ? 'Archivo JSON' : 'Archivo CSV',
-                                                                    accept: { [mimeType]: [defaultExtension] },
-                                                                }],
-                                                            });
-
-                                                            const fileName = handle.name;
-
-                                                            const writable = await handle.createWritable();
-                                                            await writable.write(blob);
-                                                            await writable.close();
-
-                                                            toast.success(`Guardado como "${fileName}"`, {
-                                                                duration: 5000
-                                                            });
-                                                        } catch (err) {
-                                                            if (err.name !== 'AbortError') {
-                                                                console.warn("File System Access API falló", err);
-                                                                toast.error("No se pudo guardar directamente. Usa descarga normal.");
-
-                                                                const suggestedName = `${defaultBaseName}_${today}`;
-                                                                setExportFormat(opt.format);
-                                                                setExportFilename(suggestedName.replace(defaultExtension, ''));
-                                                                setShowExportModal(true);
-                                                            }
-                                                        }
-                                                    } else {
-                                                        const defaultBaseName = opt.format === "csv" ? "historialUrlAmazon" : "amazon-affiliate-history";
-                                                        const suggestedName = `${defaultBaseName}_${new Date().toISOString().split('T')[0]}`;
-                                                        setExportFormat(opt.format);
-                                                        setExportFilename(suggestedName);
-                                                        setShowExportModal(true);
-                                                    }
-                                                }}
-                                                className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 transition contenedorCosas
-                                                        ${opt.format === "csv"
-                                                        ? "text-green-700 hover:bg-green-50 hover:text-green-800"
-                                                        : "text-slate-700 hover:bg-violet-50 hover:text-violet-700"
-                                                    }`}
-                                            >
-                                                {opt.icon}
-                                                <span>{opt.label}</span>
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>,
-                                document.body
-                            )}
-
-                            {/* Vaciar */}
-                            <button
-                                onClick={() => isHistoryFullyLoaded && history.length > 0 && handleClear()}
-                                disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
-                                className={`borrarTodo w-full flex items-center justify-center gap-2 transition-all
-                                ${!isHistoryFullyLoaded || isLoading || history.length === 0
-                                        ? 'opacity-60 cursor-not-allowed'
-                                        : 'hover:bg-[#fecaca] active:bg-red-200'}`}
-                                title={
-                                    !isHistoryFullyLoaded || isLoading
-                                        ? "Cargando historial..."
-                                        : history.length === 0
-                                            ? "No hay elementos para borrar"
-                                            : "Borrar todo el historial"
-                                }
-                            >
-                                <Trash2 className="w-4 h-4" />
-                                Vaciar
-                            </button>
                         </div>
-                    </div>
-
-                    {/* List */}
-                    <div className="w-full">
-                        {!isImporting && (
-                            <>
-                                <div className="space-y-3">
-                                    {isLoading ? (
-                                        <div className="space-y-3">
-                                            {[...Array(6)].map((_, i) => (
-                                                <div
-                                                    key={i}
-                                                    className="bg-white border border-slate-200 contenedorCosas p-6 animate-pulse"
-                                                >
-                                                    <div className="h-4 bg-slate-200 contenedorCosas w-3/4 mb-3"></div>
-                                                    <div className="h-3 bg-slate-200 contenedorCosas w-1/2"></div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    ) : filtered.length === 0 ? (
-                                        <div
-                                            className={`
+                        {/* List */}
+                        <div className="w-full">
+                            {!isImporting && (
+                                <>
+                                    <div className="space-y-3">
+                                        {isLoading ? (
+                                            <div className="space-y-3">
+                                                {[...Array(6)].map((_, i) => (
+                                                    <div
+                                                        key={i}
+                                                        className="bg-white border border-slate-200 contenedorCosas p-6 animate-pulse"
+                                                    >
+                                                        <div className="h-4 bg-slate-200 contenedorCosas w-3/4 mb-3"></div>
+                                                        <div className="h-3 bg-slate-200 contenedorCosas w-1/2"></div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        ) : filtered.length === 0 ? (
+                                            <div
+                                                className={`
                                   bg-white border border-slate-200 contenedorCosas noResultado p-8 text-center text-slate-500
                                   transition-all duration-700
                                   ${history.length === 0 || !isLoading
-                                                    ? 'opacity-100 translate-y-0'
-                                                    : 'opacity-0 translate-y-8'
-                                                }
-                                `}
-                                            style={{
-                                                animation: history.length === 0 || !isLoading
-                                                    ? 'fadeInUp 0.7s ease-out forwards'
-                                                    : 'none'
-                                            }}
-                                        >
-                                            <div className="max-w-sm mx-auto space-y-4">
-                                                <div className="mx-auto w-16 h-16 bg-slate-100 contenedorCosas flex items-center justify-center">
-                                                    <Package className="w-8 h-8 text-slate-400" />
-                                                </div>
-                                                <p className="text-lg font-medium text-slate-600">
-                                                    {search ? "No se encontraron resultados" : "Aún no hay enlaces en el historial"}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ) : (
-                                        filtered.map((item, index) => (
-                                            <div
-                                                key={item.id}
-                                                className={`transition-all duration-500 ${!animatedItems.has(item.id)
-                                                    ? "opacity-0 translate-y-4"
-                                                    : "opacity-100 translate-y-0"
-                                                    }`}
-                                                ref={(el) => {
-                                                    if (el && !animatedItems.has(item.id)) {
-                                                        el.getBoundingClientRect();
-                                                        markAsAnimated(item.id);
+                                                        ? 'opacity-100 translate-y-0'
+                                                        : 'opacity-0 translate-y-8'
                                                     }
-                                                }}
+                                `}
                                                 style={{
-                                                    transitionDelay: `${0.5 + index * 0.1}s`, // Suave escalonado
+                                                    animation: history.length === 0 || !isLoading
+                                                        ? 'fadeInUp 0.7s ease-out forwards'
+                                                        : 'none'
                                                 }}
                                             >
-                                                <HistoryItem
-                                                    item={item}
-                                                    onDelete={handleDelete}
-                                                    setHistory={setHistory}
-                                                    index={index}
-                                                    moveItem={moveItem}
-                                                    isAuthenticated={isAuthenticated}
-                                                />
+                                                <div className="max-w-sm mx-auto space-y-4">
+                                                    <div className="mx-auto w-24 h-24 bg-slate-100 contenedorCosas flex items-center justify-center">
+                                                        <Package className="w-10 h-10 text-slate-400" />
+                                                    </div>
+                                                    <p className="text-lg font-medium text-slate-600">
+                                                        {search ? "No se encontraron resultados" : "Aún no hay enlaces en el historial"}
+                                                    </p>
+                                                </div>
                                             </div>
-                                        ))
-                                    )}
-
-                                </div>
-                            </>
-                        )}
-                        {/* Loader centrado durante la importación */}
-                        {isImporting && (
-                            <div className="py-32 flex flex-col items-center justify-center min-h-[60vh] gap-12">
-                                {/* Contenedor principal del loader – centrado */}
-                                <div className="import-cube-wrapper">
-                                    <div className="import-cube">
-                                        <div className="cube-face front"></div>
-                                        <div className="cube-face back"></div>
-                                        <div className="cube-face right"></div>
-                                        <div className="cube-face left"></div>
-                                        <div className="cube-face top"></div>
-                                        <div className="cube-face bottom"></div>
+                                        ) : (
+                                            filtered.map((item, index) => (
+                                                <div
+                                                    key={item.id}
+                                                    className={`transition-all duration-500 ${!animatedItems.has(item.id)
+                                                        ? "opacity-0 translate-y-4"
+                                                        : "opacity-100 translate-y-0"
+                                                        }`}
+                                                    ref={(el) => {
+                                                        if (el && !animatedItems.has(item.id)) {
+                                                            el.getBoundingClientRect();
+                                                            markAsAnimated(item.id);
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        transitionDelay: `${0.5 + index * 0.1}s`, // Suave escalonado
+                                                    }}
+                                                >
+                                                    <HistoryItem
+                                                        item={item}
+                                                        onDelete={handleDelete}
+                                                        setHistory={setHistory}
+                                                        index={index}
+                                                        moveItem={moveItem}
+                                                        isAuthenticated={isAuthenticated}
+                                                        search={search}
+                                                        isUpdating={updatingItems.has(item.id)}
+                                                    />
+                                                </div>
+                                            ))
+                                        )}
                                     </div>
-                                    <div className="cube-particles"></div>
-                                </div>
-
-                                {/* Texto debajo */}
-                                <div className="text-center space-y-3 mt-10">
-                                    <p className="text-2xl font-bold text-violet-700 tracking-tight">
-                                        Construyendo tu historial...
-                                    </p>
-                                    <p className="text-base text-slate-600 font-medium">
-                                        Estamos procesando los productos
-                                    </p>
-                                </div>
-
-                                <div className="w-80 max-w-[90%] mt-0">
-                                    <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
-                                        <div
-                                            className="h-full bg-gradient-to-r from-violet-600 via-indigo-500 to-violet-600 rounded-full transition-all duration-200 ease-out"
-                                            style={{ width: `${progress}%` }}
-                                        />
+                                </>
+                            )}
+                            {/* Loader centrado durante la importación */}
+                            {isImporting && (
+                                <div className="py-32 flex flex-col items-center justify-center min-h-[60vh] gap-12">
+                                    {/* Contenedor principal del loader – centrado */}
+                                    <div className="import-cube-wrapper">
+                                        <div className="import-cube">
+                                            <div className="cube-face front"></div>
+                                            <div className="cube-face back"></div>
+                                            <div className="cube-face right"></div>
+                                            <div className="cube-face left"></div>
+                                            <div className="cube-face top"></div>
+                                            <div className="cube-face bottom"></div>
+                                        </div>
+                                        <div className="cube-particles"></div>
                                     </div>
-                                    <p className="text-sm text-slate-600 mt-3 text-center font-medium">
-                                        {progress}% completado • {processedCount} de {totalImported || '?'} productos
-                                    </p>
+                                    {/* Texto debajo */}
+                                    <div className="text-center space-y-3 mt-10">
+                                        <p className="text-2xl font-bold text-violet-700 tracking-tight">
+                                            Construyendo tu historial...
+                                        </p>
+                                        <p className="text-base text-slate-600 font-medium">
+                                            Estamos procesando los productos
+                                        </p>
+                                    </div>
+                                    <div className="w-80 max-w-[90%] mt-0">
+                                        <div className="h-2.5 bg-slate-200 rounded-full overflow-hidden shadow-inner">
+                                            <div
+                                                className="h-full bg-gradient-to-r from-violet-600 via-indigo-500 to-violet-600 rounded-full transition-all duration-200 ease-out"
+                                                style={{ width: `${progress}%` }}
+                                            />
+                                        </div>
+                                        <p className="text-sm text-slate-600 mt-3 text-center font-medium">
+                                            {progress}% completado • {processedCount} de {totalImported || '?'} productos
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                        )}
+                            )}
+                        </div>
                     </div>
                 </div>
             </div>
+            {/* MODAL: ACTUALIZAR PRECIOS SELECCIONADOS */}
+            {showPriceUpdateSelector && createPortal(
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
+                    <div
+                        className="absolute inset-0"
+                        onClick={() => setShowPriceUpdateSelector(false)}
+                    />
+                    <div className="relative w-full max-w-lg bg-white contenedorCosas shadow-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                        <div className="relative pt-3 border-b bg-gradient-to-r from-green-100 border-slate-100 bg-white flex flex-col items-center">
+                            <div className="w-14 h-14 contenedorCosas bg-emerald-600 flex items-center justify-center mb-3 shadow-sm">
+                                <RefreshCw className="w-8 h-8 text-white-600" strokeWidth={2} />
+                            </div>
+                        </div>
+
+                        {/* Body - compacto y limpio */}
+                        <div className="p-4 flex-1 overflow-y-auto bg-white">
+                            {history.length === 0 ? (
+                                <div className="text-center py-12 text-slate-500">
+                                    <Package className="w-12 h-12 mx-auto mb-3 opacity-60" />
+                                    <p className="text-base font-medium">No hay productos</p>
+                                </div>
+                            ) : (
+                                <>
+                                    <p className="text-xs text-slate-600 mb-4 leading-relaxed">
+                                        Selecciona los productos que quieres actualizar:
+                                    </p>
+
+                                    <div className="space-y-2">
+                                        {history.map(item => {
+                                            const isSelected = selectedItemsForUpdate.has(item.id);
+                                            return (
+                                                <label
+                                                    key={item.id}
+                                                    className={`
+                                            flex items-start gap-3 p-3 border cursor-pointer transition-all duration-150 contenedorCosas
+                                            ${isSelected
+                                                            ? 'border-emerald-500 bg-emerald-50/40'
+                                                            : 'border-slate-200 hover:border-slate-300 hover:bg-slate-50'}
+                                        `}
+                                                >
+                                                    <div className="relative flex items-center justify-center shrink-0 mt-0.5">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={isSelected}
+                                                            onChange={() => {
+                                                                setSelectedItemsForUpdate(prev => {
+                                                                    const next = new Set(prev);
+                                                                    if (next.has(item.id)) {
+                                                                        next.delete(item.id);
+                                                                    } else {
+                                                                        next.add(item.id);
+                                                                    }
+                                                                    return next;
+                                                                });
+                                                            }}
+                                                            className="w-5 h-5 contenedorCosas border-2 border-slate-300
+                                                    text-emerald-600 focus:ring-emerald-400
+                                                    checked:bg-emerald-600 checked:border-emerald-600
+                                                    transition-all duration-200 cursor-pointer
+                                                    appearance-none"
+                                                        />
+                                                        {isSelected && (
+                                                            <Check
+                                                                className="absolute w-4 h-4 text-white pointer-events-none"
+                                                                strokeWidth={3}
+                                                            />
+                                                        )}
+                                                    </div>
+
+                                                    <div className="flex-1 min-w-0">
+                                                        <p className="text-sm font-medium text-slate-900 line-clamp-2">
+                                                            {item.productTitle}
+                                                        </p>
+                                                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500 mt-1">
+                                                            <code className="bg-slate-100 px-1.5 py-0.5 rounded font-mono text-slate-600">
+                                                                {item.asin}
+                                                            </code>
+                                                            <span className="text-slate-400">·</span>
+                                                            <span className={item.price ? 'font-medium text-emerald-700' : 'italic text-slate-400'}>
+                                                                {item.price || 'Sin precio'}
+                                                            </span>
+                                                            <span className="text-slate-400">·</span>
+                                                            <span>{item.domain || 'amazon.es'}</span>
+                                                        </div>
+                                                    </div>
+                                                </label>
+                                            );
+                                        })}
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* Footer - compacto */}
+                        <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-3">
+                            <button
+                                onClick={() => {
+                                    if (selectedItemsForUpdate.size === history.length) {
+                                        setSelectedItemsForUpdate(new Set());
+                                    } else {
+                                        setSelectedItemsForUpdate(new Set(history.map(i => i.id)));
+                                    }
+                                }}
+                                className="text-sm text-violet-700 hover:text-violet-900 font-medium transition px-3 py-1.5 hover:bg-violet-50 rounded contenedorCosas w-full sm:w-auto text-center"
+                            >
+                                {selectedItemsForUpdate.size === history.length
+                                    ? 'Deseleccionar todo'
+                                    : `Seleccionar todos (${history.length})`}
+                            </button>
+
+                            <div className="flex gap-3 w-full sm:w-auto">
+                                <button
+                                    onClick={() => setShowPriceUpdateSelector(false)}
+                                    className="flex-1 sm:flex-none px-6 py-2.5 text-sm font-medium text-slate-700 bg-white border border-slate-300 contenedorCosas hover:bg-slate-50 transition"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (selectedItemsForUpdate.size === 0) {
+                                            toast.info("Selecciona al menos un producto");
+                                            return;
+                                        }
+
+                                        // 1. Cerramos modal inmediatamente
+                                        setShowPriceUpdateSelector(false);
+
+                                        // 2. Marcamos todos los seleccionados como "en proceso"
+                                        const idsToUpdate = Array.from(selectedItemsForUpdate);
+                                        setUpdatingItems(new Set(idsToUpdate));
+
+                                        setIsUpdatingPrices(true);
+
+                                        try {
+                                            const result = await updateSelectedPrices(idsToUpdate);
+
+                                            if (result.status === "completed") {
+                                                toast.success(result.message);
+                                            } else if (result.status === "proxy_failed") {
+                                                toast.error(result.message);
+                                            } else {
+                                                toast.info(result.message || "Operación completada");
+                                            }
+                                        } catch (err) {
+                                            console.error("Error en actualización selectiva:", err);
+                                            toast.error("Error al actualizar los precios seleccionados");
+                                        } finally {
+                                            setIsUpdatingPrices(false);
+
+                                            // Limpiamos el loader para todos (o puedes hacerlo por item si modificas updateSelectedPrices)
+                                            setUpdatingItems(new Set());
+                                            setSelectedItemsForUpdate(new Set());
+
+                                            try {
+                                                const fresh = await getUserHistory();
+                                                setHistory(fresh || []);
+                                            } catch (err) {
+                                                console.error("Error al recargar historial:", err);
+                                            }
+                                        }
+                                    }}
+                                    disabled={selectedItemsForUpdate.size === 0 || isUpdatingPrices}
+                                    className={`
+    flex-1 sm:flex-none px-6 py-2.5 text-sm font-semibold text-white
+    bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800
+    contenedorCosas transition shadow-sm flex items-center justify-center gap-2
+    disabled:opacity-50 disabled:cursor-not-allowed
+  `}
+                                >
+                                    Actualizar - {selectedItemsForUpdate.size || 0}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>,
+                document.body
+            )}
+
             {(() => {
-                // Visibilidad: solo cuando todo está listo
-                const shouldShowRefresh = isMounted && isHistoryFullyLoaded && history.length > 0;
+                // Solo en móvil
+                const isMobile = window.innerWidth < 768;
+                if (!isMobile) return null;
+
+                const shouldShow = isMounted && isHistoryFullyLoaded && history.length > 0;
 
                 return (
                     <div
                         className={`
-                fixed bottom-6 left-6 z-40
-                transition-all duration-700 ease-out
-                ${shouldShowRefresh
+        fixed bottom-6 left-6 z-[41] md:hidden
+        transition-all duration-700 ease-out
+        ${shouldShow
                                 ? 'translate-y-0 opacity-100 pointer-events-auto'
                                 : 'translate-y-12 opacity-0 pointer-events-none'
                             }
-            `}
+      `}
                     >
                         <button
-                            onClick={async () => {
-                                if (isUpdatingPrices || history.length === 0 || isLoading) return;
-                                setIsUpdatingPrices(true);
-
-                                let hasShownEarlyWarning = false;
-                                const earlyWarningTimer = setTimeout(() => {
-                                    toast.error("Problemas con proxies...", { duration: 4000 });
-                                    hasShownEarlyWarning = true;
-                                }, 30000);
-
-                                const result = await updateOutdatedPricesManually();
-
-                                clearTimeout(earlyWarningTimer);
-
-                                if (result.status === "empty") {
-                                    toast.info("No hay enlaces en el historial");
-                                } else if (result.status === "up_to_date") {
-                                    toast.success("Todos los precios están al día");
-                                } else if (result.status === "proxy_failed") {
-                                    toast.error("Actualización cancelada: proxies no funcionan", { duration: 4000 });
-                                } else if (result.status === "completed") {
-                                    if (result.updated === 0) {
-                                        toast.warning(
-                                            hasShownEarlyWarning
-                                                ? "No se obtuvo ningún precio nuevo (problemas con proxies)"
-                                                : "Se intentó actualizar pero no se obtuvo ningún precio nuevo",
-                                            { duration: 4000 }
-                                        );
-                                    } else {
-                                        toast.success(
-                                            `¡Precios actualizados en ${result.updated} producto${result.updated > 1 ? 's' : ''}!`,
-                                            { duration: 4000 }
-                                        );
-                                    }
-                                }
-
-                                setIsUpdatingPrices(false);
-                                window.dispatchEvent(new Event('amazon-history-updated'));
-                            }}
-                            disabled={isUpdatingPrices || history.length === 0 || isLoading}
+                            onClick={() => setShowMobileSidebar(!showMobileSidebar)}
+                            disabled={!isHistoryFullyLoaded || isLoading}
                             className={`
-                    bg-violet-500 text-white
-                    w-12 h-12 rounded-full
-                    transition-all duration-300
-                    shadow-lg flex items-center justify-center
-                    hover:bg-violet-700 hover:scale-110 active:scale-95
-                    ${isUpdatingPrices || isLoading
-                                    ? 'animate-pulse opacity-70 cursor-not-allowed'
-                                    : 'shadow-violet-500/50 hover:shadow-xl hover:shadow-violet-600/60'
-                                }
-                    ${history.length === 0 ? 'opacity-60 cursor-not-allowed' : ''}
-                `}
-                            title={
-                                isLoading
-                                    ? "Cargando historial..."
-                                    : history.length === 0
-                                        ? "No hay productos para actualizar"
-                                        : isUpdatingPrices
-                                            ? "Actualizando precios..."
-                                            : "Actualizar todos los precios"
-                            }
-                            aria-label="Actualizar precios"
+          bg-slate-800 text-white
+          w-12 h-12 contenedorCosas
+          flex items-center justify-center
+          shadow-xl hover:bg-slate-700 active:scale-95
+          transition-all duration-300
+          ${isLoading ? 'opacity-60 cursor-not-allowed' : ''}
+        `}
+                            title={showMobileSidebar ? "Cerrar filtros" : "Filtros y búsqueda"}
+                            aria-label={showMobileSidebar ? "Cerrar filtros" : "Abrir filtros"}
                         >
-                            <RefreshCw
-                                className={`w-5 h-5 ${isUpdatingPrices ? 'animate-spin' : ''}`}
-                            />
+                            <div className="relative w-6 h-6 flex items-center justify-center">
+                                <Sliders
+                                    className={`
+              w-6 h-6 absolute transition-opacity duration-300 ease-in-out
+              ${showMobileSidebar ? 'opacity-0' : 'opacity-100'}
+            `}
+                                />
+                                <X
+                                    className={`
+              w-6 h-6 absolute transition-opacity duration-300 ease-in-out
+              ${showMobileSidebar ? 'opacity-100' : 'opacity-0'}
+            `}
+                                    strokeWidth={2}
+                                />
+                            </div>
                         </button>
                     </div>
                 );

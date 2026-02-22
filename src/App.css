@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import 'animate.css';
 
 @tailwind base;
 @tailwind components;
@@ -40,6 +41,7 @@ h1 {
   font-size: 3em;
   line-height: 1.1;
 }
+
 
 html, body {
   overflow-x: hidden;
@@ -210,6 +212,34 @@ html, body {
 
 .botonWhatsApp:hover{
   background-color: #128c7e !important;
+}
+
+.stickyFilter{
+  top:72px;
+  left:230px;
+}
+
+.react-datepicker {
+  font-family: inherit;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 0.5rem !important;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
+}
+
+.react-datepicker__header {
+  background-color: #f8f9fa !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__day--in-selecting-range,
+.react-datepicker__day--in-range {
+  background-color: #7c3aed !important; /* violet-600 */
+  color: white !important;
+}
+
+.react-datepicker__day:hover {
+  background-color: #ede9fe !important; /* violet-100 */
 }
 
 .boton-gradiente {

@@ -377,7 +377,8 @@ export default function AmazonAffiliate() {
             </Card>
           </div>
         </div>
-        {/* ← MODAL DE ACTUALIZACIÓN – lo ponemos aquí al final del div principal */}
+
+        {/* MODAL DE ACTUALIZACIÓN */}
         {showUpdateModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
             <div className="bg-white contenedorCosas shadow-2xl max-w-md w-full overflow-hidden animate-in zoom-in-95 duration-300 border border-violet-200">
@@ -385,17 +386,17 @@ export default function AmazonAffiliate() {
               {/* Header */}
               <div
                 className="
-    relative overflow-hidden
-    bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-600
-    text-white px-2.5 py-4
-  "
-              >
-                <div
-                  className="
-      absolute inset-0
-      bg-gradient-to-r from-transparent via-white/30 to-transparent
-      -translate-x-full animate-shine-fast
-    "
+              relative overflow-hidden
+              bg-gradient-to-r from-indigo-600 via-violet-500 to-indigo-600
+              text-white px-2.5 py-4
+            "
+                        >
+              <div
+                className="
+                absolute inset-0
+                bg-gradient-to-r from-transparent via-white/30 to-transparent
+                -translate-x-full animate-shine-fast
+              "
                 />
                 <h2 className="text-xl font-bold text-center relative z-10">
                   ¡Nueva versión!

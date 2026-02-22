@@ -196,8 +196,6 @@ export const addToHistory = async (entry) => {
 };
 
 
-
-// FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS
 // FUNCIÓN PRINCIPAL DE SCRAPING Y ACTUALIZACIÓN DE DATOS
 export const fetchRealData = async (entry) => {
     if (getMassImportInProgress()) {
@@ -244,7 +242,7 @@ export const fetchRealData = async (entry) => {
             .trim()
             .slice(0, 120);
 
-        // ── Extracción de precio (sin cambios) ──
+        // ── Extracción de precio ──
         let price = null;
 
         // 1. Input displayString
@@ -293,7 +291,7 @@ export const fetchRealData = async (entry) => {
         const domain = entry.domain || domainPart;
 
         // ───────────────────────────────────────────────────────────────
-        // OBTENEMOS EL ESTADO ANTERIOR (muy importante)
+        // OBTENEMOS EL ESTADO ANTERIOR
         // ───────────────────────────────────────────────────────────────
         let previousPrice = null;
         let previousPricesHistory = [];
@@ -431,7 +429,6 @@ export const fetchRealData = async (entry) => {
 
     } catch (err) {
         console.error(`[fetchRealData] ERROR general para ${asin}:`, err.message);
-        // ← Aquí NO tocamos nada → el precio anterior se mantiene
     }
 };
 
@@ -953,7 +950,7 @@ export const updateOutdatedPricesManually = async () => {
         message: realSuccessCount === 0
             ? "No se obtuvo precio nuevo en ningún producto"
             : realSuccessCount === toUpdate.length
-                ? "¡Todos los precios actualizados correctamente!"
+                ? "Precios actualizados"
                 : `Precios actualizados en ${realSuccessCount} de ${toUpdate.length} productos`
     };
 };
@@ -984,3 +981,142 @@ export const shortenWithShortGy = async (longUrl, customSlug = null) => {
         return longUrl
     }
 }
+
+/**
+ * Actualiza los precios de una lista específica de productos (por sus IDs)
+ * @param {string[]} selectedIds - Array de IDs de los items a actualizar
+ * @returns {Promise<{status: string, updated: number, attempted: number, message: string}>}
+ */
+export const updateSelectedPrices = async (selectedIds) => {
+    if (!Array.isArray(selectedIds) || selectedIds.length === 0) {
+        return {
+            status: "empty_selection",
+            updated: 0,
+            attempted: 0,
+            message: "No se seleccionaron productos"
+        };
+    }
+
+    // 1. Detectar autenticación
+    const { data: { user } } = await supabase.auth.getUser();
+    const isAuthenticated = !!user?.id;
+
+    // 2. Cargar historial completo (necesitamos los items completos)
+    let history = [];
+    try {
+        if (isAuthenticated) {
+            history = await getUserHistory(1000); // límite alto
+        } else {
+            history = getHistory();
+        }
+    } catch (err) {
+        console.error("Error al cargar historial para actualización selectiva:", err);
+        return {
+            status: "load_error",
+            updated: 0,
+            attempted: 0,
+            message: "No se pudo cargar el historial"
+        };
+    }
+
+    // 3. Filtrar solo los items que coincidan con los IDs seleccionados
+    const toUpdate = history.filter(item => selectedIds.includes(item.id));
+
+    if (toUpdate.length === 0) {
+        return {
+            status: "no_match",
+            updated: 0,
+            attempted: 0,
+            message: "Ningún producto seleccionado encontrado en el historial"
+        };
+    }
+
+    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
+    const now = Date.now();
+
+    let realSuccessCount = 0;
+    let attemptedCount = 0;
+    let consecutiveFailures = 0;
+    const MAX_CONSECUTIVE_FAILURES = 3;
+
+    for (const item of toUpdate) {
+        attemptedCount++;
+
+        // Pequeña espera anti-bloqueo
+        if (attemptedCount > 1) {
+            await new Promise(r => setTimeout(r, 1800));
+        }
+
+        const previousPrice = item.price;
+
+        try {
+            // Reutilizamos fetchRealData (que ya maneja Supabase o local)
+            await fetchRealData(item);
+            consecutiveFailures = 0;
+        } catch (err) {
+            console.warn(`Error actualizando ${item.asin} (${item.domain}):`, err.message);
+
+            const isNetworkError = 
+                err.name === 'TypeError' && err.message.includes('Failed to fetch') ||
+                err.message.includes('net::ERR') ||
+                err.message.includes('CORS') ||
+                err.name === 'AbortError';
+
+            if (isNetworkError) {
+                consecutiveFailures++;
+            }
+
+            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+                console.warn("Cancelando actualización selectiva: múltiples fallos consecutivos");
+                return {
+                    status: "proxy_failed",
+                    updated: realSuccessCount,
+                    attempted: attemptedCount,
+                    message: "Actualización cancelada por problemas graves con proxies"
+                };
+            }
+            continue;
+        }
+
+        // Verificar si realmente cambió el precio
+        let updatedItem;
+        try {
+            if (isAuthenticated) {
+                const fresh = await getUserHistory(1000);
+                updatedItem = fresh.find(h => h.id === item.id);
+            } else {
+                const current = getHistory();
+                updatedItem = current.find(h => h.id === item.id);
+            }
+        } catch (refreshErr) {
+            console.warn("No se pudo verificar cambio:", refreshErr);
+            continue;
+        }
+
+        if (updatedItem) {
+            const newPrice = updatedItem.price;
+            if (
+                (newPrice && !previousPrice) ||
+                (newPrice && previousPrice && newPrice !== previousPrice)
+            ) {
+                realSuccessCount++;
+            }
+        }
+    }
+
+    // Disparamos evento para recargar UI
+    window.dispatchEvent(new Event('amazon-history-updated'));
+
+    return {
+        status: "completed",
+        updated: realSuccessCount,
+        attempted: attemptedCount,
+        total: toUpdate.length,
+        hadAnySuccess: realSuccessCount > 0,
+        message: realSuccessCount === 0
+            ? "No se obtuvieron nuevos precios"
+            : realSuccessCount === toUpdate.length
+                ? "Precios actualizados"
+                : `Precios actualizados en ${realSuccessCount} de ${toUpdate.length} seleccionados`
+    };
+};

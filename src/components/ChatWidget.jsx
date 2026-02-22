@@ -292,7 +292,7 @@ IMPORTANTE: Tu entrenamiento base llega hasta 2024. Si te pregunto algo posterio
         <button
           onClick={() => setIsOpen(!isOpen)}
           className={`
-          fixed bottom-6 right-6 z-50
+          fixed bottom-6 right-6 z-[10]
           w-12 h-12 rounded-full bg-violet-500 text-white
           flex items-center justify-center shadow-lg
           hover:bg-violet-700 hover:scale-110 active:scale-95

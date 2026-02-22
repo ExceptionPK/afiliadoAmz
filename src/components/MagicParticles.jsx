@@ -10,11 +10,11 @@ export default function MagicParticles() {
         const container = containerRef.current;
         const fragment = document.createDocumentFragment();
 
-        for (let i = 0; i < 45; i++) {  // más cantidad = más cielo estrellado
+        for (let i = 0; i < 40; i++) { 
             const duration = 20 + Math.random() * 30;
-            const delay = -(Math.random() * 25);  // muchas ya brillando al cargar
+            const delay = -(Math.random() * 25);
             const left = Math.random() * 100;
-            const top = 110 + Math.random() * 50;  // ¡NUEVO! aparecen por toda la pantalla
+            const top = 110 + Math.random() * 50;
 
             const particle = document.createElement("div");
             particle.className = "magic-particle";
