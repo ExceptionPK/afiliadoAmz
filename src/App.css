@@ -214,9 +214,32 @@ html, body {
   background-color: #128c7e !important;
 }
 
-.stickyFilter{
-  top:72px;
-  left:230px;
+
+/* Nueva lógica (puedes ponerla en tu archivo CSS global o módulo) */
+.sidebar-fixed {
+  position: fixed;
+  top: 72px;                      /* mantienes tu valor actual */
+  z-index: 20;
+
+  /* Esto es lo que realmente soluciona el problema */
+  left: max(16px, calc(50% - 600px + 16px));
+}
+
+/* Ajustes por breakpoint (para que no quede ni muy pegado ni muy lejos) */
+@media (min-width: 1024px) {
+  
+}
+
+@media (min-width: 1280px) {
+  .sidebar-fixed {
+    left: max(32px, calc(50% - 655px + 32px));
+  }
+}
+
+@media (min-width: 1536px) {
+  .sidebar-fixed {
+    left: max(48px, calc(50% - 671px + 48px));
+  }
 }
 
 .react-datepicker {
