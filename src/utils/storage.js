@@ -45,8 +45,6 @@ async function fetchWithFallback(targetUrl) {
         const keyIdx = (startIdx + i) % API_KEYS.length;
         const key = API_KEYS[keyIdx];
 
-        // Endpoint CORRECTO de ScraperAPI – sin render_js, por defecto no renderiza JS (1 crédito)
-        // Si algún día necesitas JS: añade &render=true (cuesta 10 créditos)
         const scraperUrl = `https://api.scraperapi.com?api_key=${key}&url=${encodeURIComponent(targetUrl)}`;
 
         console.log(`[fetchRealData] Probando clave ScraperAPI #${keyIdx + 1} → ${targetUrl}`);

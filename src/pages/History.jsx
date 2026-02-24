@@ -2801,9 +2801,6 @@ export default function HistoryPage() {
                             <div className="w-14 h-14 contenedorCosas bg-emerald-600 flex items-center justify-center mb-3 shadow-sm">
                                 <RefreshCw className="w-8 h-8 text-white" strokeWidth={2} />
                             </div>
-                            <h3 className="text-lg font-semibold text-slate-900 mb-1">
-                                Actualizar precios
-                            </h3>
                             <p className="text-xs text-slate-600 mb-3">
                                 {filtered.length} producto{filtered.length === 1 ? '' : 's'} coinciden con los filtros actuales
                             </p>
@@ -2819,9 +2816,6 @@ export default function HistoryPage() {
                                 </div>
                             ) : (
                                 <>
-                                    <p className="text-xs text-slate-600 mb-4 leading-relaxed">
-                                        Selecciona los productos que quieres actualizar:
-                                    </p>
                                     <div className="space-y-2">
                                         {filtered.map(item => {
                                             const isSelected = selectedItemsForUpdate.has(item.id);
@@ -2908,40 +2902,113 @@ export default function HistoryPage() {
                                 <button
                                     onClick={async () => {
                                         if (selectedItemsForUpdate.size === 0) {
-                                            toast.info("Selecciona al menos un producto");
+                                            toast.info("Selecciona al menos un producto para actualizar");
                                             return;
                                         }
 
+                                        // Cerramos el modal de selección inmediatamente
                                         setShowPriceUpdateSelector(false);
+
+                                        // Activamos loaders visuales SOLO en los items seleccionados
                                         const idsToUpdate = Array.from(selectedItemsForUpdate);
                                         setUpdatingItems(new Set(idsToUpdate));
                                         setIsUpdatingPrices(true);
 
                                         try {
+                                            // Llamamos a la función optimizada
                                             const result = await updateSelectedPrices(idsToUpdate);
-                                            toast[result.hadAnySuccess ? 'success' : 'info'](result.message);
-                                        } catch (err) {
-                                            console.error("Error actualización selectiva:", err);
-                                            toast.error("Error al actualizar precios");
-                                        } finally {
-                                            setIsUpdatingPrices(false);
+
+                                            // Mostramos toast lo antes posible (éxito o info)
+                                            if (result.hadAnySuccess) {
+                                                toast.success(result.message, { duration: 5000 });
+                                            } else {
+                                                toast.info(result.message, { duration: 6000 });
+                                            }
+
                                             setUpdatingItems(new Set());
+                                            setIsUpdatingPrices(false);
+
                                             setSelectedItemsForUpdate(new Set());
 
-                                            // Recarga desde fuente correcta
-                                            const fresh = await getUserHistory();
-                                            setHistory(fresh || []);
+                                            if (result.updated > 0) {
+                                                await new Promise(r => setTimeout(r, 600));
+
+                                                let updatedItems = [];
+
+                                                if (isAuthenticated) {
+                                                    const { data, error } = await supabase
+                                                        .from('affiliate_history')
+                                                        .select(`
+              id, asin, dominio, product_title, title_is_custom,
+              price, original_price, prices_history, last_update,
+              created_at, short_link, affiliate_url, original_url,
+              recommended, position, last_visited
+            `)
+                                                        .in('id', idsToUpdate);
+
+                                                    if (!error && data?.length > 0) {
+                                                        updatedItems = data.map(item => ({
+                                                            id: item.id,
+                                                            asin: item.asin,
+                                                            domain: item.dominio,
+                                                            productTitle: item.product_title,
+                                                            title_is_custom: item.title_is_custom ?? false,
+                                                            price: item.price,
+                                                            originalPrice: item.original_price,
+                                                            prices: item.prices_history || [],
+                                                            lastUpdate: item.last_update,
+                                                            timestamp: item.created_at,
+                                                            shortLink: item.short_link,
+                                                            affiliateUrl: item.affiliate_url,
+                                                            originalUrl: item.original_url,
+                                                            recommended: item.recommended || [],
+                                                            position: item.position,
+                                                            lastVisited: item.last_visited
+                                                                ? new Date(item.last_visited).getTime()
+                                                                : null,
+                                                        }));
+                                                    }
+                                                } else {
+                                                    // LocalStorage: recargamos los relevantes
+                                                    updatedItems = getHistory().filter(h => idsToUpdate.includes(h.id));
+                                                }
+
+                                                // Actualizamos el estado con los datos frescos
+                                                if (updatedItems.length > 0) {
+                                                    setHistory(prev =>
+                                                        prev.map(existing =>
+                                                            updatedItems.find(u => u.id === existing.id) || existing
+                                                        )
+                                                    );
+                                                }
+                                            }
+
+                                        } catch (err) {
+                                            console.error("Error durante actualización selectiva:", err);
+                                            toast.error("Hubo un problema al actualizar los precios", { duration: 6000 });
+
+                                            // Limpiamos loaders también en caso de error
+                                            setUpdatingItems(new Set());
+                                            setIsUpdatingPrices(false);
+                                            setSelectedItemsForUpdate(new Set());
                                         }
                                     }}
                                     disabled={selectedItemsForUpdate.size === 0 || isUpdatingPrices}
                                     className={`
-                            flex-1 sm:flex-none px-6 py-2.5 text-sm font-semibold text-white
-                            bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800
-                            contenedorCosas transition shadow-sm flex items-center justify-center gap-2
-                            disabled:opacity-50 disabled:cursor-not-allowed
-                        `}
+    flex-1 sm:flex-none px-6 py-2.5 text-sm font-semibold text-white
+    bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800
+    contenedorCosas transition shadow-sm flex items-center justify-center gap-2
+    disabled:opacity-50 disabled:cursor-not-allowed
+  `}
                                 >
-                                    Actualizar · {selectedItemsForUpdate.size || 0}
+                                    {isUpdatingPrices ? (
+                                        <span className="flex items-center gap-2">
+                                            <RefreshCw className="w-4 h-4 animate-spin" />
+                                            Actualizando...
+                                        </span>
+                                    ) : (
+                                        <>Actualizar - {selectedItemsForUpdate.size || 0}</>
+                                    )}
                                 </button>
                             </div>
                         </div>
