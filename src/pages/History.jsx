@@ -642,16 +642,18 @@ const HistoryItem = ({
                         <span className="text-slate-400">|</span>
 
                         {isUpdating ? (
-                            // Loader mientras se actualiza el precio
                             <div className="relative flex-1 h-5 flex items-center min-w-[120px]">
                                 <div className="text-xs text-emerald-600 font-medium animate-pulse flex items-center gap-1.5">
                                     Actualizando...
                                 </div>
-                                {/* Barra estilo "Deshacer" que se encoge infinitamente */}
-                                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-slate-200 overflow-hidden rounded-full">
+
+                                {/* Barra de progreso infinita */}
+                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-300 overflow-hidden contenedorCosas">
                                     <div
-                                        className="h-full bg-emerald-500 origin-left animate-shrink"
-                                        style={{ animation: 'shrink 6s linear infinite' }}
+                                        className="h-full bg-emerald-500 contenedorCosas w-1/3 animate-progress-infinite"
+                                        style={{
+                                            animation: 'progress-infinite 2.2s linear infinite'
+                                        }}
                                     />
                                 </div>
                             </div>
@@ -1950,7 +1952,7 @@ export default function HistoryPage() {
                                     {uniqueDomains.map((dom) => (
                                         <label
                                             key={dom}
-                                            className="flex items-center justify-between gap-3 py-2.5 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
+                                            className="flex items-center justify-between gap-3 py-2 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
                                         >
                                             {/* Texto + icono a la izquierda */}
                                             <div className="flex items-center gap-2.5 flex-1 min-w-0">
@@ -2172,7 +2174,7 @@ export default function HistoryPage() {
                                         disabled={!isHistoryFullyLoaded || isLoading}
                                         className={`
             bg-slate-800 text-white
-            w-12 h-12 rounded-full flex items-center justify-center
+            w-12 h-12 contenedorCosas flex items-center justify-center
             shadow-xl hover:bg-slate-700 active:scale-95
             transition-all duration-300
             ${isLoading ? 'opacity-60 cursor-not-allowed' : ''}
@@ -2293,7 +2295,7 @@ export default function HistoryPage() {
                                                         {uniqueDomains.map((dom) => (
                                                             <label
                                                                 key={dom}
-                                                                className="flex items-center justify-between gap-3 py-2.5 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
+                                                                className="flex items-center justify-between gap-3 py-2 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
                                                             >
                                                                 <div className="flex items-center gap-2.5 flex-1 min-w-0">
                                                                     <span className="text-sm text-slate-700 truncate group-hover:text-violet-700 transition-colors">
@@ -2791,32 +2793,37 @@ export default function HistoryPage() {
             {/* MODAL: ACTUALIZAR PRECIOS SELECCIONADOS */}
             {showPriceUpdateSelector && createPortal(
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
-                    <div
-                        className="absolute inset-0"
-                        onClick={() => setShowPriceUpdateSelector(false)}
-                    />
+                    <div className="absolute inset-0" onClick={() => setShowPriceUpdateSelector(false)} />
                     <div className="relative w-full max-w-lg bg-white contenedorCosas shadow-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+
+                        {/* Cabecera */}
                         <div className="relative pt-3 border-b bg-gradient-to-r from-green-100 border-slate-100 bg-white flex flex-col items-center">
                             <div className="w-14 h-14 contenedorCosas bg-emerald-600 flex items-center justify-center mb-3 shadow-sm">
-                                <RefreshCw className="w-8 h-8 text-white-600" strokeWidth={2} />
+                                <RefreshCw className="w-8 h-8 text-white" strokeWidth={2} />
                             </div>
+                            <h3 className="text-lg font-semibold text-slate-900 mb-1">
+                                Actualizar precios
+                            </h3>
+                            <p className="text-xs text-slate-600 mb-3">
+                                {filtered.length} producto{filtered.length === 1 ? '' : 's'} coinciden con los filtros actuales
+                            </p>
                         </div>
 
-                        {/* Body - compacto y limpio */}
+                        {/* Body */}
                         <div className="p-4 flex-1 overflow-y-auto bg-white">
-                            {history.length === 0 ? (
+                            {filtered.length === 0 ? (
                                 <div className="text-center py-12 text-slate-500">
                                     <Package className="w-12 h-12 mx-auto mb-3 opacity-60" />
-                                    <p className="text-base font-medium">No hay productos</p>
+                                    <p className="text-base font-medium">Ningún producto coincide con los filtros</p>
+                                    <p className="text-sm mt-2">Prueba a quitar o modificar algún filtro</p>
                                 </div>
                             ) : (
                                 <>
                                     <p className="text-xs text-slate-600 mb-4 leading-relaxed">
                                         Selecciona los productos que quieres actualizar:
                                     </p>
-
                                     <div className="space-y-2">
-                                        {history.map(item => {
+                                        {filtered.map(item => {
                                             const isSelected = selectedItemsForUpdate.has(item.id);
                                             return (
                                                 <label
@@ -2843,17 +2850,10 @@ export default function HistoryPage() {
                                                                     return next;
                                                                 });
                                                             }}
-                                                            className="w-5 h-5 contenedorCosas border-2 border-slate-300
-                                                    text-emerald-600 focus:ring-emerald-400
-                                                    checked:bg-emerald-600 checked:border-emerald-600
-                                                    transition-all duration-200 cursor-pointer
-                                                    appearance-none"
+                                                            className="w-5 h-5 contenedorCosas border-2 border-slate-300 text-emerald-600 focus:ring-emerald-400 checked:bg-emerald-600 checked:border-emerald-600 transition-all duration-200 cursor-pointer appearance-none"
                                                         />
                                                         {isSelected && (
-                                                            <Check
-                                                                className="absolute w-4 h-4 text-white pointer-events-none"
-                                                                strokeWidth={3}
-                                                            />
+                                                            <Check className="absolute w-4 h-4 text-white pointer-events-none" strokeWidth={3} />
                                                         )}
                                                     </div>
 
@@ -2881,21 +2881,21 @@ export default function HistoryPage() {
                             )}
                         </div>
 
-                        {/* Footer - compacto */}
+                        {/* Footer */}
                         <div className="p-4 border-t border-slate-200 bg-slate-50 flex flex-col sm:flex-row justify-between items-center gap-3">
                             <button
                                 onClick={() => {
-                                    if (selectedItemsForUpdate.size === history.length) {
+                                    if (selectedItemsForUpdate.size === filtered.length) {
                                         setSelectedItemsForUpdate(new Set());
                                     } else {
-                                        setSelectedItemsForUpdate(new Set(history.map(i => i.id)));
+                                        setSelectedItemsForUpdate(new Set(filtered.map(i => i.id)));
                                     }
                                 }}
                                 className="text-sm text-violet-700 hover:text-violet-900 font-medium transition px-3 py-1.5 hover:bg-violet-50 rounded contenedorCosas w-full sm:w-auto text-center"
                             >
-                                {selectedItemsForUpdate.size === history.length
+                                {selectedItemsForUpdate.size === filtered.length
                                     ? 'Deseleccionar todo'
-                                    : `Seleccionar todos (${history.length})`}
+                                    : `Seleccionar todos (${filtered.length})`}
                             </button>
 
                             <div className="flex gap-3 w-full sm:w-auto">
@@ -2912,52 +2912,36 @@ export default function HistoryPage() {
                                             return;
                                         }
 
-                                        // 1. Cerramos modal inmediatamente
                                         setShowPriceUpdateSelector(false);
-
-                                        // 2. Marcamos todos los seleccionados como "en proceso"
                                         const idsToUpdate = Array.from(selectedItemsForUpdate);
                                         setUpdatingItems(new Set(idsToUpdate));
-
                                         setIsUpdatingPrices(true);
 
                                         try {
                                             const result = await updateSelectedPrices(idsToUpdate);
-
-                                            if (result.status === "completed") {
-                                                toast.success(result.message);
-                                            } else if (result.status === "proxy_failed") {
-                                                toast.error(result.message);
-                                            } else {
-                                                toast.info(result.message || "Operación completada");
-                                            }
+                                            toast[result.hadAnySuccess ? 'success' : 'info'](result.message);
                                         } catch (err) {
-                                            console.error("Error en actualización selectiva:", err);
-                                            toast.error("Error al actualizar los precios seleccionados");
+                                            console.error("Error actualización selectiva:", err);
+                                            toast.error("Error al actualizar precios");
                                         } finally {
                                             setIsUpdatingPrices(false);
-
-                                            // Limpiamos el loader para todos (o puedes hacerlo por item si modificas updateSelectedPrices)
                                             setUpdatingItems(new Set());
                                             setSelectedItemsForUpdate(new Set());
 
-                                            try {
-                                                const fresh = await getUserHistory();
-                                                setHistory(fresh || []);
-                                            } catch (err) {
-                                                console.error("Error al recargar historial:", err);
-                                            }
+                                            // Recarga desde fuente correcta
+                                            const fresh = await getUserHistory();
+                                            setHistory(fresh || []);
                                         }
                                     }}
                                     disabled={selectedItemsForUpdate.size === 0 || isUpdatingPrices}
                                     className={`
-    flex-1 sm:flex-none px-6 py-2.5 text-sm font-semibold text-white
-    bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800
-    contenedorCosas transition shadow-sm flex items-center justify-center gap-2
-    disabled:opacity-50 disabled:cursor-not-allowed
-  `}
+                            flex-1 sm:flex-none px-6 py-2.5 text-sm font-semibold text-white
+                            bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800
+                            contenedorCosas transition shadow-sm flex items-center justify-center gap-2
+                            disabled:opacity-50 disabled:cursor-not-allowed
+                        `}
                                 >
-                                    Actualizar - {selectedItemsForUpdate.size || 0}
+                                    Actualizar · {selectedItemsForUpdate.size || 0}
                                 </button>
                             </div>
                         </div>

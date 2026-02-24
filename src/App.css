@@ -597,6 +597,19 @@ html, body {
     }
 }
 
+@keyframes progress-infinite {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);   /* >100% para que se vea continuo */
+  }
+}
+
+.animate-progress-infinite {
+  animation: progress-infinite 2.2s linear infinite;
+}
+
 /* ============================================= */
 /*     ESTRELLAS MORADAS PEQUEÑAS Y MÁGICAS      */
 /* ============================================= */
