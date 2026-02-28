@@ -1,23 +1,20 @@
 // api/scraper-utils.js
-// Lógica extraída y adaptada de storage.js para uso en serverless
 
 const API_KEYS = [
-  process.env.SCRAPERAPI_KEY_1?.trim(),
-  process.env.SCRAPERAPI_KEY_2?.trim(),
-  // puedes añadir más aquí o leerlas de process.env
+  process.env.VITE_SCRAPERAPI_KEY_1?.trim(),
+  process.env.VITE_SCRAPERAPI_KEY_2?.trim(),
+  // puedes añadir más si las defines en Vercel
 ].filter(Boolean);
 
 if (API_KEYS.length === 0) {
-  console.error("No se encontraron claves de ScraperAPI en las variables de entorno");
+  console.error("[scraper-utils] No se encontraron claves VITE_SCRAPERAPI_KEY_* en las variables de entorno");
 }
 
-const LAST_GOOD_KEY_INDEX = 'scraperapi_last_good_key_index'; // se puede guardar en memoria o en Vercel KV si quieres persistencia
-
-let lastGoodKeyIndex = 0; // en memoria (se reinicia en cold start, pero es aceptable)
+let lastGoodKeyIndex = 0; // en memoria (reinicia en cold start, aceptable)
 
 async function fetchWithScraperApi(targetUrl) {
   if (API_KEYS.length === 0) {
-    throw new Error("No hay claves configuradas para ScraperAPI");
+    throw new Error("No hay claves de ScraperAPI configuradas (VITE_SCRAPERAPI_KEY_*)");
   }
 
   let startIdx = lastGoodKeyIndex;
@@ -37,16 +34,14 @@ async function fetchWithScraperApi(targetUrl) {
       });
 
       if (res.ok) {
-        lastGoodKeyIndex = keyIdx; // actualizamos en memoria
+        lastGoodKeyIndex = keyIdx;
         const html = await res.text();
         console.log(`[ScraperAPI server] Éxito con clave #${keyIdx + 1} - longitud: ${html.length}`);
         return html;
       }
 
       let errText = '';
-      try {
-        errText = await res.text();
-      } catch {}
+      try { errText = await res.text(); } catch {}
 
       const status = res.status;
 
