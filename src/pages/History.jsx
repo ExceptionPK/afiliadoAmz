@@ -2206,19 +2206,19 @@ export default function HistoryPage() {
                                         {/* Backdrop con fade */}
                                         <div
                                             className={`
-              absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-400
-              ${showMobileSidebar ? 'opacity-100' : 'opacity-0 pointer-events-none'}
-            `}
+                                              absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-400
+                                              ${showMobileSidebar ? 'opacity-100' : 'opacity-0 pointer-events-none'}
+                                            `}
                                             onClick={() => setShowMobileSidebar(false)}
                                         />
 
                                         {/* Sidebar drawer */}
                                         <div
                                             className={`
-              absolute top-0 bottom-0 left-0 w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto
-              animate__animated
-              ${showMobileSidebar ? 'animate__slideInLeft' : 'animate__slideOutLeft'}
-            `}
+                                              absolute top-0 bottom-0 left-0 w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto
+                                              animate__animated
+                                              ${showMobileSidebar ? 'animate__slideInLeft' : 'animate__slideOutLeft'}
+                                            `}
                                             style={{ animationDuration: '0.4s' }}
                                         >
                                             {/* Cabecera */}
@@ -2376,14 +2376,14 @@ export default function HistoryPage() {
                                                         <button
                                                             type="button"
                                                             className="
-                      flex items-center justify-center
-                      w-10 h-10 contenedorCosas
-                      bg-violet-100 hover:bg-violet-200
-                      text-violet-600 hover:text-violet-800
-                      transition-all duration-200
-                      shadow-sm hover:shadow
-                      focus:outline-none
-                    "
+                                                          flex items-center justify-center
+                                                          w-10 h-10 contenedorCosas
+                                                          bg-violet-100 hover:bg-violet-200
+                                                          text-violet-600 hover:text-violet-800
+                                                          transition-all duration-200
+                                                          shadow-sm hover:shadow
+                                                          focus:outline-none
+                                                        "
                                                             title="Añadir nueva etiqueta"
                                                         >
                                                             <Plus className="w-6 h-6" strokeWidth={2.5} />
@@ -2423,13 +2423,13 @@ export default function HistoryPage() {
                                                         }}
                                                         disabled={isUpdatingPrices || history.length === 0 || isLoading}
                                                         className={`
-                    w-full flex items-center justify-center gap-2
-                    py-2.5 px-4 contenedorCosas text-sm font-medium
-                    transition-all duration-200
-                    bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200
-                    hover:shadow-sm active:scale-[0.98]
-                    disabled:opacity-50 disabled:cursor-not-allowed
-                  `}
+                                                        w-full flex items-center justify-center gap-2
+                                                        py-2.5 px-4 contenedorCosas text-sm font-medium
+                                                        transition-all duration-200
+                                                        bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200
+                                                        hover:shadow-sm active:scale-[0.98]
+                                                        disabled:opacity-50 disabled:cursor-not-allowed
+                                                      `}
                                                     >
                                                         <RefreshCw className="w-4 h-4" />
                                                         Actualizar precios
@@ -2441,14 +2441,14 @@ export default function HistoryPage() {
                                                         onClick={clearFilters}
                                                         disabled={!Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))}
                                                         className={`
-                    w-full flex items-center justify-center gap-2
-                    py-2.5 px-2.5 contenedorCosas text-sm font-medium
-                    transition-all duration-200
-                    ${Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))
+                                                                w-full flex items-center justify-center gap-2
+                                                                py-2.5 px-2.5 contenedorCosas text-sm font-medium
+                                                                transition-all duration-200
+                                                                ${Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))
                                                                 ? 'bg-violet-100 text-violet-700 hover:bg-violet-200 border border-violet-200'
                                                                 : 'bg-slate-50 text-slate-400 cursor-not-allowed'
                                                             }
-                  `}
+                                                      `}
                                                     >
                                                         <X className="w-4 h-4" />
                                                         Limpiar filtros
@@ -2939,11 +2939,11 @@ export default function HistoryPage() {
                                                     const { data, error } = await supabase
                                                         .from('affiliate_history')
                                                         .select(`
-              id, asin, dominio, product_title, title_is_custom,
-              price, original_price, prices_history, last_update,
-              created_at, short_link, affiliate_url, original_url,
-              recommended, position, last_visited
-            `)
+                                                          id, asin, dominio, product_title, title_is_custom,
+                                                          price, original_price, prices_history, last_update,
+                                                          created_at, short_link, affiliate_url, original_url,
+                                                          recommended, position, last_visited
+                                                        `)
                                                         .in('id', idsToUpdate);
 
                                                     if (!error && data?.length > 0) {
@@ -2995,11 +2995,11 @@ export default function HistoryPage() {
                                     }}
                                     disabled={selectedItemsForUpdate.size === 0 || isUpdatingPrices}
                                     className={`
-    flex-1 sm:flex-none px-6 py-2.5 text-sm font-semibold text-white
-    bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800
-    contenedorCosas transition shadow-sm flex items-center justify-center gap-2
-    disabled:opacity-50 disabled:cursor-not-allowed
-  `}
+                                    flex-1 sm:flex-none px-6 py-2.5 text-sm font-semibold text-white
+                                    bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800
+                                    contenedorCosas transition shadow-sm flex items-center justify-center gap-2
+                                    disabled:opacity-50 disabled:cursor-not-allowed
+                                  `}
                                 >
                                     {isUpdatingPrices ? (
                                         <span className="flex items-center gap-2">
@@ -3027,40 +3027,40 @@ export default function HistoryPage() {
                 return (
                     <div
                         className={`
-        fixed bottom-6 left-6 z-[41] md:hidden
-        transition-all duration-700 ease-out
-        ${shouldShow
+                                fixed bottom-6 left-6 z-[41] md:hidden
+                                transition-all duration-700 ease-out
+                                ${shouldShow
                                 ? 'translate-y-0 opacity-100 pointer-events-auto'
                                 : 'translate-y-12 opacity-0 pointer-events-none'
                             }
-      `}
+                              `}
                     >
                         <button
                             onClick={() => setShowMobileSidebar(!showMobileSidebar)}
                             disabled={!isHistoryFullyLoaded || isLoading}
                             className={`
-          bg-slate-800 text-white
-          w-12 h-12 contenedorCosas
-          flex items-center justify-center
-          shadow-xl hover:bg-slate-700 active:scale-95
-          transition-all duration-300
-          ${isLoading ? 'opacity-60 cursor-not-allowed' : ''}
-        `}
+                              bg-slate-800 text-white
+                              w-12 h-12 contenedorCosas
+                              flex items-center justify-center
+                              shadow-xl hover:bg-slate-700 active:scale-95
+                              transition-all duration-300
+                              ${isLoading ? 'opacity-60 cursor-not-allowed' : ''}
+                            `}
                             title={showMobileSidebar ? "Cerrar filtros" : "Filtros y búsqueda"}
                             aria-label={showMobileSidebar ? "Cerrar filtros" : "Abrir filtros"}
                         >
                             <div className="relative w-6 h-6 flex items-center justify-center">
                                 <Sliders
                                     className={`
-              w-6 h-6 absolute transition-opacity duration-300 ease-in-out
-              ${showMobileSidebar ? 'opacity-0' : 'opacity-100'}
-            `}
+                                      w-6 h-6 absolute transition-opacity duration-300 ease-in-out
+                                      ${showMobileSidebar ? 'opacity-0' : 'opacity-100'}
+                                    `}
                                 />
                                 <X
                                     className={`
-              w-6 h-6 absolute transition-opacity duration-300 ease-in-out
-              ${showMobileSidebar ? 'opacity-100' : 'opacity-0'}
-            `}
+                                      w-6 h-6 absolute transition-opacity duration-300 ease-in-out
+                                      ${showMobileSidebar ? 'opacity-100' : 'opacity-0'}
+                                    `}
                                     strokeWidth={2}
                                 />
                             </div>
