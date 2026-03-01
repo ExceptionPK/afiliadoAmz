@@ -64,7 +64,7 @@ async function fetchWithFallback(targetUrl) {
             let errText = '';
             try {
                 errText = await res.text();
-            } catch {}
+            } catch { }
 
             const status = res.status;
 
@@ -80,7 +80,7 @@ async function fetchWithFallback(targetUrl) {
                 errText.toLowerCase().includes('no credits');
 
             if (isQuotaOrAuthError) {
-                console.warn(`[ScraperAPI] Clave #${keyIdx + 1} → problema de cuota/autorización (${status}) - ${errText.slice(0,120)}`);
+                console.warn(`[ScraperAPI] Clave #${keyIdx + 1} → problema de cuota/autorización (${status}) - ${errText.slice(0, 120)}`);
                 lastError = new Error(`Problema con clave #${keyIdx + 1}: ${status}`);
                 continue;
             }
@@ -353,34 +353,74 @@ export const fetchRealData = async (entry) => {
             updateData.title_is_custom = true;
         }
 
-        // Precio: SOLO actualizamos si conseguimos precio NUEVO y VÁLIDO
+        // ── LÓGICA DE PRECIO MEJORADA ───────────────────────────────────────
         let shouldUpdatePrice = false;
         let newPricesHistory = [...previousPricesHistory];
+        let showSameAsOriginalToast = false;
 
         if (price && price.trim() !== '') {
-            // Comparamos con el último precio conocido
-            const lastKnownPrice = previousPricesHistory.length > 0
-                ? previousPricesHistory[previousPricesHistory.length - 1]?.price
-                : previousPrice;
+            const scrapedPriceClean = price.trim();
 
-            if (lastKnownPrice !== price) {
+            // Función auxiliar para comparar precios numéricamente
+            const normalizePrice = (p) => {
+                if (!p || typeof p !== 'string') return NaN;
+                return parseFloat(
+                    p.replace(/[^0-9.,]/g, '')
+                        .replace(',', '.')
+                );
+            };
+
+            const scrapedNum = normalizePrice(scrapedPriceClean);
+            const originalNum = normalizePrice(previousOriginalPrice);
+            const currentNum = normalizePrice(previousPrice);
+
+            // Caso 1: No había precio original → actualizamos todo
+            if (!previousOriginalPrice || isNaN(originalNum)) {
                 shouldUpdatePrice = true;
-                newPricesHistory.push({ timestamp: now, price });
+                newPricesHistory.push({ timestamp: now, price: scrapedPriceClean });
+            }
+            // Caso 2: Sí había precio original
+            else {
+                // Precio scrapeado DIFERENTE del original → actualizamos
+                if (!isNaN(scrapedNum) && scrapedNum !== originalNum) {
+                    shouldUpdatePrice = true;
+                    newPricesHistory.push({ timestamp: now, price: scrapedPriceClean });
+                }
+                // Precio scrapeado IGUAL al original
+                else {
+                    // Si el precio actual (manual) era diferente → mostramos toast
+                    if (previousPrice && !isNaN(currentNum) && currentNum !== originalNum) {
+                        showSameAsOriginalToast = true;
+                    }
+
+                    // Registramos en historial que volvió al precio original
+                    // (aunque no cambiemos el price mostrado)
+                    newPricesHistory.push({
+                        timestamp: now,
+                        price: scrapedPriceClean,
+                        note: "Vuelto a precio original (scraping)"
+                    });
+                }
             }
         }
 
+        // ── Aplicamos cambios ───────────────────────────────────────────────
         if (shouldUpdatePrice) {
-            updateData.price = price;
-            updateData.original_price = previousOriginalPrice || price; // preservamos original si ya existía
+            updateData.price = price;  // el precio formateado que viene del scrape
+            updateData.original_price = previousOriginalPrice || price;
             updateData.prices_history = newPricesHistory;
             updateData.last_update = now;
         }
-        // ← Si NO hay precio nuevo → NO tocamos price, original_price, prices_history ni last_update
+        else if (newPricesHistory.length > previousPricesHistory.length) {
+            // Actualizamos historial aunque no cambie price (caso "volvió a original")
+            updateData.prices_history = newPricesHistory;
+            updateData.last_update = now;
+        }
 
         // ───────────────────────────────────────────────────────────────
         // Guardamos SOLO si hay algo que actualizar
         // ───────────────────────────────────────────────────────────────
-        if (Object.keys(updateData).length > 0) {
+        if (Object.keys(updateData).length > 0 || showSameAsOriginalToast) {
             if (isLoggedIn) {
                 const { error: updateErr } = await supabase
                     .from('affiliate_history')
@@ -407,6 +447,10 @@ export const fetchRealData = async (entry) => {
                         if (shouldUpdatePrice) {
                             final.price = price;
                             final.originalPrice = previousOriginalPrice || price;
+                            final.prices = newPricesHistory;
+                            final.lastUpdate = now;
+                        } else if (newPricesHistory.length > previousPricesHistory.length) {
+                            // Actualizamos historial y timestamp aunque no cambie price
                             final.prices = newPricesHistory;
                             final.lastUpdate = now;
                         }
@@ -811,148 +855,6 @@ export const importHistory = async (file, callback) => {
     reader.readAsText(file, "UTF-8");
 };
 
-// === FUNCIÓN PARA ACTUALIZACIÓN MANUAL DE PRECIOS (SOLO CUENTA ÉXITOS CON PRECIO NUEVO) ===
-export const updateOutdatedPricesManually = async () => {
-    // 1. Detectar si hay sesión activa
-    const { data: { user } } = await supabase.auth.getUser();
-    const isAuthenticated = !!user?.id;
-
-    // 2. Cargar el historial desde la fuente correcta
-    let history = [];
-    try {
-        if (isAuthenticated) {
-            history = await getUserHistory(500); // límite alto para no quedarnos cortos
-        } else {
-            history = getHistory();
-        }
-    } catch (err) {
-        console.error("Error al cargar historial para actualización de precios:", err);
-        return {
-            status: "error",
-            message: "No se pudo cargar el historial"
-        };
-    }
-
-    if (!history || history.length === 0) {
-        return {
-            status: "empty",
-            message: "No hay productos en el historial"
-        };
-    }
-
-    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-    const now = Date.now();
-
-    // Filtrar los que llevan más de 24h sin actualizar
-    const outdated = history.filter(item => {
-        const last = item.lastUpdate ? new Date(item.lastUpdate).getTime() : 0;
-        return now - last > TWENTY_FOUR_HOURS;
-    });
-
-    if (outdated.length === 0) {
-        return {
-            status: "up_to_date",
-            message: "Todos los precios están al día"
-        };
-    }
-
-    // Limitamos a 10 para no saturar la API en una sola pasada
-    const toUpdate = outdated.slice(0, 10);
-
-    let realSuccessCount = 0;
-    let attemptedCount = 0;
-    let consecutiveFailures = 0;
-    const MAX_CONSECUTIVE_FAILURES = 3;
-
-    for (const item of toUpdate) {
-        attemptedCount++;
-
-        // Pequeña espera entre peticiones para evitar bloqueos
-        if (attemptedCount > 1) {
-            await new Promise(resolve => setTimeout(resolve, 1800));
-        }
-
-        const previousPrice = item.price;
-
-        try {
-            await fetchRealData(item);
-            consecutiveFailures = 0;
-        } catch (err) {
-            console.warn(`Error actualizando ${item.asin} (${item.domain}):`, err.message);
-
-            const isNetworkError =
-                err.name === 'TypeError' && err.message.includes('Failed to fetch') ||
-                err.message.includes('net::ERR') ||
-                err.message.includes('CORS') ||
-                err.name === 'AbortError';
-
-            if (isNetworkError) {
-                consecutiveFailures++;
-            }
-
-            if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
-                console.warn("Cancelando actualización: múltiples fallos consecutivos de red/proxy");
-                window.dispatchEvent(new Event('amazon-history-updated'));
-                return {
-                    status: "proxy_failed",
-                    updated: realSuccessCount,
-                    attempted: attemptedCount,
-                    message: "Actualización cancelada por problemas graves con los proxies"
-                };
-            }
-
-            // Continuamos con el siguiente aunque uno falle
-            continue;
-        }
-
-        // 3. Comprobar si realmente cambió el precio → desde la fuente correcta
-        let updatedItem;
-        try {
-            if (isAuthenticated) {
-                const freshHistory = await getUserHistory(500);
-                updatedItem = freshHistory.find(
-                    h => h.asin === item.asin && h.domain === item.domain
-                );
-            } else {
-                const currentHistory = getHistory();
-                updatedItem = currentHistory.find(
-                    h => h.asin === item.asin && h.domain === item.domain
-                );
-            }
-        } catch (refreshErr) {
-            console.warn("No se pudo recargar historial para verificar cambio:", refreshErr);
-            continue;
-        }
-
-        if (updatedItem) {
-            const newPrice = updatedItem.price;
-
-            if (
-                (newPrice && !previousPrice) ||
-                (newPrice && previousPrice && newPrice !== previousPrice)
-            ) {
-                realSuccessCount++;
-            }
-        }
-    }
-
-    // Disparamos el evento para que History.jsx recargue desde la fuente correcta
-    window.dispatchEvent(new Event('amazon-history-updated'));
-
-    return {
-        status: "completed",
-        updated: realSuccessCount,
-        attempted: attemptedCount,
-        total: toUpdate.length,
-        hadAnySuccess: realSuccessCount > 0,
-        message: realSuccessCount === 0
-            ? "No se obtuvo precio nuevo en ningún producto"
-            : realSuccessCount === toUpdate.length
-                ? "Precios actualizados"
-                : `Precios actualizados en ${realSuccessCount} de ${toUpdate.length} productos`
-    };
-};
-
 // === FUNCIÓN PARA ACORTAR ENLACES CON SHORT.IO (tu subdominio amazon-dks.short.gy) ===
 export const shortenWithShortGy = async (longUrl, customSlug = null) => {
     try {
@@ -999,11 +901,11 @@ export const updateSelectedPrices = async (selectedIds) => {
     const { data: { user } } = await supabase.auth.getUser();
     const isAuthenticated = !!user?.id;
 
-    // 2. Cargar historial completo (necesitamos los items completos)
+    // 2. Cargar historial completo
     let history = [];
     try {
         if (isAuthenticated) {
-            history = await getUserHistory(1000); // límite alto
+            history = await getUserHistory(1000);
         } else {
             history = getHistory();
         }
@@ -1017,7 +919,7 @@ export const updateSelectedPrices = async (selectedIds) => {
         };
     }
 
-    // 3. Filtrar solo los items que coincidan con los IDs seleccionados
+    // 3. Filtrar solo los items seleccionados
     const toUpdate = history.filter(item => selectedIds.includes(item.id));
 
     if (toUpdate.length === 0) {
@@ -1029,10 +931,8 @@ export const updateSelectedPrices = async (selectedIds) => {
         };
     }
 
-    const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
-    const now = Date.now();
-
-    let realSuccessCount = 0;
+    let realSuccessCount = 0;           // Precio realmente cambiado
+    let sameAsOriginalCount = 0;        // Precio igual al original → mantenido manual
     let attemptedCount = 0;
     let consecutiveFailures = 0;
     const MAX_CONSECUTIVE_FAILURES = 3;
@@ -1046,15 +946,15 @@ export const updateSelectedPrices = async (selectedIds) => {
         }
 
         const previousPrice = item.price;
+        const previousOriginalPrice = item.originalPrice;
 
         try {
-            // Reutilizamos fetchRealData (que ya maneja Supabase o local)
             await fetchRealData(item);
             consecutiveFailures = 0;
         } catch (err) {
             console.warn(`Error actualizando ${item.asin} (${item.domain}):`, err.message);
 
-            const isNetworkError = 
+            const isNetworkError =
                 err.name === 'TypeError' && err.message.includes('Failed to fetch') ||
                 err.message.includes('net::ERR') ||
                 err.message.includes('CORS') ||
@@ -1076,7 +976,7 @@ export const updateSelectedPrices = async (selectedIds) => {
             continue;
         }
 
-        // Verificar si realmente cambió el precio
+        // Verificar resultado real después de actualizar
         let updatedItem;
         try {
             if (isAuthenticated) {
@@ -1093,11 +993,24 @@ export const updateSelectedPrices = async (selectedIds) => {
 
         if (updatedItem) {
             const newPrice = updatedItem.price;
+            const newOriginal = updatedItem.originalPrice;
+
+            // Caso 1: Precio realmente cambió
             if (
                 (newPrice && !previousPrice) ||
                 (newPrice && previousPrice && newPrice !== previousPrice)
             ) {
                 realSuccessCount++;
+                continue;
+            }
+
+            // Caso 2: Precio NO cambió, pero es porque coincide con el original y antes había manual distinto
+            if (
+                previousOriginalPrice &&
+                newPrice === previousOriginalPrice &&              // precio final = original
+                previousPrice && previousPrice !== previousOriginalPrice  // había manual distinto
+            ) {
+                sameAsOriginalCount++;
             }
         }
     }
@@ -1105,16 +1018,25 @@ export const updateSelectedPrices = async (selectedIds) => {
     // Disparamos evento para recargar UI
     window.dispatchEvent(new Event('amazon-history-updated'));
 
+    // ── Mensaje final inteligente ───────────────────────────────────────
+    let message = "";
+    let status = "completed";
+
+    if (realSuccessCount > 0) {
+        message = `Precio actualizado en ${realSuccessCount} de ${toUpdate.length} productos`;
+    } else if (sameAsOriginalCount > 0) {
+        message = `En ${sameAsOriginalCount} producto el precio coincide con el original.`;
+    } else {
+        message = "No hay cambios de precio en los productos.";
+    }
+
     return {
-        status: "completed",
+        status,
         updated: realSuccessCount,
+        sameAsOriginal: sameAsOriginalCount,
         attempted: attemptedCount,
         total: toUpdate.length,
-        hadAnySuccess: realSuccessCount > 0,
-        message: realSuccessCount === 0
-            ? "No se obtuvieron nuevos precios"
-            : realSuccessCount === toUpdate.length
-                ? "Precios actualizados"
-                : `Precios actualizados en ${realSuccessCount} de ${toUpdate.length} seleccionados`
+        hadAnySuccess: realSuccessCount > 0 || sameAsOriginalCount > 0,
+        message
     };
 };

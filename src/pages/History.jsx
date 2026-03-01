@@ -1867,119 +1867,263 @@ export default function HistoryPage() {
             <div className="min-h-screen bg-gradient-to-b separacionArriba max-w-[1200px] mx-auto">
                 <div className="flex flex-col md:flex-row gap-4 pt-4">
                     {/* Sidebar for filters - hidden on mobile, shown on md+ */}
-                    <div className={`
-                    hidden
-                    lg:block
-                    md:w-64 lg:w-72
-                    bg-white border border-slate-200 contenedorCosas shadow-sm contenedorCosas
-                    self-start
-                    fixed
-                    stickyFilter
-                    z-20
-                    max-h-[calc(100vh-3rem)]
-                    overflow-y-auto
-                    animate-fade-in-up
-                    sidebar-fixed
-                    max-[1308px]:!hidden
-                    `}>
-                        <div className="p-4 border-b text-lg font-semibold text-slate-800 bg-white sticky top-0 z-10">
-                            Filtros
-                        </div>
 
-                        <div className="space-y-0">
-                            <Accordion
-                                id="precio"
-                                title={
-                                    <div className="flex items-center gap-2">
-                                        <Euro className="w-4 h-4 font-bold" />
-                                        <span className="font-bold">Precio</span>
-                                    </div>
-                                }
-                                defaultOpen={false}
-                            >
-                                <div className="space-y-4 pt-2">
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                            <span className="text-slate-400 text-sm font-medium">Desde</span>
-                                        </div>
-                                        <input
-                                            type="text"
-                                            placeholder=""
-                                            value={filters.priceMin}
-                                            onChange={(e) => setFilters({ ...filters, priceMin: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
-                                            className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
-                                           text-slate-900 placeholder-slate-400
-                                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
-                                           transition-all duration-200"
-                                        />
-                                        <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                                            <span className="text-slate-400 text-xs">€</span>
-                                        </div>
+                    <div
+                        className={`
+                        hidden lg:block
+                        md:w-64 lg:w-72
+                        bg-white border border-slate-200 shadow-sm
+                        self-start fixed
+                        stickyFilter z-20
+                        max-h-[calc(100vh-3rem)]
+                        overflow-y-auto
+                        animate-fade-in-up
+                        sidebar-fixed
+                        max-[1308px]:!hidden
+                        contenedorCosas
+                      `}
+                    >
+                        <div className="relative h-full">
+                            {/* Overlay + mensaje cuando NO hay sesión iniciada */}
+                            {!isAuthenticated && (
+                                <div className="
+                                absolute inset-0 z-30
+                                bg-white/55 backdrop-blur-sm
+                                flex flex-col
+                              ">
+                                    {/* Título con border-bottom, igual que el normal */}
+                                    <div className="
+                                  p-4 border-b border-slate-200
+                                  text-lg font-semibold text-slate-800
+                                  bg-white/90 sticky top-0 z-10
+                                ">
+                                        Filtros
                                     </div>
 
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                            <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                    {/* Contenido centrado vertical y horizontal */}
+                                    <div className="
+                                  flex-1 flex -mt-10  flex-col items-center justify-center text-center
+                                ">
+                                        {/* Icono de candado grande */}
+                                        <div className="
+                                          w-16 h-16 contenedorCosas 
+                                          bg-gradient-to-br from-violet-50 to-violet-100 
+                                          flex items-center justify-center 
+                                          mb-3 
+                                          shadow-md ring-1 ring-violet-200/30
+                                          transition-all duration-200 hover:shadow-lg hover:ring-violet-300/50
+                                        ">
+                                            <svg
+                                                className="w-9 h-9 text-violet-600/90"
+                                                fill="none"
+                                                stroke="currentColor"
+                                                viewBox="0 0 24 24"
+                                                strokeWidth="1.8"
+                                                strokeLinecap="round"
+                                                strokeLinejoin="round"
+                                            >
+                                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                                <path d="M7 11V7a5 5 0 0110 0v4" />
+                                            </svg>
                                         </div>
-                                        <input
-                                            type="text"
-                                            placeholder=""
-                                            value={filters.priceMax}
-                                            onChange={(e) => setFilters({ ...filters, priceMax: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
-                                            className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
-                                           text-slate-900 placeholder-slate-400
-                                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
-                                             transition-all duration-200"
-                                        />
-                                        <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                                            <span className="text-slate-400 text-xs">€</span>
-                                        </div>
+
+                                        {/* Texto principal */}
+                                        <p className="text-base font-medium text-slate-700 leading-relaxed max-w-[280px]">
+                                            Inicia sesión y accede a todos los filtros avanzados.
+                                        </p>
                                     </div>
                                 </div>
-                            </Accordion>
+                            )}
 
-                            <Accordion
-                                id="dominio"
-                                title={
-                                    <div className="flex items-center gap-2">
-                                        <Globe className="w-4 h-4 text-slate-500" />
-                                        <span className="font-bold">Dominio</span>
-                                    </div>
-                                }
-                                defaultOpen={false}
-                            >
-                                <div className="max-h-48 overflow-y-auto">
-                                    {uniqueDomains.map((dom) => (
-                                        <label
-                                            key={dom}
-                                            className="flex items-center justify-between gap-3 py-2 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
-                                        >
-                                            {/* Texto + icono a la izquierda */}
-                                            <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                                                <span className="text-sm text-slate-700 truncate group-hover:text-violet-700 transition-colors">
-                                                    {dom}
-                                                </span>
+                            {/* Contenido real – se difumina y desactiva cuando no hay auth */}
+                            <div className={`transition-all duration-300 ${!isAuthenticated ? 'blur-sm pointer-events-none' : ''}`}>
+                                <div className="p-4 border-b text-lg font-semibold text-slate-800 bg-white sticky top-0 z-10">
+                                    Filtros
+                                </div>
+
+                                <div className="space-y-0">
+                                    <Accordion
+                                        id="precio"
+                                        title={
+                                            <div className="flex items-center gap-2">
+                                                <Euro className="w-4 h-4 font-bold" />
+                                                <span className="font-bold">Precio</span>
+                                            </div>
+                                        }
+                                        defaultOpen={false}
+                                    >
+                                        <div className="space-y-4 pt-2">
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-sm font-medium">Desde</span>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder=""
+                                                    value={filters.priceMin}
+                                                    onChange={(e) =>
+                                                        setFilters({
+                                                            ...filters,
+                                                            priceMin: e.target.value.replace(/[^0-9.,]/g, "").replace(".", ","),
+                                                        })
+                                                    }
+                                                    className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 placeholder-slate-400 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200"
+                                                />
+                                                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-xs">€</span>
+                                                </div>
                                             </div>
 
-                                            {/* Checkbox a la derecha */}
-                                            <div className="relative flex items-center justify-center shrink-0">
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder=""
+                                                    value={filters.priceMax}
+                                                    onChange={(e) =>
+                                                        setFilters({
+                                                            ...filters,
+                                                            priceMax: e.target.value.replace(/[^0-9.,]/g, "").replace(".", ","),
+                                                        })
+                                                    }
+                                                    className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 placeholder-slate-400 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200"
+                                                />
+                                                <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-xs">€</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Accordion>
+
+                                    <Accordion
+                                        id="dominio"
+                                        title={
+                                            <div className="flex items-center gap-2">
+                                                <Globe className="w-4 h-4 text-slate-500" />
+                                                <span className="font-bold">Dominio</span>
+                                            </div>
+                                        }
+                                        defaultOpen={false}
+                                    >
+                                        <div className="max-h-48 overflow-y-auto">
+                                            {uniqueDomains.map((dom) => (
+                                                <label
+                                                    key={dom}
+                                                    className="flex items-center justify-between gap-3 py-2 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
+                                                >
+                                                    <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                                        <span className="text-sm text-slate-700 truncate group-hover:text-violet-700 transition-colors">
+                                                            {dom}
+                                                        </span>
+                                                    </div>
+                                                    <div className="relative flex items-center justify-center shrink-0">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={filters.domains.includes(dom)}
+                                                            onChange={(e) => {
+                                                                const newDomains = e.target.checked
+                                                                    ? [...filters.domains, dom]
+                                                                    : filters.domains.filter((d) => d !== dom);
+                                                                setFilters({ ...filters, domains: newDomains });
+                                                            }}
+                                                            className="w-5 h-5 contenedorCosas border-2 border-slate-300 text-violet-600 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
+                                                        />
+                                                        {filters.domains.includes(dom) && (
+                                                            <Check
+                                                                className="absolute w-4 h-4 text-white pointer-events-none"
+                                                                strokeWidth={3}
+                                                            />
+                                                        )}
+                                                    </div>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </Accordion>
+
+                                    <Accordion
+                                        id="fechas"
+                                        title={
+                                            <div className="flex items-center gap-2">
+                                                <Calendar className="w-4 h-4 text-slate-500" />
+                                                <span className="font-bold">Fechas</span>
+                                            </div>
+                                        }
+                                        defaultOpen={false}
+                                    >
+                                        <div className="space-y-4 pt-2">
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-sm font-medium">Desde</span>
+                                                </div>
+                                                <input
+                                                    type="date"
+                                                    value={filters.dateFrom}
+                                                    onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                                                    className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200 [color-scheme:light]"
+                                                />
+                                            </div>
+
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                    <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                                </div>
+                                                <input
+                                                    type="date"
+                                                    value={filters.dateTo}
+                                                    onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                                                    className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200 [color-scheme:light]"
+                                                />
+                                            </div>
+                                        </div>
+                                    </Accordion>
+
+                                    <Accordion
+                                        id="etiquetas"
+                                        title={
+                                            <div className="flex items-center gap-2">
+                                                <Tag className="w-4 h-4 text-slate-500" />
+                                                <span className="font-bold">Etiquetas</span>
+                                            </div>
+                                        }
+                                        defaultOpen={false}
+                                    >
+                                        <div className="py-0 flex items-center justify-center">
+                                            <button
+                                                type="button"
+                                                className="
+                flex items-center justify-center
+                w-10 h-10 contenedorCosas
+                bg-violet-100 hover:bg-violet-200
+                text-violet-600 hover:text-violet-800
+                transition-all duration-200
+                shadow-sm hover:shadow
+                focus:outline-none
+              "
+                                                title="Añadir nueva etiqueta"
+                                            >
+                                                <Plus className="w-6 h-6" strokeWidth={2.5} />
+                                            </button>
+                                        </div>
+                                    </Accordion>
+
+                                    <div className="px-4 py-3">
+                                        <label className="flex items-center justify-between gap-3 cursor-pointer group select-none">
+                                            <div className="flex items-center gap-2.5">
+                                                <Percent className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
+                                                <span className="text-sm font-bold text-slate-700 group-hover:text-violet-700 transition-colors">
+                                                    Con descuento
+                                                </span>
+                                            </div>
+                                            <div className="relative flex items-center justify-center">
                                                 <input
                                                     type="checkbox"
-                                                    checked={filters.domains.includes(dom)}
-                                                    onChange={(e) => {
-                                                        const newDomains = e.target.checked
-                                                            ? [...filters.domains, dom]
-                                                            : filters.domains.filter(d => d !== dom);
-                                                        setFilters({ ...filters, domains: newDomains });
-                                                    }}
-                                                    className="w-5 h-5 contenedorCosas border-2 border-slate-300 
-                                               text-violet-600 
-                                               checked:bg-violet-600 checked:border-violet-600 
-                                               transition-all duration-200 cursor-pointer
-                                               appearance-none
-                                               group-hover:border-violet-400"
+                                                    checked={filters.onlyDiscounts || false}
+                                                    onChange={(e) => setFilters({ ...filters, onlyDiscounts: e.target.checked })}
+                                                    className="w-5 h-5 contenedorCosas border-2 border-slate-300 text-violet-600 focus:ring-violet-400 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
                                                 />
-                                                {filters.domains.includes(dom) && (
+                                                {filters.onlyDiscounts && (
                                                     <Check
                                                         className="absolute w-4 h-4 text-white pointer-events-none"
                                                         strokeWidth={3}
@@ -1987,163 +2131,48 @@ export default function HistoryPage() {
                                                 )}
                                             </div>
                                         </label>
-                                    ))}
-                                </div>
-                            </Accordion>
-
-                            <Accordion
-                                id="fechas"
-                                title={
-                                    <div className="flex items-center gap-2">
-                                        <Calendar className="w-4 h-4 text-slate-500" />
-                                        <span className="font-bold">Fechas</span>
-                                    </div>
-                                }
-                                defaultOpen={false}
-                            >
-                                <div className="space-y-4 pt-2">
-                                    {/* Desde */}
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                            <span className="text-slate-400 text-sm font-medium">Desde</span>
-                                        </div>
-                                        <input
-                                            type="date"
-                                            value={filters.dateFrom}
-                                            onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-                                            className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
-                                           text-slate-900
-                                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
-                                           transition-all duration-200
-                                           [color-scheme:light]"
-                                        />
                                     </div>
 
-                                    {/* Hasta */}
-                                    <div className="relative">
-                                        <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                            <span className="text-slate-400 text-sm font-medium">Hasta</span>
-                                        </div>
-                                        <input
-                                            type="date"
-                                            value={filters.dateTo}
-                                            onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-                                            className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas
-                                           text-slate-900
-                                           focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm
-                                           transition-all duration-200
-                                           [color-scheme:light]"
-                                        />
+                                    <div className="px-4 pt-4">
+                                        <button
+                                            onClick={() => {
+                                                setSelectedItemsForUpdate(new Set());
+                                                setShowPriceUpdateSelector(true);
+                                            }}
+                                            disabled={isUpdatingPrices || history.length === 0 || isLoading}
+                                            className={`
+              w-full flex items-center justify-center gap-2
+              py-2.5 px-4 contenedorCosas text-sm font-medium
+              transition-all duration-200
+              bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200
+              hover:shadow-sm active:scale-[0.98]
+              disabled:opacity-50 disabled:cursor-not-allowed
+            `}
+                                        >
+                                            <RefreshCw className="w-4 h-4" />
+                                            Actualizar precios
+                                        </button>
+                                    </div>
+
+                                    <div className="px-4 py-4">
+                                        <button
+                                            onClick={clearFilters}
+                                            disabled={!Object.values(filters).some((v) => (Array.isArray(v) ? v.length > 0 : !!v))}
+                                            className={`
+              w-full flex items-center justify-center gap-2
+              py-2.5 px-2.5 contenedorCosas text-sm font-medium
+              transition-all duration-200
+              ${Object.values(filters).some((v) => (Array.isArray(v) ? v.length > 0 : !!v))
+                                                    ? "bg-violet-100 text-violet-700 hover:bg-violet-200 border border-violet-200"
+                                                    : "bg-slate-50 text-slate-400 cursor-not-allowed"
+                                                }
+            `}
+                                        >
+                                            <X className="w-4 h-4" />
+                                            Limpiar filtros
+                                        </button>
                                     </div>
                                 </div>
-                            </Accordion>
-
-                            <Accordion
-                                id="etiquetas"
-                                title={
-                                    <div className="flex items-center gap-2">
-                                        <Tag className="w-4 h-4 text-slate-500" />
-                                        <span className="font-bold">Etiquetas</span>
-                                    </div>
-                                }
-                                defaultOpen={false}
-                            >
-                                <div className="py-0 flex items-center justify-center">
-                                    <button
-                                        type="button"
-                                        className="
-                                        flex items-center justify-center
-                                        w-10 h-10 contenedorCosas
-                                        bg-violet-100 hover:bg-violet-200
-                                        text-violet-600 hover:text-violet-800
-                                        transition-all duration-200
-                                        shadow-sm hover:shadow
-                                        focus:outline-none
-                                    "
-                                        title="Añadir nueva etiqueta"
-
-                                    >
-                                        <Plus className="w-6 h-6" strokeWidth={2.5} />
-                                    </button>
-                                </div>
-                            </Accordion>
-
-                            <div className="px-4 py-3">
-                                <label className="flex items-center justify-between gap-3 cursor-pointer group select-none">
-                                    {/* Texto + icono a la izquierda */}
-                                    <div className="flex items-center gap-2.5">
-                                        <Percent className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
-                                        <span className="text-sm font-bold text-slate-700 group-hover:text-violet-700 transition-colors">
-                                            Con descuento
-                                        </span>
-                                    </div>
-
-                                    {/* Checkbox a la derecha del todo */}
-                                    <div className="relative flex items-center justify-center">
-                                        <input
-                                            type="checkbox"
-                                            checked={filters.onlyDiscounts || false}
-                                            onChange={(e) => setFilters({ ...filters, onlyDiscounts: e.target.checked })}
-                                            className="w-5 h-5 contenedorCosas border-2 border-slate-300 
-                                           text-violet-600  focus:ring-violet-400
-                                           checked:bg-violet-600 checked:border-violet-600 
-                                           transition-all duration-200 cursor-pointer
-                                           appearance-none
-                                           group-hover:border-violet-400"
-                                        />
-                                        {/* Check personalizado cuando está marcado */}
-                                        {filters.onlyDiscounts && (
-                                            <Check
-                                                className="absolute w-4 h-4 text-white pointer-events-none"
-                                                strokeWidth={3}
-                                            />
-                                        )}
-                                    </div>
-                                </label>
-                            </div>
-
-                            <div className="px-4 pt-4">
-                                <button
-                                    onClick={() => {
-                                        setSelectedItemsForUpdate(new Set());
-                                        setShowPriceUpdateSelector(true);
-                                    }}
-                                    disabled={isUpdatingPrices || history.length === 0 || isLoading}
-                                    className={`
-                                    w-full flex items-center justify-center gap-2
-                                    py-2.5 px-4 contenedorCosas text-sm font-medium
-                                    transition-all duration-200
-                                    bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200
-                                    hover:shadow-sm active:scale-[0.98]
-                                    disabled:opacity-50 disabled:cursor-not-allowed
-                                `}
-                                >
-                                    <RefreshCw className="w-4 h-4" />
-                                    Actualizar precios
-                                </button>
-                            </div>
-
-                            <div className="px-4 py-4">
-                                <button
-                                    onClick={clearFilters}
-                                    disabled={
-                                        !Object.values(filters).some(v =>
-                                            (Array.isArray(v) ? v.length > 0 : !!v)
-                                        )
-                                    }
-                                    className={`
-                                          w-full flex items-center justify-center gap-2
-                                          py-2.5 px-2.5 contenedorCosas text-sm font-medium
-                                          transition-all duration-200
-                                          ${Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))
-                                            ? 'bg-violet-100 text-violet-700 hover:bg-violet-200 border border-violet-200'
-                                            : 'bg-slate-50 text-slate-400 cursor-not-allowed'
-                                        }
-    `}
-                                >
-                                    <X className="w-4 h-4" />
-                                    Limpiar filtros
-                                </button>
                             </div>
                         </div>
                     </div>
@@ -2161,13 +2190,13 @@ export default function HistoryPage() {
                                 {/* Botón flotante */}
                                 <div
                                     className={`
-          fixed bottom-6 left-6 z-[41] 
-          transition-all duration-700 ease-out
-          ${shouldShowButton
+                                          fixed bottom-6 left-6 z-[41] 
+                                          transition-all duration-700 ease-out
+                                          ${shouldShowButton
                                             ? 'translate-y-0 opacity-100 pointer-events-auto'
                                             : 'translate-y-12 opacity-0 pointer-events-none'
                                         }
-        `}
+                                        `}
                                 >
                                     <button
                                         onClick={() => setShowMobileSidebar(!showMobileSidebar)}
@@ -2201,258 +2230,319 @@ export default function HistoryPage() {
                                 </div>
 
                                 {/* Drawer (portal) */}
+                                {/* Drawer (portal) */}
                                 {shouldRenderSidebar && createPortal(
                                     <div className="fixed inset-0 z-40">
                                         {/* Backdrop con fade */}
                                         <div
                                             className={`
-                                              absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-400
-                                              ${showMobileSidebar ? 'opacity-100' : 'opacity-0 pointer-events-none'}
-                                            `}
+        absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity duration-400
+        ${showMobileSidebar ? 'opacity-100' : 'opacity-0 pointer-events-none'}
+      `}
                                             onClick={() => setShowMobileSidebar(false)}
                                         />
 
                                         {/* Sidebar drawer */}
                                         <div
                                             className={`
-                                              absolute top-0 bottom-0 left-0 w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto
-                                              animate__animated
-                                              ${showMobileSidebar ? 'animate__slideInLeft' : 'animate__slideOutLeft'}
-                                            `}
+        absolute top-0 bottom-0 left-0 w-80 max-w-[85vw] bg-white shadow-2xl overflow-y-auto
+        animate__animated
+        ${showMobileSidebar ? 'animate__slideInLeft' : 'animate__slideOutLeft'}
+      `}
                                             style={{ animationDuration: '0.4s' }}
                                         >
-                                            {/* Cabecera */}
-                                            <div className="p-4 border-b bg-white sticky top-0 z-10 flex justify-between items-center">
-                                                <span className="text-lg font-semibold text-slate-800">Filtros</span>
-                                                <button
-                                                    onClick={() => setShowMobileSidebar(false)}
-                                                    className="p-0 text-slate-600 hover:text-slate-900"
-                                                >
-                                                    <X className="w-6 h-6" />
-                                                </button>
-                                            </div>
-
-                                            {/* Contenido de filtros (idéntico al del sidebar fijo) */}
-                                            <div className="space-y-0">
-                                                {/* Precio */}
-                                                <Accordion
-                                                    id="precio"
-                                                    title={
-                                                        <div className="flex items-center gap-2">
-                                                            <Euro className="w-4 h-4 font-bold" />
-                                                            <span className="font-bold">Precio</span>
-                                                        </div>
-                                                    }
-                                                    defaultOpen={true}
-                                                >
-                                                    <div className="space-y-4 pt-2">
-                                                        <div className="relative">
-                                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                                <span className="text-slate-400 text-sm font-medium">Desde</span>
-                                                            </div>
-                                                            <input
-                                                                type="text"
-                                                                placeholder=""
-                                                                value={filters.priceMin}
-                                                                onChange={(e) => setFilters({ ...filters, priceMin: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
-                                                                className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 placeholder-slate-400 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200"
-                                                            />
-                                                            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                                                                <span className="text-slate-400 text-xs">€</span>
-                                                            </div>
+                                            {/* Contenedor relativo → necesario para posicionar el overlay absolute */}
+                                            <div className="relative h-full">
+                                                {/* Overlay de bloqueo cuando NO hay sesión iniciada */}
+                                                {!isAuthenticated && (
+                                                    <div className="
+            absolute inset-0 z-30
+            bg-white/55 backdrop-blur-sm
+            flex flex-col
+          ">
+                                                        {/* Título con border-bottom, igual que el normal */}
+                                                        <div className="
+              p-4 border-b border-slate-200
+              text-lg font-semibold text-slate-800
+              bg-white/90 sticky top-0 z-10
+            ">
+                                                            Filtros
                                                         </div>
 
-                                                        <div className="relative">
-                                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                                <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                                        {/* Contenido centrado vertical y horizontal */}
+                                                        <div className="
+              flex-1 flex flex-col items-center justify-center text-center
+            ">
+                                                            {/* Icono de candado */}
+                                                            <div className="
+                w-16 h-16 contenedorCosas 
+                bg-gradient-to-br from-violet-50 to-violet-100 
+                flex items-center justify-center 
+                mb-6 
+                shadow-md ring-1 ring-violet-200/30
+                transition-all duration-200 hover:shadow-lg hover:ring-violet-300/50
+              ">
+                                                                <svg
+                                                                    className="w-9 h-9 text-violet-600/90"
+                                                                    fill="none"
+                                                                    stroke="currentColor"
+                                                                    viewBox="0 0 24 24"
+                                                                    strokeWidth="1.8"
+                                                                    strokeLinecap="round"
+                                                                    strokeLinejoin="round"
+                                                                >
+                                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                                                    <path d="M7 11V7a5 5 0 0110 0v4" />
+                                                                </svg>
                                                             </div>
-                                                            <input
-                                                                type="text"
-                                                                placeholder=""
-                                                                value={filters.priceMax}
-                                                                onChange={(e) => setFilters({ ...filters, priceMax: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
-                                                                className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 placeholder-slate-400 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200"
-                                                            />
-                                                            <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
-                                                                <span className="text-slate-400 text-xs">€</span>
-                                                            </div>
+
+                                                            {/* Texto principal */}
+                                                            <p className="
+                text-base font-medium text-slate-700 
+                leading-relaxed max-w-[280px]
+              ">
+                                                                Inicia sesión y accede a todos los filtros avanzados.
+                                                            </p>
                                                         </div>
                                                     </div>
-                                                </Accordion>
+                                                )}
 
-                                                {/* Dominio */}
-                                                <Accordion
-                                                    id="dominio"
-                                                    title={
-                                                        <div className="flex items-center gap-2">
-                                                            <Globe className="w-4 h-4 text-slate-500" />
-                                                            <span className="font-bold">Dominio</span>
-                                                        </div>
-                                                    }
-                                                    defaultOpen={false}
-                                                >
-                                                    <div className="space-y-1 max-h-48 overflow-y-auto">
-                                                        {uniqueDomains.map((dom) => (
-                                                            <label
-                                                                key={dom}
-                                                                className="flex items-center justify-between gap-3 py-2 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
-                                                            >
-                                                                <div className="flex items-center gap-2.5 flex-1 min-w-0">
-                                                                    <span className="text-sm text-slate-700 truncate group-hover:text-violet-700 transition-colors">
-                                                                        {dom}
+                                                {/* Contenido real de filtros – se difumina y desactiva si no autenticado */}
+                                                <div className={`transition-all duration-300 ${!isAuthenticated ? 'blur-sm pointer-events-none' : ''}`}>
+                                                    {/* Cabecera */}
+                                                    <div className="p-4 border-b bg-white sticky top-0 z-10 flex justify-between items-center">
+                                                        <span className="text-lg font-semibold text-slate-800">Filtros</span>
+                                                        <button
+                                                            onClick={() => setShowMobileSidebar(false)}
+                                                            className="p-0 text-slate-600 hover:text-slate-900"
+                                                        >
+                                                            <X className="w-6 h-6" />
+                                                        </button>
+                                                    </div>
+
+                                                    {/* Contenido de filtros (idéntico al del sidebar fijo) */}
+                                                    <div className="space-y-0">
+                                                        {/* Precio */}
+                                                        <Accordion
+                                                            id="precio"
+                                                            title={
+                                                                <div className="flex items-center gap-2">
+                                                                    <Euro className="w-4 h-4 font-bold" />
+                                                                    <span className="font-bold">Precio</span>
+                                                                </div>
+                                                            }
+                                                            defaultOpen={true}
+                                                        >
+                                                            <div className="space-y-4 pt-2">
+                                                                <div className="relative">
+                                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                                        <span className="text-slate-400 text-sm font-medium">Desde</span>
+                                                                    </div>
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder=""
+                                                                        value={filters.priceMin}
+                                                                        onChange={(e) => setFilters({ ...filters, priceMin: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
+                                                                        className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 placeholder-slate-400 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200"
+                                                                    />
+                                                                    <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                                                                        <span className="text-slate-400 text-xs">€</span>
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="relative">
+                                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                                        <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                                                    </div>
+                                                                    <input
+                                                                        type="text"
+                                                                        placeholder=""
+                                                                        value={filters.priceMax}
+                                                                        onChange={(e) => setFilters({ ...filters, priceMax: e.target.value.replace(/[^0-9.,]/g, '').replace('.', ',') })}
+                                                                        className="w-full pl-32 pr-10 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 placeholder-slate-400 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200"
+                                                                    />
+                                                                    <div className="absolute inset-y-0 right-0 pr-3.5 flex items-center pointer-events-none">
+                                                                        <span className="text-slate-400 text-xs">€</span>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </Accordion>
+
+                                                        {/* Dominio */}
+                                                        <Accordion
+                                                            id="dominio"
+                                                            title={
+                                                                <div className="flex items-center gap-2">
+                                                                    <Globe className="w-4 h-4 text-slate-500" />
+                                                                    <span className="font-bold">Dominio</span>
+                                                                </div>
+                                                            }
+                                                            defaultOpen={false}
+                                                        >
+                                                            <div className="space-y-1 max-h-48 overflow-y-auto">
+                                                                {uniqueDomains.map((dom) => (
+                                                                    <label
+                                                                        key={dom}
+                                                                        className="flex items-center justify-between gap-3 py-2 contenedorCosas cursor-pointer transition-all duration-200 group select-none"
+                                                                    >
+                                                                        <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                                                                            <span className="text-sm text-slate-700 truncate group-hover:text-violet-700 transition-colors">
+                                                                                {dom}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="relative flex items-center justify-center shrink-0">
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={filters.domains.includes(dom)}
+                                                                                onChange={(e) => {
+                                                                                    const newDomains = e.target.checked
+                                                                                        ? [...filters.domains, dom]
+                                                                                        : filters.domains.filter(d => d !== dom);
+                                                                                    setFilters({ ...filters, domains: newDomains });
+                                                                                }}
+                                                                                className="w-5 h-5 rounded-md border-2 border-slate-300 text-violet-600 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
+                                                                            />
+                                                                            {filters.domains.includes(dom) && (
+                                                                                <Check className="absolute w-4 h-4 text-white pointer-events-none" strokeWidth={3} />
+                                                                            )}
+                                                                        </div>
+                                                                    </label>
+                                                                ))}
+                                                            </div>
+                                                        </Accordion>
+
+                                                        {/* Fechas */}
+                                                        <Accordion
+                                                            id="fechas"
+                                                            title={
+                                                                <div className="flex items-center gap-2">
+                                                                    <Calendar className="w-4 h-4 text-slate-500" />
+                                                                    <span className="font-bold">Fechas</span>
+                                                                </div>
+                                                            }
+                                                            defaultOpen={false}
+                                                        >
+                                                            <div className="space-y-4 pt-2">
+                                                                <div className="relative">
+                                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                                        <span className="text-slate-400 text-sm font-medium">Desde</span>
+                                                                    </div>
+                                                                    <input
+                                                                        type="date"
+                                                                        value={filters.dateFrom}
+                                                                        onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
+                                                                        className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200 [color-scheme:light]"
+                                                                    />
+                                                                </div>
+
+                                                                <div className="relative">
+                                                                    <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
+                                                                        <span className="text-slate-400 text-sm font-medium">Hasta</span>
+                                                                    </div>
+                                                                    <input
+                                                                        type="date"
+                                                                        value={filters.dateTo}
+                                                                        onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
+                                                                        className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200 [color-scheme:light]"
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </Accordion>
+
+                                                        {/* Etiquetas */}
+                                                        <Accordion
+                                                            id="etiquetas"
+                                                            title={
+                                                                <div className="flex items-center gap-2">
+                                                                    <Tag className="w-4 h-4 text-slate-500" />
+                                                                    <span className="font-bold">Etiquetas</span>
+                                                                </div>
+                                                            }
+                                                            defaultOpen={false}
+                                                        >
+                                                            <div className="py-0 flex items-center justify-center">
+                                                                <button
+                                                                    type="button"
+                                                                    className="
+                    flex items-center justify-center
+                    w-10 h-10 contenedorCosas
+                    bg-violet-100 hover:bg-violet-200
+                    text-violet-600 hover:text-violet-800
+                    transition-all duration-200
+                    shadow-sm hover:shadow
+                    focus:outline-none
+                  "
+                                                                    title="Añadir nueva etiqueta"
+                                                                >
+                                                                    <Plus className="w-6 h-6" strokeWidth={2.5} />
+                                                                </button>
+                                                            </div>
+                                                        </Accordion>
+
+                                                        {/* Con descuento */}
+                                                        <div className="px-4 py-3">
+                                                            <label className="flex items-center justify-between gap-3 cursor-pointer group select-none py-2.5 transition-all duration-200">
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <Percent className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
+                                                                    <span className="text-sm font-bold text-slate-700 group-hover:text-violet-700 transition-colors">
+                                                                        Con descuento
                                                                     </span>
                                                                 </div>
-                                                                <div className="relative flex items-center justify-center shrink-0">
+                                                                <div className="relative flex items-center justify-center">
                                                                     <input
                                                                         type="checkbox"
-                                                                        checked={filters.domains.includes(dom)}
-                                                                        onChange={(e) => {
-                                                                            const newDomains = e.target.checked
-                                                                                ? [...filters.domains, dom]
-                                                                                : filters.domains.filter(d => d !== dom);
-                                                                            setFilters({ ...filters, domains: newDomains });
-                                                                        }}
+                                                                        checked={filters.onlyDiscounts || false}
+                                                                        onChange={(e) => setFilters({ ...filters, onlyDiscounts: e.target.checked })}
                                                                         className="w-5 h-5 rounded-md border-2 border-slate-300 text-violet-600 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
                                                                     />
-                                                                    {filters.domains.includes(dom) && (
+                                                                    {filters.onlyDiscounts && (
                                                                         <Check className="absolute w-4 h-4 text-white pointer-events-none" strokeWidth={3} />
                                                                     )}
                                                                 </div>
                                                             </label>
-                                                        ))}
+                                                        </div>
+
+                                                        {/* Botones de acción */}
+                                                        <div className="px-4 pt-4">
+                                                            <button
+                                                                onClick={() => {
+                                                                    setSelectedItemsForUpdate(new Set());
+                                                                    setShowPriceUpdateSelector(true);
+                                                                }}
+                                                                disabled={isUpdatingPrices || history.length === 0 || isLoading}
+                                                                className={`
+                  w-full flex items-center justify-center gap-2
+                  py-2.5 px-4 contenedorCosas text-sm font-medium
+                  transition-all duration-200
+                  bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200
+                  hover:shadow-sm active:scale-[0.98]
+                  disabled:opacity-50 disabled:cursor-not-allowed
+                `}
+                                                            >
+                                                                <RefreshCw className="w-4 h-4" />
+                                                                Actualizar precios
+                                                            </button>
+                                                        </div>
+
+                                                        <div className="px-4 py-4">
+                                                            <button
+                                                                onClick={clearFilters}
+                                                                disabled={!Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))}
+                                                                className={`
+                  w-full flex items-center justify-center gap-2
+                  py-2.5 px-2.5 contenedorCosas text-sm font-medium
+                  transition-all duration-200
+                  ${Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))
+                                                                        ? 'bg-violet-100 text-violet-700 hover:bg-violet-200 border border-violet-200'
+                                                                        : 'bg-slate-50 text-slate-400 cursor-not-allowed'
+                                                                    }
+                `}
+                                                            >
+                                                                <X className="w-4 h-4" />
+                                                                Limpiar filtros
+                                                            </button>
+                                                        </div>
                                                     </div>
-                                                </Accordion>
-
-                                                {/* Fechas */}
-                                                <Accordion
-                                                    id="fechas"
-                                                    title={
-                                                        <div className="flex items-center gap-2">
-                                                            <Calendar className="w-4 h-4 text-slate-500" />
-                                                            <span className="font-bold">Fechas</span>
-                                                        </div>
-                                                    }
-                                                    defaultOpen={false}
-                                                >
-                                                    <div className="space-y-4 pt-2">
-                                                        <div className="relative">
-                                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                                <span className="text-slate-400 text-sm font-medium">Desde</span>
-                                                            </div>
-                                                            <input
-                                                                type="date"
-                                                                value={filters.dateFrom}
-                                                                onChange={(e) => setFilters({ ...filters, dateFrom: e.target.value })}
-                                                                className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200 [color-scheme:light]"
-                                                            />
-                                                        </div>
-
-                                                        <div className="relative">
-                                                            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none">
-                                                                <span className="text-slate-400 text-sm font-medium">Hasta</span>
-                                                            </div>
-                                                            <input
-                                                                type="date"
-                                                                value={filters.dateTo}
-                                                                onChange={(e) => setFilters({ ...filters, dateTo: e.target.value })}
-                                                                className="w-full pl-20 pr-4 py-2.5 text-sm bg-slate-50/70 border border-slate-300 contenedorCosas text-slate-900 focus:bg-white focus:border-violet-500 focus:ring-1 focus:ring-violet-700 focus:shadow-sm transition-all duration-200 [color-scheme:light]"
-                                                            />
-                                                        </div>
-                                                    </div>
-                                                </Accordion>
-
-                                                {/* Etiquetas */}
-                                                <Accordion
-                                                    id="etiquetas"
-                                                    title={
-                                                        <div className="flex items-center gap-2">
-                                                            <Tag className="w-4 h-4 text-slate-500" />
-                                                            <span className="font-bold">Etiquetas</span>
-                                                        </div>
-                                                    }
-                                                    defaultOpen={false}
-                                                >
-                                                    <div className="py-0 flex items-center justify-center">
-                                                        <button
-                                                            type="button"
-                                                            className="
-                                                          flex items-center justify-center
-                                                          w-10 h-10 contenedorCosas
-                                                          bg-violet-100 hover:bg-violet-200
-                                                          text-violet-600 hover:text-violet-800
-                                                          transition-all duration-200
-                                                          shadow-sm hover:shadow
-                                                          focus:outline-none
-                                                        "
-                                                            title="Añadir nueva etiqueta"
-                                                        >
-                                                            <Plus className="w-6 h-6" strokeWidth={2.5} />
-                                                        </button>
-                                                    </div>
-                                                </Accordion>
-
-                                                {/* Con descuento */}
-                                                <div className="px-4 py-3">
-                                                    <label className="flex items-center justify-between gap-3 cursor-pointer group select-none py-2.5 transition-all duration-200">
-                                                        <div className="flex items-center gap-2.5">
-                                                            <Percent className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
-                                                            <span className="text-sm font-bold text-slate-700 group-hover:text-violet-700 transition-colors">
-                                                                Con descuento
-                                                            </span>
-                                                        </div>
-                                                        <div className="relative flex items-center justify-center">
-                                                            <input
-                                                                type="checkbox"
-                                                                checked={filters.onlyDiscounts || false}
-                                                                onChange={(e) => setFilters({ ...filters, onlyDiscounts: e.target.checked })}
-                                                                className="w-5 h-5 rounded-md border-2 border-slate-300 text-violet-600 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
-                                                            />
-                                                            {filters.onlyDiscounts && (
-                                                                <Check className="absolute w-4 h-4 text-white pointer-events-none" strokeWidth={3} />
-                                                            )}
-                                                        </div>
-                                                    </label>
-                                                </div>
-
-                                                {/* Botones de acción */}
-                                                <div className="px-4 pt-4">
-                                                    <button
-                                                        onClick={() => {
-                                                            setSelectedItemsForUpdate(new Set());
-                                                            setShowPriceUpdateSelector(true);
-                                                        }}
-                                                        disabled={isUpdatingPrices || history.length === 0 || isLoading}
-                                                        className={`
-                                                        w-full flex items-center justify-center gap-2
-                                                        py-2.5 px-4 contenedorCosas text-sm font-medium
-                                                        transition-all duration-200
-                                                        bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200
-                                                        hover:shadow-sm active:scale-[0.98]
-                                                        disabled:opacity-50 disabled:cursor-not-allowed
-                                                      `}
-                                                    >
-                                                        <RefreshCw className="w-4 h-4" />
-                                                        Actualizar precios
-                                                    </button>
-                                                </div>
-
-                                                <div className="px-4 py-4">
-                                                    <button
-                                                        onClick={clearFilters}
-                                                        disabled={!Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))}
-                                                        className={`
-                                                                w-full flex items-center justify-center gap-2
-                                                                py-2.5 px-2.5 contenedorCosas text-sm font-medium
-                                                                transition-all duration-200
-                                                                ${Object.values(filters).some(v => (Array.isArray(v) ? v.length > 0 : !!v))
-                                                                ? 'bg-violet-100 text-violet-700 hover:bg-violet-200 border border-violet-200'
-                                                                : 'bg-slate-50 text-slate-400 cursor-not-allowed'
-                                                            }
-                                                      `}
-                                                    >
-                                                        <X className="w-4 h-4" />
-                                                        Limpiar filtros
-                                                    </button>
                                                 </div>
                                             </div>
                                         </div>
@@ -2794,20 +2884,17 @@ export default function HistoryPage() {
             {showPriceUpdateSelector && createPortal(
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm">
                     <div className="absolute inset-0" onClick={() => setShowPriceUpdateSelector(false)} />
-                    <div className="relative w-full max-w-lg bg-white contenedorCosas shadow-2xl max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                    <div className="relative w-full max-w-[646px] bg-white contenedorCosas shadow-2xl max-h-[80.8vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
 
                         {/* Cabecera */}
                         <div className="relative pt-3 border-b bg-gradient-to-r from-green-100 border-slate-100 bg-white flex flex-col items-center">
                             <div className="w-14 h-14 contenedorCosas bg-emerald-600 flex items-center justify-center mb-3 shadow-sm">
                                 <RefreshCw className="w-8 h-8 text-white" strokeWidth={2} />
                             </div>
-                            <p className="text-xs text-slate-600 mb-3">
-                                {filtered.length} producto{filtered.length === 1 ? '' : 's'} coinciden con los filtros actuales
-                            </p>
                         </div>
 
                         {/* Body */}
-                        <div className="p-4 flex-1 overflow-y-auto bg-white">
+                        <div className="p-3 flex-1 overflow-y-auto bg-white">
                             {filtered.length === 0 ? (
                                 <div className="text-center py-12 text-slate-500">
                                     <Package className="w-12 h-12 mx-auto mb-3 opacity-60" />
@@ -2816,7 +2903,7 @@ export default function HistoryPage() {
                                 </div>
                             ) : (
                                 <>
-                                    <div className="space-y-2">
+                                    <div className="space-y-3">
                                         {filtered.map(item => {
                                             const isSelected = selectedItemsForUpdate.has(item.id);
                                             return (
@@ -2918,18 +3005,34 @@ export default function HistoryPage() {
                                             // Llamamos a la función optimizada
                                             const result = await updateSelectedPrices(idsToUpdate);
 
-                                            // Mostramos toast lo antes posible (éxito o info)
-                                            if (result.hadAnySuccess) {
-                                                toast.success(result.message, { duration: 5000 });
+                                            // ── Mensaje final más inteligente y sin duplicados ───────────────────────
+                                            let toastType = "info";
+                                            let toastMessage = result.message;
+
+                                            if (result.updated > 0) {
+                                                // Hubo al menos un cambio real de precio
+                                                toastType = "success";
+                                                toastMessage = result.message; // ej: "Precios actualizados en 3 de 5 productos"
+                                            } else if (result.sameAsOriginal > 0) {
+                                                // No cambió precio porque coincidía con original, pero se mantuvo manual
+                                                toastType = "info";
+                                                toastMessage = result.message; // ej: "En 2 producto(s) el precio coincide con el original → se mantuvo el valor manual que tenías"
                                             } else {
-                                                toast.info(result.message, { duration: 6000 });
+                                                // Nada cambió en absoluto
+                                                toastType = "info";
+                                                toastMessage = "No se detectaron cambios de precio en los productos seleccionados.";
                                             }
+
+                                            // Mostramos UN SOLO toast
+                                            toast[toastType](toastMessage, {
+                                                duration: toastType === "success" ? 5000 : 6500
+                                            });
 
                                             setUpdatingItems(new Set());
                                             setIsUpdatingPrices(false);
-
                                             setSelectedItemsForUpdate(new Set());
 
+                                            // Recarga de datos frescos (tu lógica original, sin cambios)
                                             if (result.updated > 0) {
                                                 await new Promise(r => setTimeout(r, 600));
 
@@ -2939,11 +3042,11 @@ export default function HistoryPage() {
                                                     const { data, error } = await supabase
                                                         .from('affiliate_history')
                                                         .select(`
-                                                          id, asin, dominio, product_title, title_is_custom,
-                                                          price, original_price, prices_history, last_update,
-                                                          created_at, short_link, affiliate_url, original_url,
-                                                          recommended, position, last_visited
-                                                        `)
+                        id, asin, dominio, product_title, title_is_custom,
+                        price, original_price, prices_history, last_update,
+                        created_at, short_link, affiliate_url, original_url,
+                        recommended, position, last_visited
+                    `)
                                                         .in('id', idsToUpdate);
 
                                                     if (!error && data?.length > 0) {
