@@ -25,7 +25,10 @@ import {
     Percent,
     Plus,
     Euro,
-    Sliders
+    Sliders,
+    MoreVertical,
+    Star,
+    Bug
 } from "lucide-react";
 import {
     getHistory,
@@ -42,7 +45,10 @@ import {
     saveToHistory,
     updateHistoryPositions,
     saveSimpleMessage,
-    getSavedMessages
+    getSavedMessages,
+    toggleFavorite,
+    getUserFavorites,
+    bulkDeleteItems
 } from "../utils/supabaseStorage";
 const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY || "";
 
@@ -105,9 +111,45 @@ const HistoryItem = ({
     const [customMessage, setCustomMessage] = useState("");
     const [selectedOption, setSelectedOption] = useState("none");
     const [showQuickDropdown, setShowQuickDropdown] = useState(false);
+
+    // ── NUEVO: menú contextual y favoritos ───────────────────────────────
+    const [showContextMenu, setShowContextMenu] = useState(false);
+    const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+
+    const handleContextMenu = (e) => {
+        e.preventDefault();
+        setMenuPosition({ x: e.clientX, y: e.clientY });
+        setShowContextMenu(true);
+    };
+
+    const closeContextMenu = () => setShowContextMenu(false);
+
+    const handleToggleFavorite = async () => {
+        const isNowFavorite = await toggleFavorite(propItem.asin, propItem.domain);
+
+        // Actualizamos el estado local del componente padre
+        setHistory(prev => prev.map(h =>
+            h.id === propItem.id
+                ? { ...h, isFavorite: isNowFavorite }
+                : h
+        ));
+        closeContextMenu();
+    };
+
+    // Cerrar menú contextual al clic fuera
+    useEffect(() => {
+        if (showContextMenu) {
+            const handleClickOutside = () => closeContextMenu();
+            document.addEventListener('click', handleClickOutside);
+            return () => document.removeEventListener('click', handleClickOutside);
+        }
+    }, [showContextMenu]);
+
+    // Resto de tus useEffect originales (no tocados)
     useEffect(() => {
         setLocalTitle(propItem.productTitle);
     }, [propItem.productTitle]);
+
     useEffect(() => {
         if (showShareModal) {
             const scrollY = window.scrollY;
@@ -128,6 +170,7 @@ const HistoryItem = ({
             }
         }
     }, [showShareModal]);
+
     useEffect(() => {
         if (editingPriceId === propItem.id && priceInputRef.current) {
             const timer = setTimeout(() => {
@@ -138,58 +181,41 @@ const HistoryItem = ({
         }
     }, [editingPriceId, propItem.id]);
 
-
-    // Dentro de HistoryItem
+    // Tus funciones originales (highlightMatches, startEditing, saveTitle, etc.)
     const highlightMatches = (text, query) => {
         if (!query?.trim()) return text;
-
         const normalizedQuery = query
             .toLowerCase()
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "")
             .trim();
-
         if (!normalizedQuery) return text;
-
         const parts = [];
         let lastIndex = 0;
-
-        // Usamos la misma normalización que en el filtro
         const normalizedText = text
             .toLowerCase()
             .normalize("NFD")
             .replace(/[\u0300-\u036f]/g, "");
-
-        // Buscamos TODAS las palabras de la query (AND)
         const words = normalizedQuery.split(/\s+/).filter(Boolean);
-
-        // Para cada palabra buscamos sus ocurrencias
         words.forEach(word => {
             let index = 0;
             while ((index = normalizedText.indexOf(word, index)) !== -1) {
-                // Añadimos texto antes de la coincidencia
                 if (index > lastIndex) {
                     parts.push(text.slice(lastIndex, index));
                 }
-
-                // Añadimos la coincidencia resaltada (usamos el texto original)
                 const matchLength = word.length;
                 parts.push(
                     <mark key={`${index}-${word}`} className="bg-violet-200 p-0.5 rounded">
                         {text.slice(index, index + matchLength)}
                     </mark>
                 );
-
                 lastIndex = index + matchLength;
                 index += matchLength;
             }
         });
-
-        // Añadimos el resto del texto
         if (lastIndex < text.length) {
             parts.push(text.slice(lastIndex));
         }
-
         return parts.length > 0 ? parts : text;
     };
 
@@ -210,7 +236,6 @@ const HistoryItem = ({
         if (isAuthenticated) {
             await updateHistoryItem(updatedEntry);
         } else {
-            // Lógica local antigua
             const history = getHistory();
             const updated = history.map(h =>
                 h.id === propItem.id ? { ...h, productTitle: newTitle } : h
@@ -222,6 +247,7 @@ const HistoryItem = ({
         setHistory(prev => prev.map(h => h.id === propItem.id ? updatedEntry : h));
         setEditingId(null);
     };
+
     const startEditingPrice = (e) => {
         e.stopPropagation();
         let priceToEdit = (propItem.price || '').replace(' €', '');
@@ -237,6 +263,7 @@ const HistoryItem = ({
             }
         }, 50);
     };
+
     const handleKeyDown = (e) => {
         if (e.key === 'Enter') {
             e.preventDefault();
@@ -246,30 +273,36 @@ const HistoryItem = ({
             setEditTitle("");
         }
     };
+
     const handleDragStart = (e) => {
         e.dataTransfer.effectAllowed = 'move';
         e.dataTransfer.setData('text/plain', index.toString());
         e.currentTarget.classList.add('dragging');
     };
+
     const handleDragEnd = (e) => {
         e.currentTarget.classList.remove('dragging', 'drag-over');
         document.querySelectorAll('.history-item').forEach(el => {
             el.classList.remove('drag-over');
         });
     };
+
     const handleDragOver = (e) => {
         e.preventDefault();
         e.currentTarget.classList.add('drag-over');
     };
+
     const handleDragEnter = (e) => {
         e.preventDefault();
         e.currentTarget.classList.add('drag-over');
     };
+
     const handleDragLeave = (e) => {
         if (!e.currentTarget.contains(e.relatedTarget)) {
             e.currentTarget.classList.remove('drag-over');
         }
     };
+
     const handleDrop = (e) => {
         e.preventDefault();
         e.currentTarget.classList.remove('drag-over');
@@ -279,6 +312,7 @@ const HistoryItem = ({
             moveItem(fromIndex, toIndex);
         }
     };
+
     const handleShare = async () => {
         let message = "";
         if (selectedOption === "quick") {
@@ -301,7 +335,7 @@ const HistoryItem = ({
                 setHistory(updated);
             } catch (err) {
                 console.error("Error generando short link on-demand:", err);
-                linkToShare = propItem.affiliateUrl; // fallback
+                linkToShare = propItem.affiliateUrl;
             }
         }
         const text = encodeURIComponent(
@@ -314,6 +348,7 @@ const HistoryItem = ({
         setCustomMessage("");
         setShowQuickDropdown(false);
     };
+
     const formatPrice = (raw) => {
         if (!raw || !raw.trim()) return null;
         let cleaned = raw.trim().replace(' €', '').replace(/\s/g, '');
@@ -355,6 +390,7 @@ const HistoryItem = ({
         integerPart = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
         return integerPart + ',' + decimalPart + ' €';
     };
+
     const updatePriceField = (field, newValue) => {
         const history = getHistory();
         const updated = history.map(h =>
@@ -363,6 +399,7 @@ const HistoryItem = ({
         localStorage.setItem('amazon-affiliate-history', JSON.stringify(updated));
         setHistory(updated);
     };
+
     const finishPriceEditing = async () => {
         const formattedCurrent = editPrice.trim() ? formatPrice(editPrice) : null;
         const formattedOriginal = editOriginalPrice.trim() ? formatPrice(editOriginalPrice) : null;
@@ -384,6 +421,7 @@ const HistoryItem = ({
         setHistory(prev => prev.map(h => h.id === propItem.id ? updatedEntry : h));
         setEditingPriceId(null);
     };
+
     const markAsVisited = async (asin, domain) => {
         const key = `visited_${asin}_${domain}`;
         const timestamp = Date.now();
@@ -401,6 +439,7 @@ const HistoryItem = ({
                 });
         }
     };
+
     const wasVisitedRecently = (item) => {
         const key = `visited_${item.asin}_${item.domain}`;
         const localTs = localStorage.getItem(key);
@@ -413,6 +452,7 @@ const HistoryItem = ({
         }
         return false;
     };
+
     const generateShareMessage = async () => {
         const title = propItem.productTitle?.trim() || "este producto";
         const hasDiscount = propItem.originalPrice && propItem.price &&
@@ -446,10 +486,10 @@ const HistoryItem = ({
             }
             const prompt = `Eres una persona real de España que le está mandando un WhatsApp a un amigo, familiar o conocido para recomendarle un producto de Amazon.
             Producto: "${title}"${priceMention}.
-                   
+                  
             ${contextInstruction}
             ${savedExamples}
-                   
+                  
             Reglas OBLIGATORIAS:
             - Empieza casi siempre con un saludo directo o nombre si se identifica uno (Hola Teresa, Oye mamá, Mira Juan, Ey Laura…)
             - Habla SIEMPRE en PRIMERA PERSONA: "te paso", "mira lo que he visto", "he pensado en ti", etc.
@@ -461,12 +501,12 @@ const HistoryItem = ({
             - Termina invitando a mirar el enlace de forma suave.
             - No inventes características del producto.
             - Suena como un mensaje real de WhatsApp entre conocidos.
-                   
+                  
             Ejemplos de lo que SÍ quieres (varía mucho):
             Hola Teresa, mira lo que he pillado, creo que te vendría genial para los peques.
             Oye mamá, he visto esto y me he acordado de ti, ¿qué te parece?
             Mira Juan, está bastante bien de precio, te lo paso por si te interesa.
-                   
+                  
             Genera SOLO el texto del mensaje WhatsApp, nada más.`;
             const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
                 method: "POST",
@@ -492,7 +532,6 @@ const HistoryItem = ({
             if (generated.length > 12 && generated.length < 350) {
                 setCustomMessage(generated);
             } else {
-                // fallback simple
                 const fallback = userContext
                     ? `Hola ${userContext}, mira este producto que vi en Amazon`
                     : "Mira lo que he encontrado, por si te interesa";
@@ -507,18 +546,68 @@ const HistoryItem = ({
             );
         }
     };
+
+    const RotatingLoadingText = () => {
+        const messages = [
+            "Rasgando precios...",
+            "Extrayendo datos...",
+            "Casi lo tenemos..."
+        ];
+
+        const [currentIndex, setCurrentIndex] = useState(0);
+        const [isFading, setIsFading] = useState(false);
+
+        useEffect(() => {
+            const interval = setInterval(() => {
+                setIsFading(true); // inicia fade out
+
+                setTimeout(() => {
+                    setCurrentIndex((prev) => (prev + 1) % messages.length);
+                    setIsFading(false); // fade in con nuevo texto
+                }, 400); // tiempo de fade out antes de cambiar texto
+            }, 3200); // tiempo total por frase (incluyendo fade)
+
+            return () => clearInterval(interval);
+        }, []);
+
+        return (
+            <span
+                className={`
+        text-xs font-medium text-emerald-700
+        transition-all duration-500 ease-in-out
+        ${isFading ? 'opacity-0 translate-y-1' : 'opacity-100 translate-y-0'}
+      `}
+            >
+                {messages[currentIndex]}
+            </span>
+        );
+    };
+
     return (
         <div
             className={`
-        history-item bg-white border border-slate-200 contenedorCosas p-4
-        hover:shadow-md transition relative
-        ${isDragging ? 'dragging drag-ghost' : ''}
-        ${isDragOver ? 'drag-over' : ''}
-        ${editingId === propItem.id || editingPriceId === propItem.id
-                    ? 'editing-mode'
-                    : ''
+    history-item 
+    bg-white border border-slate-200 
+    contenedorCosas p-4
+    transition-all duration-300 ease-out relative
+    ${isDragging ? 'dragging drag-ghost' : ''}
+    ${isDragOver ? 'drag-over' : ''}
+    ${editingId === propItem.id || editingPriceId === propItem.id ? 'editing-mode' : ''}
+
+    ${propItem.isFavorite
+                    ? `
+        border-l-4 border-l-violet-600/75
+        border border-violet-600/40
+        bg-gradient-to-t from-violet-500/10 to-white
+        shadow-[inset_2px_0_9px_-4px_rgba(245,158,11,0.09)]
+        hover:shadow-[inset_2px_0_12px_-3px_rgba(245,158,11,0.14),0_2px_6px_rgba(0,0,0,0.03)]
+      `
+                    : `
+        border border-slate-200 
+        hover:shadow-[0_2px_6px_rgba(0,0,0,0.03)]
+      `
                 }
-        `}
+  `}
             draggable={editingId !== propItem.id && editingPriceId !== propItem.id}
             onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
@@ -532,6 +621,7 @@ const HistoryItem = ({
                     return;
                 }
             }}
+            onContextMenu={handleContextMenu}
         >
             <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
@@ -545,7 +635,6 @@ const HistoryItem = ({
                     <div className="min-h-6 relative">
                         {editingId === propItem.id ? (
                             window.innerWidth < 768 ? (
-                                // VERSIÓN MÓVIL
                                 <div
                                     contentEditable
                                     suppressContentEditableWarning
@@ -599,7 +688,6 @@ const HistoryItem = ({
                                     ref={(el) => el && el.focus()}
                                 />
                             ) : (
-                                // VERSIÓN ESCRITORIO
                                 <input
                                     ref={inputRef}
                                     type="text"
@@ -615,9 +703,9 @@ const HistoryItem = ({
                             <p
                                 onClick={startEditing}
                                 className={`
-                                title-normal text-left text-sm font-medium text-slate-900 
-                                cursor-pointer hover:text-violet-700 transition select-none block w-full
-                                ${search.trim() ? '' : 'truncate'}
+                                    title-normal text-left text-sm font-medium text-slate-900
+                                    cursor-pointer hover:text-violet-700 transition select-none block w-full
+                                    ${search.trim() ? '' : 'truncate'}
                                 `}
                                 title="Clic para renombrar"
                             >
@@ -640,21 +728,33 @@ const HistoryItem = ({
                             </span>
                         </span>
                         <span className="text-slate-400">|</span>
-
                         {isUpdating ? (
-                            <div className="relative flex-1 h-5 flex items-center min-w-[120px]">
-                                <div className="text-xs text-emerald-600 font-medium animate-pulse flex items-center gap-1.5">
-                                    Actualizando...
+                            <div className="relative flex items-center gap-3 min-w-[180px] h-6">
+                                {/* Escarabajo caminando */}
+                                <div className="relative w-6 h-6 flex items-center justify-center">
+                                    <Bug
+                                        className="w-5 h-5 text-emerald-600 animate-[wiggle_1.2s_ease-in-out_infinite]"
+                                    />
+                                    {/* Pequeña polvareda/partícula */}
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="w-2 h-2 bg-emerald-400/40 rounded-full animate-ping-slow" />
+                                    </div>
                                 </div>
 
-                                {/* Barra de progreso infinita */}
-                                <div className="absolute bottom-0 left-0 right-0 h-1 bg-slate-300 overflow-hidden contenedorCosas">
-                                    <div
-                                        className="h-full bg-emerald-500 contenedorCosas w-1/3 animate-progress-infinite"
-                                        style={{
-                                            animation: 'progress-infinite 2.2s linear infinite'
-                                        }}
-                                    />
+                                <div className="flex text-left flex-col flex-1">
+                                    {/* Texto que rota automáticamente mientras carga */}
+                                    <RotatingLoadingText />
+
+                                    {/* Barra de carga MÁS LARGA */}
+                                    <div className="md:w-[400px] w-[180px] h-1 bg-slate-200 contenedorCosas overflow-hidden mt-0.5">
+                                        <div
+                                            className="h-full bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400 animate-progress-infinite"
+                                            style={{
+                                                width: '38%',
+                                                animation: 'progress-infinite 3.2s linear infinite'
+                                            }}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         ) : editingPriceId === propItem.id ? (
@@ -666,7 +766,6 @@ const HistoryItem = ({
                                     }
                                 }}
                             >
-                                {/* Precio Original */}
                                 <div className="flex items-center gap-1">
                                     <span className="text-xs text-slate-500">Original:</span>
                                     <input
@@ -700,7 +799,6 @@ const HistoryItem = ({
                                         placeholder="0,00 €"
                                     />
                                 </div>
-                                {/* Precio Actual */}
                                 <div className="flex items-center gap-1">
                                     <span className="text-xs text-slate-500">Actual:</span>
                                     <input
@@ -777,9 +875,9 @@ const HistoryItem = ({
                                                     {propItem.originalPrice}
                                                 </span>
                                                 <span className={`
-                font-bold
-                ${isLower ? 'text-emerald-600' : isHigher ? 'text-red-600' : 'text-emerald-600'}
-              `}>
+                                                    font-bold
+                                                    ${isLower ? 'text-emerald-600' : isHigher ? 'text-red-600' : 'text-emerald-600'}
+                                                `}>
                                                     {propItem.price}
                                                     {isLower && <span className="text-xs text-emerald-500 ml-1">↓</span>}
                                                     {isHigher && <span className="text-xs text-red-500 ml-1">↑</span>}
@@ -805,7 +903,7 @@ const HistoryItem = ({
                         )}
                     </p>
                 </div>
-                <div className="flex gap-2 flex-shrink-0">
+                <div className="flex gap-2 flex-shrink-0 relative">
                     <a
                         href={propItem.affiliateUrl}
                         target="_blank"
@@ -849,8 +947,110 @@ const HistoryItem = ({
                     >
                         <Trash2 className="w-4 h-4" />
                     </button>
+
+                    {window.innerWidth < 768 && (
+                        <button
+                            onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+
+                                if (showContextMenu) {
+                                    setShowContextMenu(false);
+                                } else {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    setMenuPosition({
+                                        x: rect.right - 204,
+                                        y: rect.bottom + 8,
+                                    });
+                                    setShowContextMenu(true);
+                                }
+                            }}
+                            className="left-0 relative -mt-1.5 contenedorCosas transition"
+                            title="Más opciones"
+                        >
+                            <MoreVertical className="w-4 h-4 text-slate-600" />
+                        </button>
+                    )}
                 </div>
             </div>
+
+            {/* MENÚ CONTEXTUAL (clic derecho) */}
+            {showContextMenu && createPortal(
+                <div
+                    className={`
+                          fixed z-[9999]
+                          bg-white
+                          border border-slate-200
+                          rounded-lg
+                          shadow-xl
+                          overflow-hidden
+                          min-w-[220px]
+                          text-sm
+                          animate-in
+                          fade-in
+                          duration-200
+                          zoom-in-95
+                          slide-in-from-top-1
+                        `}
+                    style={{
+                        left: `${menuPosition.x}px`,
+                        top: `${menuPosition.y}px`,
+                        transformOrigin: 'top right',
+                    }}
+                >
+                    {/* Botón Favoritos */}
+                    <button
+                        onClick={handleToggleFavorite}
+                        className={`
+                        w-full px-4 py-3
+                        flex items-center gap-3
+                        text-left
+                        text-slate-700
+                        hover:bg-slate-50
+                        active:bg-slate-100
+                        transition-colors duration-150
+                      `}
+                    >
+                        <Star
+                            className={`
+                                    w-4 h-4 flex-shrink-0
+                                    ${propItem.isFavorite
+                                    ? 'fill-violet-600 text-slate-500'
+                                    : 'text-slate-500'}
+    `}
+                            strokeWidth={propItem.isFavorite ? 0 : 1.8}
+                        />
+                        <span>
+                            {propItem.isFavorite ? 'Quitar de favoritos' : 'Añadir a favoritos'}
+                        </span>
+                    </button>
+
+                    {/* Separador sutil */}
+                    <div className="h-px bg-slate-100 mx-2" />
+
+                    {/* Botón Etiquetas */}
+                    <button
+                        onClick={() => {
+                            toast.info("Próximamente", { duration: 3500 });
+                            closeContextMenu();
+                        }}
+                        className="
+        w-full px-4 py-3
+        flex items-center gap-3
+        text-left
+        text-slate-600
+        hover:bg-slate-50
+        active:bg-slate-100
+        transition-colors duration-150
+      "
+                    >
+                        <Tag className="w-4 h-4 flex-shrink-0 text-slate-400" />
+                        <span>Añadir etiqueta</span>
+                    </button>
+                </div>,
+                document.body
+            )}
+
             {/* === MODAL DE COMPARTIR POR WHATSAPP === */}
             {showShareModal && createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1063,6 +1263,7 @@ const HistoryItem = ({
         </div>
     );
 };
+
 export default function HistoryPage() {
     const [history, setHistory] = useState([]);
     const [search, setSearch] = useState(() => {
@@ -1097,7 +1298,6 @@ export default function HistoryPage() {
     const [selectedItemsForUpdate, setSelectedItemsForUpdate] = useState(new Set());
     const [updatingItems, setUpdatingItems] = useState(new Set());
 
-
     const [filters, setFilters] = useState(() => {
         const saved = localStorage.getItem('historyFilters');
         return saved
@@ -1109,6 +1309,7 @@ export default function HistoryPage() {
                 dateFrom: '',
                 dateTo: '',
                 onlyDiscounts: false,
+                onlyFavorites: false,
             };
     });
 
@@ -1425,7 +1626,9 @@ export default function HistoryPage() {
                 parsePrice(item.price) < parsePrice(item.originalPrice)
             );
 
-            return searchMatch && priceMatch && domainMatch && dateMatch && discountMatch;
+            const favoriteMatch = !filters.onlyFavorites || item.isFavorite === true;
+
+            return searchMatch && priceMatch && domainMatch && dateMatch && discountMatch && favoriteMatch;
         });
     }, [history, search, filters]);
 
@@ -1533,23 +1736,43 @@ export default function HistoryPage() {
     };
 
     const handleClear = () => {
+        if (filtered.length === 0) {
+            toast.info("No hay elementos que borrar con los filtros actuales");
+            return;
+        }
         setShowConfirmModal(true);
     };
 
     const confirmClear = async () => {
-        try {
-            if (isAuthenticated) {
-                await clearUserHistory();
-            } else {
-                localStorage.removeItem('amazon-affiliate-history');
-                window.dispatchEvent(new Event('amazon-history-updated'));
-            }
-            setHistory([]);
-            toast.success("Historial vaciado");
-        } catch (err) {
-            toast.error("Error al vaciar el historial");
-        }
         setShowConfirmModal(false);
+
+        const itemsToDelete = filtered.map(item => ({
+            asin: item.asin,
+            dominio: item.domain || 'amazon.es'
+        }));
+
+        const count = itemsToDelete.length;
+        const isAll = count === history.length;
+
+        try {
+            const success = await bulkDeleteItems(itemsToDelete);
+            if (!success) throw new Error("Fallo al eliminar");
+
+            // Actualizamos UI inmediatamente
+            setHistory(prev => prev.filter(h =>
+                !itemsToDelete.some(d => d.asin === h.asin && d.dominio === (h.domain || 'amazon.es'))
+            ));
+
+            toast.success(
+                isAll
+                    ? "Historial vaciado"
+                    : `Eliminados ${count} elemento${count === 1 ? '' : 's'}`
+            );
+
+        } catch (err) {
+            console.error("Error al vaciar elementos filtrados:", err);
+            toast.error("No se pudo eliminar los elementos");
+        }
     };
 
     const cancelClear = () => {
@@ -1742,9 +1965,23 @@ export default function HistoryPage() {
             dateFrom: '',
             dateTo: '',
             onlyDiscounts: false,
+            onlyFavorites: false,
         });
         localStorage.removeItem('historyFilters');
     };
+
+    const filtersEmpty = useMemo(() => {
+        return (
+            !search.trim() &&
+            !filters.priceMin &&
+            !filters.priceMax &&
+            filters.domains.length === 0 &&
+            !filters.dateFrom &&
+            !filters.dateTo &&
+            !filters.onlyDiscounts &&
+            !filters.onlyFavorites
+        );
+    }, [search, filters]);
 
     return (
         <>
@@ -1752,29 +1989,27 @@ export default function HistoryPage() {
             {/* === MODAL DE CONFIRMACIÓN DE VACIAR HISTORIAL === */}
             {showConfirmModal && createPortal(
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div
-                        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-                        onClick={cancelClear}
-                    />
-                    {/* Contenedor del modal */}
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={cancelClear} />
                     <div className="relative w-full max-w-sm bg-white contenedorCosas shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
-                        <div className="py-2 border-b border-slate-200 bg-slate-50 bg-gradient-to-r from-red-100">
+                        <div className="py-2 border-b border-slate-200 bg-gradient-to-r from-red-100">
                             <div className="flex justify-center">
                                 <div className="p-2 bg-red-600 contenedorCosas shadow-lg">
                                     <Trash2 className="w-7 h-7 text-white" strokeWidth={2.5} />
                                 </div>
                             </div>
                         </div>
-                        {/* Contenido */}
                         <div className="p-6 space-y-4 text-center">
                             <h3 className="text-lg font-semibold text-slate-900">
-                                ¿Borrar todo el historial?
+                                {filtered.length === history.length || filtersEmpty
+                                    ? "¿Borrar todo el historial?"
+                                    : `¿Borrar ${filtered.length} elemento${filtered.length === 1 ? '' : 's'}?`}
                             </h3>
                             <p className="text-sm text-slate-600 max-w-xs mx-auto">
-                                Esta acción no se puede deshacer. Se eliminarán todos los enlaces generados.
+                                {filtered.length === history.length || filtersEmpty
+                                    ? "Se eliminarán todos los elementos. Esta acción no se puede deshacer."
+                                    : `Se eliminarán los elementos que cumplen los filtros actuales. Esta acción no se puede deshacer.`}
                             </p>
                         </div>
-                        {/* Botones de acción */}
                         <div className="flex gap-3 p-3 border-t border-slate-200 bg-slate-50">
                             <button
                                 onClick={cancelClear}
@@ -1787,7 +2022,7 @@ export default function HistoryPage() {
                                 className="flex-1 px-5 py-3 text-sm font-semibold text-white bg-red-600 contenedorCosas hover:bg-red-700 transition flex items-center justify-center gap-2 shadow-lg"
                             >
                                 <Trash2 className="w-5 h-5" strokeWidth={2.5} />
-                                Vaciar
+                                {filtered.length === history.length || filtersEmpty ? "Vaciar" : `Vaciar`}
                             </button>
                         </div>
                     </div>
@@ -1875,7 +2110,7 @@ export default function HistoryPage() {
                         bg-white border border-slate-200 shadow-sm
                         self-start fixed
                         stickyFilter z-20
-                        max-h-[calc(100vh-3rem)]
+                        max-h-[calc(89.5vh)]
                         overflow-y-auto
                         animate-fade-in-up
                         sidebar-fixed
@@ -2124,6 +2359,31 @@ export default function HistoryPage() {
                                                     className="w-5 h-5 contenedorCosas border-2 border-slate-300 text-violet-600 focus:ring-violet-400 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
                                                 />
                                                 {filters.onlyDiscounts && (
+                                                    <Check
+                                                        className="absolute w-4 h-4 text-white pointer-events-none"
+                                                        strokeWidth={3}
+                                                    />
+                                                )}
+                                            </div>
+                                        </label>
+                                    </div>
+
+                                    <div className="px-4 py-3 border-t border-slate-100">  {/* opcional: separador sutil */}
+                                        <label className="flex items-center justify-between gap-3 cursor-pointer group select-none">
+                                            <div className="flex items-center gap-2.5">
+                                                <Star className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
+                                                <span className="text-sm font-bold text-slate-700 group-hover:text-violet-600 transition-colors">
+                                                    Favoritos
+                                                </span>
+                                            </div>
+                                            <div className="relative flex items-center justify-center">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={filters.onlyFavorites || false}
+                                                    onChange={(e) => setFilters({ ...filters, onlyFavorites: e.target.checked })}
+                                                    className="w-5 h-5 contenedorCosas border-2 border-slate-300 text-violet-600 focus:ring-violet-400 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
+                                                />
+                                                {filters.onlyFavorites && (
                                                     <Check
                                                         className="absolute w-4 h-4 text-white pointer-events-none"
                                                         strokeWidth={3}
@@ -2480,7 +2740,7 @@ export default function HistoryPage() {
                                                         </Accordion>
 
                                                         {/* Con descuento */}
-                                                        <div className="px-4 py-3">
+                                                        <div className="px-4">
                                                             <label className="flex items-center justify-between gap-3 cursor-pointer group select-none py-2.5 transition-all duration-200">
                                                                 <div className="flex items-center gap-2.5">
                                                                     <Percent className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
@@ -2497,6 +2757,31 @@ export default function HistoryPage() {
                                                                     />
                                                                     {filters.onlyDiscounts && (
                                                                         <Check className="absolute w-4 h-4 text-white pointer-events-none" strokeWidth={3} />
+                                                                    )}
+                                                                </div>
+                                                            </label>
+                                                        </div>
+
+                                                        <div className="px-4 py-3 border-t border-slate-100">  {/* opcional: separador sutil */}
+                                                            <label className="flex items-center justify-between gap-3 cursor-pointer group select-none">
+                                                                <div className="flex items-center gap-2.5">
+                                                                    <Star className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
+                                                                    <span className="text-sm font-bold text-slate-700 group-hover:text-violet-600 transition-colors">
+                                                                        Favoritos
+                                                                    </span>
+                                                                </div>
+                                                                <div className="relative flex items-center justify-center">
+                                                                    <input
+                                                                        type="checkbox"
+                                                                        checked={filters.onlyFavorites || false}
+                                                                        onChange={(e) => setFilters({ ...filters, onlyFavorites: e.target.checked })}
+                                                                        className="w-5 h-5 contenedorCosas border-2 border-slate-300 text-violet-600 focus:ring-violet-400 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
+                                                                    />
+                                                                    {filters.onlyFavorites && (
+                                                                        <Check
+                                                                            className="absolute w-4 h-4 text-white pointer-events-none"
+                                                                            strokeWidth={3}
+                                                                        />
                                                                     )}
                                                                 </div>
                                                             </label>
@@ -2747,19 +3032,15 @@ export default function HistoryPage() {
                                     onClick={() => isHistoryFullyLoaded && history.length > 0 && handleClear()}
                                     disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
                                     className={`borrarTodo w-full flex items-center justify-center gap-2 transition-all
-                                ${!isHistoryFullyLoaded || isLoading || history.length === 0
+    ${!isHistoryFullyLoaded || isLoading || history.length === 0
                                             ? 'opacity-60 cursor-not-allowed'
                                             : 'hover:bg-[#fecaca] active:bg-red-200'}`}
-                                    title={
-                                        !isHistoryFullyLoaded || isLoading
-                                            ? "Cargando historial..."
-                                            : history.length === 0
-                                                ? "No hay elementos para borrar"
-                                                : "Borrar todo el historial"
-                                    }
+                                    title={filtered.length === history.length ? "Borrar todo" : `Borrar ${filtered.length} elementos visibles`}
                                 >
                                     <Trash2 className="w-4 h-4" />
-                                    Vaciar
+                                    {filtered.length < history.length && filtered.length > 0
+                                        ? `Vaciar`
+                                        : "Vaciar"}
                                 </button>
                             </div>
                         </div>
@@ -3002,10 +3283,9 @@ export default function HistoryPage() {
                                         setIsUpdatingPrices(true);
 
                                         try {
-                                            // Llamamos a la función optimizada
                                             const result = await updateSelectedPrices(idsToUpdate);
 
-                                            // ── Mensaje final más inteligente y sin duplicados ───────────────────────
+                                            // ── Mensaje final
                                             let toastType = "info";
                                             let toastMessage = result.message;
 
@@ -3018,12 +3298,10 @@ export default function HistoryPage() {
                                                 toastType = "info";
                                                 toastMessage = result.message; // ej: "En 2 producto(s) el precio coincide con el original → se mantuvo el valor manual que tenías"
                                             } else {
-                                                // Nada cambió en absoluto
                                                 toastType = "info";
-                                                toastMessage = "No se detectaron cambios de precio en los productos seleccionados.";
+                                                toastMessage = "No se detectaron cambios de precio.";
                                             }
 
-                                            // Mostramos UN SOLO toast
                                             toast[toastType](toastMessage, {
                                                 duration: toastType === "success" ? 5000 : 6500
                                             });
@@ -3032,21 +3310,22 @@ export default function HistoryPage() {
                                             setIsUpdatingPrices(false);
                                             setSelectedItemsForUpdate(new Set());
 
-                                            // Recarga de datos frescos (tu lógica original, sin cambios)
+                                            // Recarga de datos frescos
                                             if (result.updated > 0) {
                                                 await new Promise(r => setTimeout(r, 600));
 
                                                 let updatedItems = [];
-
                                                 if (isAuthenticated) {
+                                                    const favoritesSet = await getUserFavorites();
+
                                                     const { data, error } = await supabase
                                                         .from('affiliate_history')
                                                         .select(`
-                        id, asin, dominio, product_title, title_is_custom,
-                        price, original_price, prices_history, last_update,
-                        created_at, short_link, affiliate_url, original_url,
-                        recommended, position, last_visited
-                    `)
+                                                        id, asin, dominio, product_title, title_is_custom,
+                                                        price, original_price, prices_history, last_update,
+                                                        created_at, short_link, affiliate_url, original_url,
+                                                        recommended, position, last_visited
+                                                      `)
                                                         .in('id', idsToUpdate);
 
                                                     if (!error && data?.length > 0) {
@@ -3066,17 +3345,19 @@ export default function HistoryPage() {
                                                             originalUrl: item.original_url,
                                                             recommended: item.recommended || [],
                                                             position: item.position,
-                                                            lastVisited: item.last_visited
-                                                                ? new Date(item.last_visited).getTime()
-                                                                : null,
+                                                            lastVisited: item.last_visited ? new Date(item.last_visited).getTime() : null,
+                                                            isFavorite: favoritesSet.has(`${item.asin}-${item.dominio}`)
                                                         }));
                                                     }
                                                 } else {
-                                                    // LocalStorage: recargamos los relevantes
-                                                    updatedItems = getHistory().filter(h => idsToUpdate.includes(h.id));
+                                                    updatedItems = getHistory()
+                                                        .filter(h => idsToUpdate.includes(h.id))
+                                                        .map(item => ({
+                                                            ...item,
+                                                            isFavorite: item.isFavorite ?? false
+                                                        }));
                                                 }
 
-                                                // Actualizamos el estado con los datos frescos
                                                 if (updatedItems.length > 0) {
                                                     setHistory(prev =>
                                                         prev.map(existing =>

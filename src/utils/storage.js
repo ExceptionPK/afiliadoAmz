@@ -8,6 +8,7 @@ import { saveToHistory, updateHistoryPositions, getUserHistory } from './supabas
 const API_KEYS = [
     import.meta.env.VITE_SCRAPERAPI_KEY_1?.trim(),
     import.meta.env.VITE_SCRAPERAPI_KEY_2?.trim(),
+    import.meta.env.VITE_SCRAPERAPI_KEY_3?.trim(),
     // puedes añadir más
 ].filter(Boolean);
 

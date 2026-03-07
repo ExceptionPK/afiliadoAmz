@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { History, Home as HomeIcon, LogOut, User, Settings, ChevronDown, LogIn } from 'lucide-react';
+import { History, Home as HomeIcon, LogOut, User, Settings, ChevronDown, LogIn, Crown } from 'lucide-react';
 import { supabase } from '../utils/supabaseClient';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -76,7 +76,7 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: -10, scale: 0.95 }}
                   transition={{ duration: 0.2, ease: "easeOut" }}
-                  className="absolute top-full left-0 mt-2 w-48 bg-white rounded-lg shadow-xl border border-slate-200 overflow-hidden z-50"
+                  className="absolute top-full left-0 mt-2 w-48 bg-white contenedorCosas shadow-xl border border-slate-200 overflow-hidden z-50"
                 >
                   <Link
                     to="/profile"
@@ -94,6 +94,14 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
                     <Settings className="w-4 h-4" />
                     Configuración
                   </Link>
+                  {/* <Link
+                    to="/planes"
+                    onClick={() => setIsDropdownOpen(false)}
+                    className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
+                  >
+                    <Crown className="w-4 h-4" />
+                    Planes
+                  </Link> */}
                   <hr className="border-slate-200" />
                   <button
                     onClick={handleLogout}
@@ -124,6 +132,7 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
               <History className="w-5 h-5" />
               <span>Historial</span>
             </Link>
+            
           </nav>
         </div>
       </div>
