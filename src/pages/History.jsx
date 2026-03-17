@@ -1641,23 +1641,44 @@ export default function HistoryPage() {
         return { total: history.length, domains: domains.length, last7days };
     }, [history]);
     const handleDelete = async (id, asin, domain) => {
+        // Guardamos copia del estado actual para el undo
         const currentHistory = [...history];
         const itemIndex = currentHistory.findIndex(item => item.id === id);
         const itemToDelete = currentHistory[itemIndex];
+
         if (!itemToDelete) return;
+
         lastDeletedRef.current = {
             item: itemToDelete,
             originalIndex: itemIndex,
             originalHistoryLength: currentHistory.length
         };
+
         try {
+            // 1. Ejecutamos la eliminación
             if (isAuthenticated) {
                 await deleteFromHistory(id, asin, domain);
+                // Esperamos un poco más que el promedio de propagación en Supabase (~200-600 ms)
+                await new Promise(r => setTimeout(r, 450));
             } else {
                 removeFromHistory(id);
             }
-            const updatedHistory = await getUserHistory();
-            setHistory(updatedHistory);
+
+            // 2. Primera recarga
+            let updatedHistory = await getUserHistory(200); // límite alto para estar seguros
+
+            // 3. Verificación simple de consistencia (opcional pero muy útil)
+            const stillThere = updatedHistory.some(h => h.id === id);
+            if (stillThere && isAuthenticated) {
+                console.warn(`[handleDelete] El item ${id} aún aparece después de delete → reintentando...`);
+                await new Promise(r => setTimeout(r, 600));
+                updatedHistory = await getUserHistory(200);
+            }
+
+            // 4. Actualizamos el estado
+            setHistory(updatedHistory || []);
+
+            // 5. Toast con deshacer (sin cambios importantes aquí)
             toast(
                 <div className="relative w-full pt-3 pb-3 px-3">
                     <div className="flex items-center justify-between">
@@ -1666,12 +1687,13 @@ export default function HistoryPage() {
                             onClick={async () => {
                                 const deleted = lastDeletedRef.current;
                                 if (!deleted) return;
+
                                 try {
                                     if (isAuthenticated) {
-                                        // Restaurar en Supabase
                                         await saveToHistory(deleted.item);
+                                        // Pequeña espera después de restaurar
+                                        await new Promise(r => setTimeout(r, 400));
                                     } else {
-                                        // Restaurar local
                                         const currentFullHistory = getHistory();
                                         let insertAt = deleted.originalIndex;
                                         if (insertAt > currentFullHistory.length) {
@@ -1684,7 +1706,7 @@ export default function HistoryPage() {
                                         ];
                                         localStorage.setItem('amazon-affiliate-history', JSON.stringify(newHistory));
                                     }
-                                    // Recargar el historial actualizado
+
                                     const refreshed = await getUserHistory();
                                     setHistory(refreshed);
                                     lastDeletedRef.current = null;
@@ -1729,6 +1751,7 @@ export default function HistoryPage() {
                     }
                 }
             );
+
         } catch (err) {
             console.error("Error al borrar:", err);
             toast.error("No se pudo eliminar el producto");
