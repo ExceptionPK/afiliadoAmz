@@ -6,6 +6,14 @@ import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { Send } from "lucide-react";
 import {
+    Menu,
+    MenuButton,
+    MenuItem,
+    MenuItems,
+    Transition,
+} from '@headlessui/react'
+import { Fragment } from 'react'
+import {
     Search,
     ExternalLink,
     Trash2,
@@ -981,7 +989,7 @@ const HistoryItem = ({
                           fixed z-[9999]
                           bg-white
                           border border-slate-200
-                          rounded-lg
+                          contenedorCosas
                           shadow-xl
                           overflow-hidden
                           min-w-[220px]
@@ -1270,8 +1278,6 @@ export default function HistoryPage() {
         return localStorage.getItem('historySearch') || '';
     });
     const [showConfirmModal, setShowConfirmModal] = useState(false);
-    const [showExportMenu, setShowExportMenu] = useState(false);
-    const exportButtonRef = useRef(null);
     const fileInputRef = useRef(null);
     const isInitialLoad = useRef(true);
     const exportInputRef = useRef(null);
@@ -1536,24 +1542,12 @@ export default function HistoryPage() {
     const markAsAnimated = (id) => {
         setAnimatedItems(prev => new Set(prev).add(id));
     };
-    const handleClickOutside = (e) => {
-        if (exportButtonRef.current && !exportButtonRef.current.contains(e.target)) {
-            setShowExportMenu(false);
-        }
-    };
-    useEffect(() => {
-        if (!showExportMenu) return;
-        const handler = (e) => handleClickOutside(e);
-        document.addEventListener("click", handler);
-        return () => document.removeEventListener("click", handler);
-    }, [showExportMenu]);
+
     const parsePrice = (str) => {
         if (!str || !str.trim()) return NaN;
         let cleaned = str.trim().replace(' €', '').replace(/\s/g, '').replace(',', '.');
         return parseFloat(cleaned);
     };
-
-    // Reemplaza todo el bloque de filtered useMemo con esta versión mejorada:
 
     const filtered = useMemo(() => {
         const normalize = (str) =>
@@ -1831,14 +1825,74 @@ export default function HistoryPage() {
     };
 
     const handleExportFormat = (format) => {
-        const defaultName = format === "csv"
-            ? "historialUrlAmazon"
-            : "amazon-affiliate-history";
-        const suggestedName = `${defaultName}_${new Date().toISOString().split('T')[0]}`;
-        setExportFormat(format);
-        setExportFilename(suggestedName);
-        setShowExportModal(true);
-        setShowExportMenu(false);
+        const data = filtered;
+        if (!data?.length) {
+            toast.error("No hay datos para exportar");
+            return;
+        }
+
+        const today = new Date().toISOString().split('T')[0];
+        const defaultBaseName = format === "csv" ? "historialUrlAmazon" : "amazon-affiliate-history";
+        const suggestedName = `${defaultBaseName}_${today}`;
+
+        if ("showSaveFilePicker" in window) {
+            let content = "";
+            let mimeType = "";
+            let defaultExtension = "";
+
+            if (format === "json") {
+                content = JSON.stringify(data, null, 2);
+                mimeType = "application/json";
+                defaultExtension = ".json";
+            } else if (format === "csv") {
+                const headers = [
+                    "Fecha", "Título", "Precio Original", "Precio Actual",
+                    "Dominio", "URL Afiliado", "ASIN"
+                ];
+                const rows = data.map(item => [
+                    new Date(item.timestamp).toLocaleString("es-ES"),
+                    `"${(item.productTitle || "").replace(/"/g, '""')}"`,
+                    item.originalPrice ? `"${item.originalPrice.replace(/"/g, '""')}"` : '""',
+                    item.price ? `"${item.price.replace(/"/g, '""')}"` : '""',
+                    item.domain || "amazon.es",
+                    item.affiliateUrl || "",
+                    item.asin || ""
+                ]);
+                const BOM = "\uFEFF";
+                content = BOM + [headers, ...rows].map(row => row.join(";")).join("\r\n");
+                mimeType = "text/csv";
+                defaultExtension = ".csv";
+            }
+
+            const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+            const defaultFileName = `${suggestedName}${defaultExtension}`;
+
+            window.showSaveFilePicker({
+                suggestedName: defaultFileName,
+                types: [{
+                    description: format.toUpperCase() + " File",
+                    accept: { [mimeType]: [defaultExtension] },
+                }],
+            })
+                .then(async (handle) => {
+                    const writable = await handle.createWritable();
+                    await writable.write(blob);
+                    await writable.close();
+                    toast.success(`Guardado como ${handle.name}`);
+                })
+                .catch((err) => {
+                    if (err.name !== 'AbortError') {
+                        console.warn("showSaveFilePicker falló:", err);
+                        setExportFormat(format);
+                        setExportFilename(suggestedName);
+                        setShowExportModal(true);
+                    }
+                });
+        } else {
+            setExportFormat(format);
+            setExportFilename(suggestedName);
+            setShowExportModal(true);
+        }
     };
 
     const performExport = async () => {
@@ -2513,7 +2567,6 @@ export default function HistoryPage() {
                                 </div>
 
                                 {/* Drawer (portal) */}
-                                {/* Drawer (portal) */}
                                 {shouldRenderSidebar && createPortal(
                                     <div className="fixed inset-0 z-40">
                                         {/* Backdrop con fade */}
@@ -2683,7 +2736,7 @@ export default function HistoryPage() {
                                                                                         : filters.domains.filter(d => d !== dom);
                                                                                     setFilters({ ...filters, domains: newDomains });
                                                                                 }}
-                                                                                className="w-5 h-5 rounded-md border-2 border-slate-300 text-violet-600 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
+                                                                                className="w-5 h-5 contenedorCosas border-2 border-slate-300 text-violet-600 checked:bg-violet-600 checked:border-violet-600 transition-all duration-200 cursor-pointer appearance-none group-hover:border-violet-400"
                                                                             />
                                                                             {filters.domains.includes(dom) && (
                                                                                 <Check className="absolute w-4 h-4 text-white pointer-events-none" strokeWidth={3} />
@@ -2861,10 +2914,152 @@ export default function HistoryPage() {
                         );
                     })()}
 
+                    {/* ====================== PORTAL: BUSCADOR + BOTONES FIJO ====================== */}
+                    {createPortal(
+                        <div
+                            className="fixed left-0 right-0 z-[9] pointer-events-none"
+                            style={{ top: '73px' }}   // ← AJUSTA este valor según altura real de tu navbar
+                        >
+                            <div className="max-w-[646px] mx-auto px-4 md:px-0 pointer-events-auto animate-in fade-in zoom-in-95 duration-600">
+                                <div className="bg-white contenedorCosas shadow-sm p-2.5 mb-3 flex flex-col md:flex-row gap-3">
+
+                                    {/* Input de búsqueda */}
+                                    <div className="flex-1 relative min-w-0">
+                                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
+                                        <input
+                                            type="text"
+                                            placeholder="Buscar..."
+                                            value={search}
+                                            onChange={(e) => setSearch(e.target.value)}
+                                            className="
+                                              input-historial w-full pl-10
+                                              border border-slate-300
+                                              focus:border-violet-500 focus:border-1
+                                              focus:ring-1 focus:ring-violet-400/40
+                                              focus:outline-none
+                                              transition-all duration-200
+                                            "
+                                            style={{
+                                                paddingRight: search ? '30px' : '17px'   // 40px ≈ pr-10, 16px ≈ pr-4
+                                            }}
+                                        />
+                                        {search && (
+                                            <button
+                                                onClick={() => setSearch("")}
+                                                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                                            >
+                                                <X className="w-4 h-4" />
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Botones */}
+                                    <div className="grid grid-cols-3 gap-3 w-full md:w-auto md:flex md:items-center">
+
+                                        {/* Importar */}
+                                        <label
+                                            className={`botonesImportarExportar flex items-center justify-center gap-2 transition-all
+                                        ${(isLoading || !isHistoryFullyLoaded || isImporting) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:bg-violet-600 active:bg-violet-700'}`}
+
+                                        >
+                                            <Upload className="w-4 h-4" />
+                                            Importar
+                                            <input
+                                                id="file-input"
+                                                type="file"
+                                                accept=".json,.csv,text/csv,application/json"
+                                                onChange={handleImport}
+                                                className="hidden"
+                                                ref={fileInputRef}
+                                                disabled={isLoading || !isHistoryFullyLoaded || isImporting}
+                                            />
+                                        </label>
+
+                                        {/* Exportar → solo el botón, el menú se renderiza en el nivel superior */}
+                                        <Menu as="div" className="relative inline-block text-left w-full md:w-auto">
+                                            <MenuButton
+                                                disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
+                                                className={`botonesImportarExportar w-full flex items-center justify-center gap-2 transition-all
+      ${!isHistoryFullyLoaded || isLoading || history.length === 0
+                                                        ? 'opacity-60 cursor-not-allowed'
+                                                        : 'hover:bg-[#8575da] active:bg-violet-700 cursor-pointer'}`}
+                                            >
+                                                <Download className="w-4 h-4" />
+                                                Exportar
+                                            </MenuButton>
+
+                                            <Transition
+                                                as={Fragment}
+                                                enter="transition ease-out duration-100"
+                                                enterFrom="transform opacity-0 scale-95"
+                                                enterTo="transform opacity-100 scale-100"
+                                                leave="transition ease-in duration-75"
+                                                leaveFrom="transform opacity-100 scale-100"
+                                                leaveTo="transform opacity-0 scale-95"
+                                            >
+                                                <MenuItems className="
+      absolute right-0 mt-2 w-48 origin-top-right z-[9999]
+      bg-white border border-slate-200 contenedorCosas shadow-xl
+      focus:outline-none overflow-hidden divide-y divide-slate-100
+    ">
+                                                    <div className="py-0">
+                                                        <MenuItem>
+                                                            <button
+                                                                onClick={() => handleExportFormat("json")}
+                                                                className={`
+      w-full text-left px-4 py-3 text-sm flex items-center gap-3
+      text-slate-700
+      data-[active]:bg-violet-50 data-[active]:text-violet-700
+      hover:bg-violet-50 transition-colors
+    `}
+                                                            >
+                                                                <Package className="w-4 h-4" />
+                                                                JSON
+                                                            </button>
+                                                        </MenuItem>
+
+                                                        <MenuItem>
+                                                            <button
+                                                                onClick={() => handleExportFormat("csv")}
+                                                                className={`
+      w-full text-left px-4 py-3 text-sm flex items-center gap-3
+      text-green-700
+      data-[active]:bg-green-50 data-[active]:text-green-800
+      hover:bg-green-50 transition-colors
+    `}
+                                                            >
+                                                                <Copy className="w-4 h-4" />
+                                                                CSV
+                                                            </button>
+                                                        </MenuItem>
+                                                    </div>
+                                                </MenuItems>
+                                            </Transition>
+                                        </Menu>
+
+                                        {/* Vaciar */}
+                                        <button
+                                            onClick={() => isHistoryFullyLoaded && history.length > 0 && handleClear()}
+                                            disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
+                                            className={`borrarTodo contenedorCosas w-full flex items-center justify-center gap-2 transition-all md:h-[2.6rem]
+              ${!isHistoryFullyLoaded || isLoading || history.length === 0
+                                                    ? 'opacity-60 cursor-not-allowed'
+                                                    : 'hover:bg-[#fecaca] active:bg-red-200'}`}
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                            {filtered.length < history.length && filtered.length > 0 ? `Vaciar` : "Vaciar"}
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>,
+                        document.body
+                    )}
+
                     {/* Main content */}
                     <div className="flex-1 -mt-4 space-y-3 max-w-[646px]">
                         {/* Search + Actions */}
-                        <div className=" bg-white contenedorCosas shadow-sm p-2.5 mb-3 flex flex-col md:flex-row gap-3 opacity-0 animate-fade-in-up" style={{ animationDelay: "0.3s" }}>
+                        <div className="bg-white contenedorCosas shadow-sm p-2.5 mb-3 flex flex-col md:flex-row gap-3 opacity-0 animate-fade-in-up" style={{ visibility: 'hidden', overflow: 'hidden' }}>
                             <div className="flex-1 relative min-w-0">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                                 <input
@@ -2912,144 +3107,68 @@ export default function HistoryPage() {
                                 </label>
                                 {/* Exportar */}
                                 <div className="relative">
-                                    <button
-                                        onClick={() => isHistoryFullyLoaded && history.length > 0 && setShowExportMenu(!showExportMenu)}
-                                        disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
-                                        className={`botonesImportarExportar w-full flex items-center justify-center gap-2 transition-all
-                                    ${!isHistoryFullyLoaded || isLoading || history.length === 0
-                                                ? 'opacity-60 cursor-not-allowed'
-                                                : 'hover:bg-[#8575da] active:bg-violet-700'}`}
-                                        title={
-                                            !isHistoryFullyLoaded || isLoading
-                                                ? "Cargando historial..."
-                                                : history.length === 0
-                                                    ? "No hay elementos para exportar"
-                                                    : "Exportar en varios formatos"
-                                        }
-                                        ref={exportButtonRef}
-                                    >
-                                        <Download className="w-4 h-4" />
-                                        Exportar
-                                    </button>
-                                </div>
-                                {/* === PORTAL: MENÚ FUERA DEL DOM === */}
-                                {showExportMenu && history.length > 0 && createPortal(
-                                    <div
-                                        className="fixed inset-0 z-[9999] pointer-events-none"
-                                        onClick={() => setShowExportMenu(false)}
-                                    >
-                                        <div
-                                            className="absolute bg-white contenedorCosas shadow-xl border border-slate-200 w-48 pointer-events-auto animate-in fade-in zoom-in-95"
-                                            style={{
-                                                top: `${exportButtonRef.current?.getBoundingClientRect().bottom + 8}px`,
-                                                left: `${exportButtonRef.current?.getBoundingClientRect().right - 192}px`, // 48*4 = 192px
-                                                animation: 'modalIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards'
-                                            }}
-                                            onClick={(e) => e.stopPropagation()}
+                                    <Menu as="div" className="relative inline-block text-left w-full md:w-auto">
+                                        <MenuButton
+                                            disabled={!isHistoryFullyLoaded || history.length === 0 || isLoading}
+                                            className={`botonesImportarExportar w-full flex items-center justify-center gap-2 transition-all
+      ${!isHistoryFullyLoaded || isLoading || history.length === 0
+                                                    ? 'opacity-60 cursor-not-allowed'
+                                                    : 'hover:bg-[#8575da] active:bg-violet-700 cursor-pointer'}`}
                                         >
-                                            {[
-                                                { label: "JSON", format: "json", icon: <Package className="w-4 h-4" /> },
-                                                { label: "CSV", format: "csv", icon: <Copy className="w-4 h-4 text-green-600" /> },
-                                            ].map((opt) => (
-                                                <button
-                                                    key={opt.format}
-                                                    onClick={async () => {
-                                                        setShowExportMenu(false);
+                                            <Download className="w-4 h-4" />
+                                            Exportar
+                                        </MenuButton>
 
-                                                        const data = filtered;
+                                        <Transition
+                                            as={Fragment}
+                                            enter="transition ease-out duration-100"
+                                            enterFrom="transform opacity-0 scale-95"
+                                            enterTo="transform opacity-100 scale-100"
+                                            leave="transition ease-in duration-75"
+                                            leaveFrom="transform opacity-100 scale-100"
+                                            leaveTo="transform opacity-0 scale-95"
+                                        >
+                                            <MenuItems className="
+      absolute right-0 mt-2 w-48 origin-top-right z-[9999]
+      bg-white border border-slate-200 contenedorCosas shadow-xl
+      focus:outline-none overflow-hidden divide-y divide-slate-100
+    ">
+                                                <div className="py-1">
+                                                    <MenuItem>
+                                                        <button
+                                                            onClick={() => handleExportFormat("json")}
+                                                            className={`
+      w-full text-left px-4 py-3 text-sm flex items-center gap-3
+      text-slate-700
+      data-[active]:bg-violet-50 data-[active]:text-violet-700
+      hover:bg-violet-50 transition-colors
+    `}
+                                                        >
+                                                            <Package className="w-4 h-4" />
+                                                            JSON
+                                                        </button>
+                                                    </MenuItem>
 
-                                                        if (!data?.length) {
-                                                            toast.error("No hay datos para exportar");
-                                                            return;
-                                                        }
-                                                        // === EXPORTAR DIRECTO CON FILE SYSTEM ACCESS API (JSON o CSV) ===
-                                                        if ("showSaveFilePicker" in window) {
-                                                            let content = "";
-                                                            let mimeType = "";
-                                                            let defaultExtension = "";
-                                                            let defaultBaseName = "";
-                                                            if (opt.format === "json") {
-                                                                content = JSON.stringify(data, null, 2);
-                                                                mimeType = "application/json";
-                                                                defaultExtension = ".json";
-                                                                defaultBaseName = "amazon-affiliate-history";
-                                                            } else if (opt.format === "csv") {
-                                                                const headers = [
-                                                                    "Fecha",
-                                                                    "Título",
-                                                                    "Precio Original",
-                                                                    "Precio Actual",
-                                                                    "Dominio",
-                                                                    "URL Afiliado",
-                                                                    "ASIN"
-                                                                ];
-                                                                const rows = data.map(item => [
-                                                                    new Date(item.timestamp).toLocaleString("es-ES"),
-                                                                    `"${(item.productTitle || "").replace(/"/g, '""')}"`,
-                                                                    item.originalPrice ? `"${item.originalPrice.replace(/"/g, '""')}"` : '""',
-                                                                    item.price ? `"${item.price.replace(/"/g, '""')}"` : '""',
-                                                                    item.domain || item.dominio || "amazon.es",
-                                                                    item.affiliateUrl || item.affiliate_url || "",
-                                                                    item.asin || ""
-                                                                ]);
-                                                                const BOM = "\uFEFF";
-                                                                content = BOM + [headers, ...rows]
-                                                                    .map(row => row.join(";"))
-                                                                    .join("\r\n");
-                                                                mimeType = "text/csv";
-                                                                defaultExtension = ".csv";
-                                                                defaultBaseName = "historialUrlAmazon";
-                                                            }
-                                                            const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
-                                                            const today = new Date().toISOString().split('T')[0];
-                                                            const defaultName = `${defaultBaseName}_${today}${defaultExtension}`;
-                                                            try {
-                                                                const handle = await window.showSaveFilePicker({
-                                                                    suggestedName: defaultName,
-                                                                    types: [{
-                                                                        description: opt.format === "json" ? 'Archivo JSON' : 'Archivo CSV',
-                                                                        accept: { [mimeType]: [defaultExtension] },
-                                                                    }],
-                                                                });
-                                                                const fileName = handle.name;
-                                                                const writable = await handle.createWritable();
-                                                                await writable.write(blob);
-                                                                await writable.close();
-                                                                toast.success(`Guardado como "${fileName}"`, {
-                                                                    duration: 5000
-                                                                });
-                                                            } catch (err) {
-                                                                if (err.name !== 'AbortError') {
-                                                                    console.warn("File System Access API falló", err);
-                                                                    toast.error("No se pudo guardar directamente. Usa descarga normal.");
-                                                                    const suggestedName = `${defaultBaseName}_${today}`;
-                                                                    setExportFormat(opt.format);
-                                                                    setExportFilename(suggestedName.replace(defaultExtension, ''));
-                                                                    setShowExportModal(true);
-                                                                }
-                                                            }
-                                                        } else {
-                                                            const defaultBaseName = opt.format === "csv" ? "historialUrlAmazon" : "amazon-affiliate-history";
-                                                            const suggestedName = `${defaultBaseName}_${new Date().toISOString().split('T')[0]}`;
-                                                            setExportFormat(opt.format);
-                                                            setExportFilename(suggestedName);
-                                                            setShowExportModal(true);
-                                                        }
-                                                    }}
-                                                    className={`w-full px-3 py-2.5 text-left text-sm flex items-center gap-3 transition contenedorCosas
-                                                        ${opt.format === "csv"
-                                                            ? "text-green-700 hover:bg-green-50 hover:text-green-800"
-                                                            : "text-slate-700 hover:bg-violet-50 hover:text-violet-700"
-                                                        }`}
-                                                >
-                                                    {opt.icon}
-                                                    <span>{opt.label}</span>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    </div>,
-                                    document.body
-                                )}
+                                                    <MenuItem>
+                                                        <button
+                                                            onClick={() => handleExportFormat("csv")}
+                                                            className={`
+      w-full text-left px-4 py-3 text-sm flex items-center gap-3
+      text-green-700
+      data-[active]:bg-green-50 data-[active]:text-green-800
+      hover:bg-green-50 transition-colors
+    `}
+                                                        >
+                                                            <Copy className="w-4 h-4" />
+                                                            CSV
+                                                        </button>
+                                                    </MenuItem>
+                                                </div>
+                                            </MenuItems>
+                                        </Transition>
+                                    </Menu>
+                                </div>
+
                                 {/* Vaciar */}
                                 <button
                                     onClick={() => isHistoryFullyLoaded && history.length > 0 && handleClear()}
