@@ -1319,6 +1319,11 @@ export default function HistoryPage() {
             };
     });
 
+    // Al inicio del componente, después de otros estados
+    const favoriteCount = useMemo(() => {
+        return history.filter(item => item.isFavorite === true).length;
+    }, [history]);
+
     useEffect(() => {
         if (showPriceUpdateSelector) {
             // Guardamos la posición actual para restaurarla después
@@ -2445,13 +2450,31 @@ export default function HistoryPage() {
                                         </label>
                                     </div>
 
-                                    <div className="px-4 py-3 border-t border-slate-100">  {/* opcional: separador sutil */}
+                                    <div className="px-4 py-3 border-t border-slate-100">
                                         <label className="flex items-center justify-between gap-3 cursor-pointer group select-none">
-                                            <div className="flex items-center gap-2.5">
+                                            <div className="flex items-center gap-2.5 flex-1">
                                                 <Star className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
-                                                <span className="text-sm font-bold text-slate-700 group-hover:text-violet-600 transition-colors">
-                                                    Favoritos
-                                                </span>
+                                                <div className="flex items-baseline gap-2">
+                                                    <span className="text-sm font-bold text-slate-700 group-hover:text-violet-700 transition-colors">
+                                                        Favoritos
+                                                    </span>
+                                                    {favoriteCount > 0 && (
+                                                        <span className="
+                                                          inline-flex items-center justify-center
+                                                          min-w-[20px] h-5
+                                                          text-xs font-semibold
+                                                          text-violet-700
+                                                          bg-white
+                                                          contenedorCosas
+                                                          border border-violet-300/60
+                                                          shadow-[0_1px_2px_rgba(0,0,0,0.05)]
+                                                          ring-1 ring-inset ring-violet-200/40
+                                                          px-1.5
+                                                        ">
+                                                            {favoriteCount}
+                                                        </span>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div className="relative flex items-center justify-center">
                                                 <input
@@ -2838,13 +2861,31 @@ export default function HistoryPage() {
                                                             </label>
                                                         </div>
 
-                                                        <div className="px-4 py-3 border-t border-slate-100">  {/* opcional: separador sutil */}
+                                                        <div className="px-4 py-3 border-t border-slate-100">
                                                             <label className="flex items-center justify-between gap-3 cursor-pointer group select-none">
-                                                                <div className="flex items-center gap-2.5">
+                                                                <div className="flex items-center gap-2.5 flex-1">
                                                                     <Star className="w-4 h-4 text-slate-500 group-hover:text-violet-600 transition-colors" />
-                                                                    <span className="text-sm font-bold text-slate-700 group-hover:text-violet-600 transition-colors">
-                                                                        Favoritos
-                                                                    </span>
+                                                                    <div className="flex items-baseline gap-2">
+                                                                        <span className="text-sm font-bold text-slate-700 group-hover:text-violet-700 transition-colors">
+                                                                            Favoritos
+                                                                        </span>
+                                                                        {favoriteCount > 0 && (
+                                                                            <span className="
+                                                                              inline-flex items-center justify-center
+                                                                              min-w-[20px] h-5
+                                                                              text-xs font-semibold
+                                                                              text-violet-700
+                                                                              bg-white
+                                                                              contenedorCosas
+                                                                              border border-violet-300/60
+                                                                              shadow-[0_1px_2px_rgba(0,0,0,0.05)]
+                                                                              ring-1 ring-inset ring-violet-200/40
+                                                                              px-1.5
+                                                                            ">
+                                                                                {favoriteCount}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                 </div>
                                                                 <div className="relative flex items-center justify-center">
                                                                     <input
@@ -2920,7 +2961,7 @@ export default function HistoryPage() {
                             className="fixed left-0 right-0 z-[9] pointer-events-none"
                             style={{ top: '73px' }}   // ← AJUSTA este valor según altura real de tu navbar
                         >
-                            <div className="max-w-[646px] mx-auto px-4 md:px-0 pointer-events-auto animate-in fade-in zoom-in-95 duration-600">
+                            <div className="max-w-[646px] mx-auto px-4 md:px-0 pointer-events-auto animate-custom">
                                 <div className="bg-white contenedorCosas shadow-sm p-2.5 mb-3 flex flex-col md:flex-row gap-3">
 
                                     {/* Input de búsqueda */}
