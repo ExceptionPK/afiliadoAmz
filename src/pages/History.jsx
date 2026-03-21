@@ -1601,10 +1601,6 @@ export default function HistoryPage() {
                     domainNorm.includes(word)
                 );
 
-                // Alternativa más laxa (OR) → descomenta si prefieres:
-                // searchMatch = searchWords.some(word => 
-                //     titleNorm.includes(word) || asinNorm.includes(word) || domainNorm.includes(word)
-                // );
             }
 
             // ── FILTROS ADICIONALES ───────────────────────────────────────

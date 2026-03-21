@@ -34,7 +34,7 @@ const setLastGoodKeyIndex = (idx) => {
  * @returns {Promise<string>} HTML obtenido
  * @throws Error si todas las keys fallan
  */
-async function fetchWithFallback(targetUrl) {
+export async function fetchWithFallback(targetUrl) {
     if (API_KEYS.length === 0) {
         throw new Error("No hay claves configuradas para ScraperAPI");
     }
@@ -71,9 +71,9 @@ async function fetchWithFallback(targetUrl) {
 
             // Errores típicos de ScraperAPI (basado en su documentación actual)
             const isQuotaOrAuthError =
-                status === 401 ||           // clave inválida o sin créditos
-                status === 429 ||           // rate limit
-                status === 403 ||           // forbidden (p.ej. costo excedido si usas max_cost, o bloqueo temporal)
+                status === 401 ||
+                status === 429 ||
+                status === 403 ||
                 errText.toLowerCase().includes('credit') ||
                 errText.toLowerCase().includes('quota') ||
                 errText.toLowerCase().includes('exceeded') ||

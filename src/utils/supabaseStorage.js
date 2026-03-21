@@ -195,6 +195,7 @@ export const updateHistoryItem = async (updatedEntry) => {
       const favUpdateData = {
         product_title: data.product_title,
         price: data.price,
+        original_price: data.original_price,
       };
 
       const { error: favUpdateErr } = await supabase
@@ -439,6 +440,7 @@ export const getSavedMessages = async (limit = 10) => {
 
 /**
  * Añade o quita un producto de favoritos (toggle)
+ * - Al añadir: copia original_price y price desde affiliate_history
  */
 export const toggleFavorite = async (asin, dominio = 'amazon.es') => {
   const { data: { user } } = await supabase.auth.getUser();
@@ -467,17 +469,17 @@ export const toggleFavorite = async (asin, dominio = 'amazon.es') => {
     if (deleteError) {
       console.error('Error al quitar favorito:', deleteError);
       toast.error('No se pudo quitar de favoritos');
-      return true; // sigue siendo favorito (fallo)
+      return true;
     }
 
     return false;
   }
 
   // ── Añadir favorito ────────────────────────────────────────────────
-  // 1. Obtener datos actuales desde la tabla principal
+  // 1. Obtener datos actuales desde affiliate_history (incluyendo original_price)
   const { data: product, error: fetchError } = await supabase
     .from('affiliate_history')
-    .select('product_title, price')
+    .select('product_title, price, original_price')
     .eq('user_id', user.id)
     .eq('asin', asin)
     .eq('dominio', dominio)
@@ -485,24 +487,30 @@ export const toggleFavorite = async (asin, dominio = 'amazon.es') => {
 
   let titleToSave = 'Producto sin título';
   let priceToSave = null;
+  let originalPriceToSave = null;
 
   if (!fetchError && product) {
     titleToSave = product.product_title?.trim() || titleToSave;
-    priceToSave = product.price; // ya viene formateado como string ("19,99 €")
+    priceToSave = product.price;
+    originalPriceToSave = product.original_price;
+    console.log(`[toggleFavorite] Copiando desde affiliate_history → original_price: ${originalPriceToSave}, price: ${priceToSave}`);
   } else {
     console.warn(`No se encontró producto en affiliate_history para ASIN ${asin} → usando defaults`);
   }
 
-  // 2. Insertar con los datos
-  const { error: insertError } = await supabase
+  // 2. Insertar en user_favorites con original_price incluido
+  const { data: inserted, error: insertError } = await supabase
     .from('user_favorites')
     .insert({
       user_id: user.id,
       asin,
       dominio,
       product_title: titleToSave,
-      price: priceToSave,
-    });
+      price: priceToSave,              // precio actual
+      original_price: originalPriceToSave,  // ← el precio original (o fallback)
+    })
+    .select()
+    .single();
 
   if (insertError) {
     console.error('Error al añadir favorito:', insertError);
@@ -555,17 +563,17 @@ export const getUserFavorites = async () => {
  */
 export const bulkDeleteItems = async (itemsToDelete) => {
   const user = await getCurrentUser();
-  
+
   if (!user?.id) {
     // Modo localStorage
     const current = getHistory();
     const keysToRemove = new Set(itemsToDelete.map(i => `${i.asin}-${i.dominio || 'amazon.es'}`));
-    
+
     const remaining = current.filter(item => {
       const key = `${item.asin}-${item.domain || 'amazon.es'}`;
       return !keysToRemove.has(key);
     });
-    
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(remaining));
     window.dispatchEvent(new Event('amazon-history-updated'));
     return true;
@@ -576,7 +584,7 @@ export const bulkDeleteItems = async (itemsToDelete) => {
     // Como la clave primaria compuesta es (user_id, asin, dominio)
     // podemos hacer varias llamadas o intentar un filter con in + lógica
     // La forma más segura hoy por hoy es borrar uno por uno o por batches
-    
+
     const batches = [];
     for (let i = 0; i < itemsToDelete.length; i += 20) {
       batches.push(itemsToDelete.slice(i, i + 20));
