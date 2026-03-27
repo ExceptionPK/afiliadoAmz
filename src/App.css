@@ -367,6 +367,26 @@ html, body {
   }
 }
 
+/* Parpadeo suave rojo */
+@keyframes pulse-soft {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+.animate-pulse-soft {
+  animation: pulse-soft 1.2s ease-in-out infinite;
+}
+
+/* Flecha que sube y desaparece una vez */
+@keyframes bounce-once {
+  0% { transform: translateY(0); opacity: 0; }
+  20% { transform: translateY(-8px); opacity: 1; }
+  60% { transform: translateY(-4px); }
+  100% { transform: translateY(0); opacity: 0; }
+}
+.animate-bounce-once {
+  animation: bounce-once 1.5s ease-out forwards;
+}
+
 .animate-custom {
   animation: fadeInZoom .4s ease-out forwards;  /* ← aquí controlas la duración */
 }
