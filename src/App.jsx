@@ -7,6 +7,7 @@ import History from './pages/History';
 import Chat from './pages/Chat';
 import Auth from './pages/Auth';
 import Planes from './pages/Planes';
+import Success from './pages/Success';
 import ChatWidget from './components/ChatWidget';
 import LoadingScreen from './components/LoadingScreen';
 import { supabase } from './utils/supabaseClient';
@@ -78,6 +79,7 @@ function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/history" element={<History />} />
         <Route path="/planes" element={<Planes />} />
+        <Route path="/success" element={<Success />} />
         
         <Route
           path="/chat"

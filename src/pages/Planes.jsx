@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
 import { Check, Sparkles } from 'lucide-react';
 import MagicParticles from '../components/MagicParticles';
 
@@ -14,11 +13,10 @@ const PriceCounter = ({ target, duration = 700 }) => {
       return;
     }
 
-    let start = 0;
+    let current = 0;
     const steps = duration / 16;
     const increment = numericTarget / steps;
 
-    let current = 0;
     const timer = setInterval(() => {
       current += increment;
       if (current >= numericTarget) {
@@ -44,10 +42,46 @@ const PriceCounter = ({ target, duration = 700 }) => {
 export default function Planes() {
   const [isYearly, setIsYearly] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [loading, setLoading] = useState(false);        // ← Nuevo
 
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  // Función principal para pagar con Stripe
+  const handleSubscribe = async (planName) => {
+    const planKey = planName.toLowerCase() === 'profesional' ? 'pro' : 'premier';
+    const billing = isYearly ? 'yearly' : 'monthly';
+
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ 
+          plan: planKey, 
+          billing 
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.url) {
+        // Redirige al Checkout de Stripe
+        window.location.href = data.url;
+      } else {
+        alert('Error al procesar el pago. Por favor, inténtalo de nuevo.');
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Hubo un problema de conexión. Inténtalo más tarde.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const plans = [
     {
@@ -63,7 +97,7 @@ export default function Planes() {
       ],
       variant: 'outline',
       popular: false,
-      isCurrent: true,  // ← esto vendrá de tu lógica real (auth / suscripción)
+      isCurrent: true,
     },
     {
       name: 'Profesional',
@@ -81,7 +115,6 @@ export default function Planes() {
       buttonText: 'Comprar',
       variant: 'primary',
       popular: true,
-      href: '/auth?plan=pro',
       isCurrent: false,
     },
     {
@@ -101,7 +134,6 @@ export default function Planes() {
       buttonText: 'Comprar',
       variant: 'premium',
       popular: false,
-      href: '/auth?plan=premier',
       isCurrent: false,
     },
   ];
@@ -143,7 +175,6 @@ export default function Planes() {
             {plans.map((plan, index) => {
               const priceValue = isYearly ? plan.priceYearly : plan.priceMonthly;
               const period = isYearly ? '/año' : '/mes';
-
               const isFree = plan.name === 'Gratis';
 
               return (
@@ -155,9 +186,7 @@ export default function Planes() {
                     transition-all duration-500 ease-out
                     hover:shadow-2xl hover:shadow-violet-500/20 hover:-translate-y-0.5
                     flex flex-col w-full
-                    ${plan.popular
-                      ? 'border-violet-400/50 md:scale-105 ring-1 ring-violet-400/20'
-                      : 'border-slate-200/60'}
+                    ${plan.popular ? 'border-violet-400/50 md:scale-105 ring-1 ring-violet-400/20' : 'border-slate-200/60'}
                     ${plan.isCurrent ? 'ring-2 ring-emerald-400/30' : ''}
                     ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-10'}
                   `}
@@ -178,7 +207,6 @@ export default function Planes() {
 
                   <div className="p-5 sm:p-6 flex flex-col flex-grow">
                     <h3 className="text-xl font-bold text-slate-800 mb-2">{plan.name}</h3>
-
                     <p className="text-slate-600 text-sm leading-relaxed mb-5">{plan.description}</p>
 
                     <div className="flex items-baseline mb-6">
@@ -202,25 +230,22 @@ export default function Planes() {
                     </ul>
 
                     <div className="mt-auto pt-4 min-h-[52px]">
-                      {!plan.isCurrent && plan.href && (
-                        <Link
-                          to={plan.href}
+                      {!plan.isCurrent && (
+                        <button
+                          onClick={() => handleSubscribe(plan.name)}
+                          disabled={loading}
                           className={`
                             block w-full py-3 text-center font-medium text-base contenedorCosas
                             !text-white hover:!text-white focus:!text-white active:!text-white
                             transition-all duration-300 ease-out
-                            bg-violet-600 hover:bg-violet-700/95
-                            shadow-md hover:shadow-lg rounded-md
+                            bg-violet-600 hover:bg-violet-700 shadow-md hover:shadow-lg rounded-md
+                            disabled:opacity-70 disabled:cursor-not-allowed
                           `}
                         >
-                          {plan.buttonText || 'Seleccionar plan'}
-                        </Link>
+                          {loading ? 'Procesando pago...' : (plan.buttonText || 'Seleccionar plan')}
+                        </button>
                       )}
-                      {/* 
-                        Cuando es el plan actual:
-                        - Si es Gratis → no se muestra NADA
-                        - Si es Pro o Premier → se muestra "Plan activo" (o puedes quitarlo también si prefieres)
-                      */}
+
                       {plan.isCurrent && !isFree && (
                         <div className="w-full py-3 text-center font-medium text-base bg-emerald-50/80 text-emerald-800 border border-emerald-200 contenedorCosas rounded-md">
                           Plan activo

@@ -2915,7 +2915,7 @@ export default function HistoryPage() {
                                               transition-all duration-200
                                             "
                                             style={{
-                                                paddingRight: search ? '30px' : '17px'   // 40px ≈ pr-10, 16px ≈ pr-4
+                                                paddingRight: search ? '30px' : '17px'
                                             }}
                                         />
                                         {search && (
