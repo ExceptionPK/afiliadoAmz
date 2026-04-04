@@ -275,7 +275,7 @@ export default function AmazonAffiliate() {
 
           <div
             className="max-w-3xl mx-auto contenedorCosas opacity-0 animate-fade-in-up"
-            style={{ animationDelay: "0.3s" }}
+            style={{ animationDelay: "0.4s" }}
           >
             <Card>
               <div className="space-y-1.5">
