@@ -308,7 +308,7 @@ export const clearUserHistory = async () => {
  * Obtiene el historial del usuario ordenado por posición personalizada
  * (si existe sesión) o desde localStorage (si no hay sesión)
  */
-export const getUserHistory = async (limit = 50) => {
+export const getUserHistory = async (limit = 2000) => {
   const user = await getCurrentUser();
 
   if (!user?.id) {

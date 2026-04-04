@@ -1461,7 +1461,7 @@ export default function HistoryPage() {
             console.log("[HISTORY LOAD] Intentando cargar historial... Fuente esperada:",
                 isAuthenticated ? "Supabase" : "localStorage");
             try {
-                const data = await getUserHistory(100);
+                const data = await getUserHistory(2000);
                 console.log("[HISTORY LOAD] Datos obtenidos:",
                     data?.length || 0, "items | Primera entrada:", data?.[0]?.asin || "vacío");
                 setHistory(data || []);
@@ -1493,7 +1493,7 @@ export default function HistoryPage() {
             if (isAuthenticated) {
                 const reload = async () => {
                     try {
-                        const freshData = await getUserHistory(100);
+                        const freshData = await getUserHistory(2000);
                         console.log("[WINDOW FOCUS] Datos frescos:", freshData?.length || 0, "items");
                         setHistory(prev => {
                             if (prev.length === freshData.length &&
@@ -1671,14 +1671,14 @@ export default function HistoryPage() {
             }
 
             // 2. Primera recarga
-            let updatedHistory = await getUserHistory(200); // límite alto para estar seguros
+            let updatedHistory = await getUserHistory(2000); // límite alto para estar seguros
 
             // 3. Verificación simple de consistencia (opcional pero muy útil)
             const stillThere = updatedHistory.some(h => h.id === id);
             if (stillThere && isAuthenticated) {
                 console.warn(`[handleDelete] El item ${id} aún aparece después de delete → reintentando...`);
                 await new Promise(r => setTimeout(r, 600));
-                updatedHistory = await getUserHistory(200);
+                updatedHistory = await getUserHistory(2000);
             }
 
             // 4. Actualizamos el estado
@@ -1816,7 +1816,7 @@ export default function HistoryPage() {
         importHistory(file, async (success, message, useInfoToast = false) => {
             await new Promise(resolve => setTimeout(resolve, 300));
             if (success) {
-                const fresh = await getUserHistory(500);
+                const fresh = await getUserHistory(2000);
                 setHistory(fresh || []);
                 setAnimatedItems(new Set());
                 const longDuration = 5000;
