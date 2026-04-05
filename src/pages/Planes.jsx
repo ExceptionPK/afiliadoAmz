@@ -42,7 +42,7 @@ const PriceCounter = ({ target, duration = 700 }) => {
 export default function Planes() {
   const [isYearly, setIsYearly] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const [loading, setLoading] = useState(false);        // ← Nuevo
+  const [loadingPlan, setLoadingPlan] = useState(null);
 
   useEffect(() => {
     setMounted(true);
@@ -53,8 +53,10 @@ export default function Planes() {
     const planKey = planName.toLowerCase() === 'profesional' ? 'pro' : 'premier';
     const billing = isYearly ? 'yearly' : 'monthly';
 
-    setLoading(true);
-    console.log('→ Iniciando pago:', { plan: planKey, billing, isYearly });
+    // Guardamos qué plan está cargando
+    setLoadingPlan(planName);
+
+    console.log(`→ Iniciando pago: ${planName} (${planKey} - ${billing})`);
 
     try {
       const response = await fetch('/api/create-checkout-session', {
@@ -63,22 +65,20 @@ export default function Planes() {
         body: JSON.stringify({ plan: planKey, billing }),
       });
 
-      console.log('← Status de la respuesta:', response.status);
-
       const data = await response.json();
-      console.log('← Datos recibidos:', data);
 
       if (response.ok && data.url) {
-        console.log('Redirigiendo a Stripe Checkout →', data.url);
-        window.location.href = data.url;
+        console.log('Redirigiendo a Stripe →', data.url);
+        window.location.href = data.url;   // Redirección inmediata
       } else {
-        alert(`Error: ${data.error || 'Respuesta inválida del servidor'}`);
+        console.error('Error del servidor:', data);
+        alert(data.error || 'Error al procesar el pago. Inténtalo de nuevo.');
       }
     } catch (error) {
-      console.error('❌ Error en fetch:', error);
-      alert('Error de conexión. Revisa la consola (F12) para más detalles.');
+      console.error('❌ Error en la petición:', error);
+      alert('Hubo un problema de conexión. Por favor, inténtalo más tarde.');
     } finally {
-      setLoading(false);
+      setLoadingPlan(null);   // ← Importante: siempre liberamos el estado
     }
   };
 
@@ -232,16 +232,18 @@ export default function Planes() {
                       {!plan.isCurrent && (
                         <button
                           onClick={() => handleSubscribe(plan.name)}
-                          disabled={loading}
+                          disabled={loadingPlan !== null}
                           className={`
-                            block w-full py-3 text-center font-medium text-base contenedorCosas
-                            !text-white hover:!text-white focus:!text-white active:!text-white
-                            transition-all duration-300 ease-out
-                            bg-violet-600 hover:bg-violet-700 shadow-md hover:shadow-lg rounded-md
-                            disabled:opacity-70 disabled:cursor-not-allowed
-                          `}
+                          block w-full py-3 text-center font-medium text-base contenedorCosas
+                          !text-white hover:!text-white focus:!text-white active:!text-white
+                          transition-all duration-300 ease-out
+                          bg-violet-600 hover:bg-violet-700 shadow-md hover:shadow-lg rounded-md
+                          disabled:opacity-70 disabled:cursor-not-allowed
+                        `}
                         >
-                          {loading ? 'Procesando pago...' : (plan.buttonText || 'Seleccionar plan')}
+                          {loadingPlan === plan.name
+                            ? 'Procesando pago...'
+                            : (plan.buttonText || 'Seleccionar plan')}
                         </button>
                       )}
 
