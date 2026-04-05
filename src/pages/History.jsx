@@ -125,10 +125,22 @@ const HistoryItem = ({
     const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
 
     const handleContextMenu = (e) => {
-        e.preventDefault();
-        setMenuPosition({ x: e.clientX, y: e.clientY });
-        setShowContextMenu(true);
-    };
+    const target = e.target;
+
+    // Si el elemento o alguno de sus padres es un input, textarea o contentEditable
+    if (
+        target.closest('input') ||
+        target.closest('textarea') ||
+        target.closest('[contenteditable="true"]') ||
+        target.isContentEditable
+    ) {
+        return; // Permitir menú nativo del navegador
+    }
+
+    e.preventDefault();
+    setMenuPosition({ x: e.clientX, y: e.clientY });
+    setShowContextMenu(true);
+};
 
     const closeContextMenu = () => setShowContextMenu(false);
 
