@@ -3,19 +3,14 @@ import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-export const runtime = 'nodejs';
-
-export default async function handler(request) {
-  // Solo permitimos método POST
-  if (request.method !== 'POST') {
-    return new Response(
-      JSON.stringify({ error: 'Método no permitido' }),
-      { status: 405, headers: { 'Content-Type': 'application/json' } }
-    );
+export default async function handler(req, res) {
+  // Solo permitimos POST
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Método no permitido' });
   }
 
   try {
-    const { plan, billing } = await request.json();
+    const { plan, billing } = req.body;        // ← Aquí está la diferencia clave
 
     const priceMap = {
       pro: {
@@ -31,10 +26,7 @@ export default async function handler(request) {
     const priceId = priceMap[plan]?.[billing];
 
     if (!priceId) {
-      return new Response(
-        JSON.stringify({ error: 'Plan o billing no válido' }),
-        { status: 400, headers: { 'Content-Type': 'application/json' } }
-      );
+      return res.status(400).json({ error: 'Plan o billing no válido' });
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -46,16 +38,12 @@ export default async function handler(request) {
       metadata: { plan, billing },
     });
 
-    return new Response(
-      JSON.stringify({ url: session.url }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } }
-    );
+    return res.status(200).json({ url: session.url });
 
   } catch (error) {
-    console.error('Stripe error:', error);
-    return new Response(
-      JSON.stringify({ error: 'Error al crear la sesión de pago' }),
-      { status: 500, headers: { 'Content-Type': 'application/json' } }
-    );
+    console.error('Stripe error:', error.message || error);
+    return res.status(500).json({ 
+      error: 'Error al crear la sesión de pago' 
+    });
   }
 }
