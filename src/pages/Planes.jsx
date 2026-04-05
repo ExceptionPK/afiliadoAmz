@@ -53,10 +53,7 @@ export default function Planes() {
     const planKey = planName.toLowerCase() === 'profesional' ? 'pro' : 'premier';
     const billing = isYearly ? 'yearly' : 'monthly';
 
-    // Guardamos qué plan está cargando
     setLoadingPlan(planName);
-
-    console.log(`→ Iniciando pago: ${planName} (${planKey} - ${billing})`);
 
     try {
       const response = await fetch('/api/create-checkout-session', {
@@ -68,17 +65,15 @@ export default function Planes() {
       const data = await response.json();
 
       if (response.ok && data.url) {
-        console.log('Redirigiendo a Stripe →', data.url);
-        window.location.href = data.url;   // Redirección inmediata
+        window.location.href = data.url;
       } else {
-        console.error('Error del servidor:', data);
-        alert(data.error || 'Error al procesar el pago. Inténtalo de nuevo.');
+        alert(data.error || 'Error al procesar el pago');
+        setLoadingPlan(null);   // Liberar si hay error
       }
     } catch (error) {
-      console.error('❌ Error en la petición:', error);
-      alert('Hubo un problema de conexión. Por favor, inténtalo más tarde.');
-    } finally {
-      setLoadingPlan(null);   // ← Importante: siempre liberamos el estado
+      console.error('Error:', error);
+      alert('Hubo un problema de conexión. Inténtalo más tarde.');
+      setLoadingPlan(null);
     }
   };
 
@@ -232,18 +227,24 @@ export default function Planes() {
                       {!plan.isCurrent && (
                         <button
                           onClick={() => handleSubscribe(plan.name)}
-                          disabled={loadingPlan !== null}
+                          disabled={loadingPlan === plan.name}
                           className={`
-                          block w-full py-3 text-center font-medium text-base contenedorCosas
-                          !text-white hover:!text-white focus:!text-white active:!text-white
-                          transition-all duration-300 ease-out
-                          bg-violet-600 hover:bg-violet-700 shadow-md hover:shadow-lg rounded-md
-                          disabled:opacity-70 disabled:cursor-not-allowed
-                        `}
+     w-full py-3 text-center font-medium text-base contenedorCosas
+    !text-white hover:!text-white focus:!text-white active:!text-white
+    transition-all duration-300 ease-out
+    bg-violet-600 hover:bg-violet-700 shadow-md hover:shadow-lg rounded-md
+    flex items-center justify-center gap-2
+    disabled:opacity-80 disabled:cursor-not-allowed
+  `}
                         >
-                          {loadingPlan === plan.name
-                            ? 'Procesando pago...'
-                            : (plan.buttonText || 'Seleccionar plan')}
+                          {loadingPlan === plan.name ? (
+                            <>
+                              {/* Loader circular */}
+                              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                            </>
+                          ) : (
+                            plan.buttonText || 'Comprar'
+                          )}
                         </button>
                       )}
 
