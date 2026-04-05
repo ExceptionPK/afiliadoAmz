@@ -7,7 +7,7 @@ const PriceCounter = ({ target, duration = 700 }) => {
   const [displayValue, setDisplayValue] = useState('0');
 
   useEffect(() => {
-    const numericTarget = Number(target.replace(',', '.')); 
+    const numericTarget = Number(target.replace(',', '.'));
     if (isNaN(numericTarget)) {
       setDisplayValue(target);
       return;
@@ -54,30 +54,29 @@ export default function Planes() {
     const billing = isYearly ? 'yearly' : 'monthly';
 
     setLoading(true);
+    console.log('→ Iniciando pago:', { plan: planKey, billing, isYearly });
 
     try {
       const response = await fetch('/api/create-checkout-session', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ 
-          plan: planKey, 
-          billing 
-        }),
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ plan: planKey, billing }),
       });
 
-      const data = await response.json();
+      console.log('← Status de la respuesta:', response.status);
 
-      if (data.url) {
-        // Redirige al Checkout de Stripe
+      const data = await response.json();
+      console.log('← Datos recibidos:', data);
+
+      if (response.ok && data.url) {
+        console.log('Redirigiendo a Stripe Checkout →', data.url);
         window.location.href = data.url;
       } else {
-        alert('Error al procesar el pago. Por favor, inténtalo de nuevo.');
+        alert(`Error: ${data.error || 'Respuesta inválida del servidor'}`);
       }
     } catch (error) {
-      console.error('Error:', error);
-      alert('Hubo un problema de conexión. Inténtalo más tarde.');
+      console.error('❌ Error en fetch:', error);
+      alert('Error de conexión. Revisa la consola (F12) para más detalles.');
     } finally {
       setLoading(false);
     }

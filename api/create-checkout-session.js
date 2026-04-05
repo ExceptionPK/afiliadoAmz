@@ -3,6 +3,8 @@ import Stripe from 'stripe';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
+export const runtime = 'nodejs';
+
 export default async function handler(request) {
   // Solo permitimos método POST
   if (request.method !== 'POST') {
