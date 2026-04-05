@@ -1,4 +1,5 @@
 {
+  "outputDirectory": "dist",
   "rewrites": [
     {
       "source": "/api/(.*)",
@@ -9,5 +10,10 @@
       "destination": "/index.html"
     }
   ],
-  "outputDirectory": "dist"
+  "functions": {
+    "api/create-checkout-session.js": {
+      "runtime": "nodejs18.x",
+      "maxDuration": 30
+    }
+  }
 }
