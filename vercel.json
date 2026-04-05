@@ -9,11 +9,5 @@
       "source": "/:path*",
       "destination": "/index.html"
     }
-  ],
-  "functions": {
-    "api/create-checkout-session.js": {
-      "runtime": "nodejs18.x",
-      "maxDuration": 30
-    }
-  }
+  ]
 }
