@@ -15,62 +15,49 @@ const OneSignalInit = ({ session }) => {
       try {
         console.log(`🚀 Iniciando OneSignal para usuario: ${session.user.id}`);
 
-        // 1. Inicializar OneSignal
         await OneSignal.init({
           appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
           allowLocalhostAsSecureOrigin: true,
-          autoResubscribe: true,
+          autoResubscribe: true,           // mantenemos true
           notifyButton: { enable: false },
           promptOptions: {
-            slidedown: {
-              enabled: false,
-              autoPrompt: false,
-            },
+            slidedown: { enabled: false, autoPrompt: false },
           },
+          // Opción importante para reducir operaciones automáticas conflictivas
+          serviceWorkerParam: { scope: "/" },
         });
 
         console.log("✅ OneSignal SDK inicializado");
 
-        if (!isMounted) return;
-
-        // 2. Login del usuario (external_id)
+        // Login del usuario
         await OneSignal.login(session.user.id);
         console.log(`🔑 OneSignal login exitoso para: ${session.user.id}`);
 
-        // 3. Listener para detectar cuando la suscripción se crea/actualiza correctamente
-        const subscriptionListener = OneSignal.User.PushSubscription.addEventListener(
+        // Listener de cambios en la suscripción (para debug)
+        const subListener = OneSignal.User.PushSubscription.addEventListener(
           "subscriptionChange",
           (event) => {
-            console.log("📡 Cambio en suscripción detectado:", event);
-
-            if (event.current?.id) {
-              console.log(`✅ Suscripción creada correctamente. ID: ${event.current.id}`);
-              // Aquí podrías guardar el subscription ID en tu base de datos si quieres
-            }
-
-            if (event.current?.optedIn === true) {
-              console.log("✅ Usuario suscrito y listo para recibir pushes");
-            }
+            console.log("📡 Subscription change:", {
+              subscribed: event.current?.optedIn,
+              id: event.current?.id,
+              token: event.current?.token ? "present" : "empty",
+              enabled: event.current?.enabled,
+            });
           }
         );
 
-        // Listener opcional para cambios de permiso
-        const permissionListener = OneSignal.Notifications.addEventListener(
+        const permListener = OneSignal.Notifications.addEventListener(
           "permissionChange",
           (permission) => {
-            console.log(`🔄 Permiso cambiado a: ${permission}`);
+            console.log(`🔄 Notification permission changed to: ${permission}`);
           }
         );
 
-        // Cleanup de listeners cuando se desmonta el componente
+        // Cleanup
         return () => {
-          console.log("🧹 Limpiando listeners de OneSignal");
-          if (subscriptionListener) {
-            OneSignal.User.PushSubscription.removeEventListener("subscriptionChange", subscriptionListener);
-          }
-          if (permissionListener) {
-            OneSignal.Notifications.removeEventListener("permissionChange", permissionListener);
-          }
+          console.log("🧹 Limpiando listeners OneSignal");
+          OneSignal.User.PushSubscription.removeEventListener("subscriptionChange", subListener);
+          OneSignal.Notifications.removeEventListener("permissionChange", permListener);
         };
 
       } catch (error) {
@@ -80,7 +67,6 @@ const OneSignalInit = ({ session }) => {
 
     initializeOneSignal();
 
-    // Cleanup general del useEffect
     return () => {
       isMounted = false;
     };
