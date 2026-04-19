@@ -17,12 +17,13 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
     setIsDropdownOpen(false);
 
     try {
-      // Logout doble para limpiar mejor
+      // Logout más seguro
       try {
+        await new Promise(r => setTimeout(r, 800));
         await OneSignal.logout();
-        await new Promise(r => setTimeout(r, 600));
+        console.log("✅ OneSignal.logout() desde Navbar");
       } catch (e) {
-        console.warn("OneSignal.logout() falló:", e);
+        console.warn("OneSignal.logout() falló (esperado):", e.message || e);
       }
 
       const { error } = await supabase.auth.signOut({ scope: 'local' });

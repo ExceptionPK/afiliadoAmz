@@ -25,41 +25,51 @@ function App() {
 
   // ==================== ONESIGNAL LOGIN / LOGOUT ====================
   useEffect(() => {
+    let mounted = true;
+
     const handleOneSignalAuth = async () => {
-      await new Promise(resolve => setTimeout(resolve, 200)); // espera más estable
+      if (!mounted) return;
+
+      // Esperamos a que OneSignalInit esté completamente listo
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       if (!session?.user?.id) {
+        // Logout cuando no hay sesión
         try {
           await OneSignal.logout();
-          console.log("✅ OneSignal.logout() ejecutado");
+          console.log("✅ OneSignal.logout() ejecutado (sin sesión)");
         } catch (err) {
-          console.warn("OneSignal.logout() falló:", err.message || err);
+          console.warn("OneSignal.logout() falló (normal si SDK no está listo):", err.message || err);
         }
         return;
       }
 
+      // Login con nuevo usuario
       try {
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1200));
 
-        // Forzamos logout primero para limpiar aliases anteriores
+        // Forzamos logout primero para limpiar estado anterior
         try {
           await OneSignal.logout();
         } catch { }
 
-        // Ahora hacemos login con el nuevo usuario
         await OneSignal.login(session.user.id);
-        console.log(`🔑 OneSignal.login() correcto para: ${session.user.id}`);
+        console.log(`🔑 OneSignal.login() correcto para usuario: ${session.user.id}`);
       } catch (err) {
         const msg = err?.message || JSON.stringify(err);
-        if (msg.includes("user-2") || msg.includes("409") || msg.includes("Aliases claimed")) {
-          console.warn(`⚠️ OneSignal 409/user-2 (esperado al cambiar cuenta)`);
+        if (msg.includes("Qe") || msg.includes("undefined") || msg.includes("409") || msg.includes("user-2")) {
+          console.warn("⚠️ Error esperado de OneSignal al cambiar de cuenta:", msg);
         } else {
-          console.error("Error grave en OneSignal:", err);
+          console.error("Error real en OneSignal.login():", err);
         }
       }
     };
 
     handleOneSignalAuth();
+
+    return () => {
+      mounted = false;
+    };
   }, [session?.user?.id]);
 
   useEffect(() => {
