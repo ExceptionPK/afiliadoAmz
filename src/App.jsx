@@ -23,29 +23,38 @@ function App() {
 
   const isAuthPage = location.pathname === '/auth';
 
+  // ==================== ONESIGNAL LOGIN / LOGOUT ====================
   useEffect(() => {
-    if (!session?.user?.id) return;
+    const handleOneSignalAuth = async () => {
+      if (!session?.user?.id) {
+        try {
+          await OneSignal.logout();
+          console.log("✅ OneSignal.logout() ejecutado (sin sesión)");
+        } catch (err) {
+          console.warn("OneSignal.logout() falló:", err);
+        }
+        return;
+      }
 
-    const handleLogin = async () => {
       try {
-        // Esperamos a que el SDK esté fully loaded
+        await new Promise(resolve => setTimeout(resolve, 800));
+
         const isInitialized = await OneSignal.isInitialized?.();
 
         if (isInitialized) {
           await OneSignal.login(session.user.id);
         } else {
-          // Si no tiene isInitialized, usamos timeout
-          await new Promise(r => setTimeout(r, 1200));
+          await new Promise(r => setTimeout(r, 1000));
           await OneSignal.login(session.user.id);
         }
 
-        console.log(`🔑 Usuario ${session.user.id} identificado correctamente`);
+        console.log(`🔑 OneSignal.login() correcto para usuario: ${session.user.id}`);
       } catch (err) {
-        console.error("Error al identificar usuario en OneSignal:", err);
+        console.error("Error en OneSignal.login():", err);
       }
     };
 
-    handleLogin();
+    handleOneSignalAuth();
   }, [session?.user?.id]);
 
   useEffect(() => {

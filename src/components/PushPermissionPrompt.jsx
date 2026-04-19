@@ -22,22 +22,36 @@ const PushPermissionPrompt = ({ session }) => {
         if (!session?.user?.id) return;
 
         const loadUserPreference = async () => {
-            const { data } = await supabase
-                .from('profiles')
-                .select('push_notifications')
-                .eq('id', session.user.id)
-                .maybeSingle();
+            try {
+                const { data, error } = await supabase
+                    .from('profiles')
+                    .select('push_notifications')
+                    .eq('id', session.user.id)
+                    .maybeSingle();
 
-            const alreadyEnabled = data?.push_notifications === true;
+                if (error) {
+                    console.warn('Error al leer push_notifications:', error);
+                }
 
-            if (alreadyEnabled) {
-                setShow(false); // No mostrar si ya lo activó
-            } else if (Notification.permission === "default") {
-                // Mostrar prompt
-                setTimeout(() => {
-                    setShow(true);
-                    setTimeout(() => setVisible(true), 120);
-                }, 2000);
+                const alreadyEnabled = data?.push_notifications === true;
+
+                if (alreadyEnabled) {
+                    setShow(false);
+                } else if (Notification.permission === "default") {
+                    // Pequeño delay para que el usuario vea la interfaz primero
+                    setTimeout(() => {
+                        setShow(true);
+                        setTimeout(() => setVisible(true), 150);
+                    }, 1800);
+                } else {
+                    setShow(false); // ya denegado o granted
+                }
+            } catch (err) {
+                console.error("Excepción al cargar preferencia push:", err);
+                // En caso de error, mostramos el prompt por seguridad (mejor UX)
+                if (Notification.permission === "default") {
+                    setTimeout(() => setShow(true), 2000);
+                }
             }
         };
 
