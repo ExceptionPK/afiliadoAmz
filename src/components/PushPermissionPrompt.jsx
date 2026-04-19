@@ -9,42 +9,43 @@ const PushPermissionPrompt = ({ session }) => {
     const [visible, setVisible] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    // Reset completo cuando cambia el usuario
+    // Reset cuando cambia de usuario
     useEffect(() => {
         setShow(false);
         setVisible(false);
     }, [session?.user?.id]);
 
-    // Verificar si debemos mostrar el prompt para ESTE usuario
     useEffect(() => {
         if (!session?.user?.id) return;
 
         const checkPromptStatus = async () => {
             try {
-                // 1. Preferencia guardada en BD para ESTE usuario
+                // 1. Obtener preferencia del usuario (si quiere recibir notificaciones)
                 const { data: profile } = await supabase
                     .from('profiles')
                     .select('push_notifications')
                     .eq('id', session.user.id)
                     .maybeSingle();
 
-                const userEnabledInDB = profile?.push_notifications === true;
+                const userWantsNotifications = profile?.push_notifications === true;
 
-                // 2. Estado real de OneSignal
+                // 2. Estado real del dispositivo actual
                 const permission = await OneSignal.Notifications.permission;
-                const isSubscribed = await OneSignal.User.PushSubscription.optedIn;
+                const isSubscribed = await OneSignal.User.PushSubscription.optedIn || false;
 
-                console.log(`Usuario ${session.user.id.slice(0, 8)}... → DB: ${userEnabledInDB}, Subscribed: ${isSubscribed}`);
+                console.log(`Dispositivo actual → User wants: ${userWantsNotifications}, Subscribed: ${isSubscribed}, Permission: ${permission}`);
 
-                // Mostrar prompt solo si el usuario NO ha activado push en NUESTRA base de datos
-                // Aunque el navegador tenga permiso global
-                if (!userEnabledInDB) {
+                // Mostrar prompt si:
+                // - El usuario quiere notificaciones (o nunca lo configuró)
+                // - Y este dispositivo NO está suscrito todavía
+                if (userWantsNotifications === false || !isSubscribed) {
+                    console.log("🔔 Mostrando prompt porque este dispositivo no está suscrito");
                     setTimeout(() => {
                         setShow(true);
-                        setTimeout(() => setVisible(true), 250);
-                    }, 2000);
+                        setTimeout(() => setVisible(true), 300);
+                    }, 2200);
                 } else {
-                    console.log(`⏭️ Prompt omitido para usuario ${session.user.id} (ya activado en BD)`);
+                    console.log("⏭️ Prompt omitido: este dispositivo ya está suscrito");
                 }
             } catch (err) {
                 console.error("Error checking prompt status:", err);
@@ -58,20 +59,24 @@ const PushPermissionPrompt = ({ session }) => {
     const handleEnable = async () => {
         setLoading(true);
         try {
-            console.log("Solicitando permiso de notificaciones...");
+            console.log("🔄 Solicitando permiso...");
+
+            // Aseguramos login antes de pedir permiso
+            await OneSignal.login(session.user.id);
 
             const granted = await OneSignal.Notifications.requestPermission();
 
-            console.log("Resultado de requestPermission:", granted);
+            console.log("Resultado requestPermission:", granted);
 
             if (granted) {
+                // Guardamos que el usuario quiere notificaciones
                 await supabase.from('profiles').upsert({
                     id: session.user.id,
                     push_notifications: true,
                     push_enabled_at: new Date().toISOString()
                 });
 
-                toast.success("✅ Notificaciones push activadas");
+                toast.success("✅ Notificaciones activadas en este dispositivo");
                 setShow(false);
             } else {
                 toast.info("Notificaciones bloqueadas por el navegador");
@@ -79,7 +84,7 @@ const PushPermissionPrompt = ({ session }) => {
             }
         } catch (err) {
             console.error("Error en requestPermission:", err);
-            toast.error("Error al activar notificaciones. Inténtalo de nuevo.");
+            toast.error("Error al activar. Recarga la página e inténtalo de nuevo.");
         } finally {
             setLoading(false);
         }
@@ -88,7 +93,6 @@ const PushPermissionPrompt = ({ session }) => {
     const handleDismiss = () => {
         setVisible(false);
         setTimeout(() => setShow(false), 500);
-        // Opcional: podrías guardar que lo rechazó para no molestar mucho
     };
 
     if (!session?.user?.id || !show) return null;
