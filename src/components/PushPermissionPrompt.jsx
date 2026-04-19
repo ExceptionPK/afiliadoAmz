@@ -6,65 +6,74 @@ import { toast } from "sonner";
 const PushPermissionPrompt = ({ session }) => {
     const [show, setShow] = useState(false);
     const [visible, setVisible] = useState(false);
-    const [permission, setPermission] = useState(Notification.permission);
+    const [permission, setPermission] = useState("default");
+    const [loading, setLoading] = useState(false);
 
-    // Solo inicializamos si hay sesión
+    // Resetear todo cuando cambia el usuario
     useEffect(() => {
-        if (!session?.user?.id) {
-            setShow(false);
-            setVisible(false);
-            return;
-        }
+        setShow(false);
+        setVisible(false);
+        setPermission(Notification.permission);
+    }, [session?.user?.id]); // ← Clave: se resetea al cambiar de usuario
 
-        if (permission === "default") {
-            const dismissedUntil = localStorage.getItem("push_prompt_dismissed_until");
-            const shouldShow = !dismissedUntil || Date.now() > parseInt(dismissedUntil);
+    // Cargar preferencia del usuario actual
+    useEffect(() => {
+        if (!session?.user?.id) return;
 
-            if (shouldShow) {
-                const timer = setTimeout(() => {
+        const loadUserPreference = async () => {
+            const { data } = await supabase
+                .from('profiles')
+                .select('push_notifications')
+                .eq('id', session.user.id)
+                .single();
+
+            const alreadyEnabled = data?.push_notifications === true;
+
+            if (alreadyEnabled) {
+                setShow(false); // No mostrar si ya lo activó
+            } else if (Notification.permission === "default") {
+                // Mostrar prompt
+                setTimeout(() => {
                     setShow(true);
-                    setTimeout(() => setVisible(true), 20);
-                }, 2800);
-                return () => clearTimeout(timer);
+                    setTimeout(() => setVisible(true), 120);
+                }, 2000);
             }
-        }
-    }, [permission, session?.user?.id]);   // ←←← Dependemos también de la sesión
+        };
+
+        loadUserPreference();
+    }, [session?.user?.id]);
 
     const handleEnable = async () => {
+        setLoading(true);
         try {
-            // Opción 1 (Recomendada): Mostrar el prompt nativo del navegador directamente
             const granted = await OneSignal.Notifications.requestPermission();
 
-            setPermission(granted ? "granted" : "denied");
-
             if (granted) {
-                toast.success("Notificaciones activadas", {
-                    description: "Recibirás alertas cuando bajen de precio tus favoritos.",
-                    duration: 4000,
+                await supabase.from('profiles').upsert({
+                    id: session.user.id,
+                    push_notifications: true,
+                    push_enabled_at: new Date().toISOString()
                 });
-            } else {
-                toast.info("Notificaciones bloqueadas por el navegador");
-            }
 
-            // Cerrar tu prompt personalizado
-            setVisible(false);
-            setTimeout(() => setShow(false), 500);
+                toast.success("✅ Notificaciones activadas");
+            } else {
+                toast.info("Notificaciones bloqueadas");
+            }
         } catch (err) {
-            console.error("Error al solicitar permiso:", err);
-            toast.error("No se pudo activar las notificaciones");
+            console.error(err);
+            toast.error("Error al activar notificaciones");
+        } finally {
+            setLoading(false);
+            setVisible(false);
+            setTimeout(() => setShow(false), 600);
         }
     };
 
     const handleDismiss = () => {
         setVisible(false);
-        setTimeout(() => {
-            setShow(false);
-            const dismissUntil = Date.now() + 24 * 60 * 60 * 1000;
-            localStorage.setItem("push_prompt_dismissed_until", dismissUntil.toString());
-        }, 500);
+        setTimeout(() => setShow(false), 500);
     };
 
-    // ←←← NUEVO: No renderizamos nada si no hay sesión
     if (!session?.user?.id || !show) return null;
 
     return (
