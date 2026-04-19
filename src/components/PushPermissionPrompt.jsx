@@ -59,41 +59,27 @@ const PushPermissionPrompt = ({ session }) => {
 
     const handleEnable = async () => {
         setLoading(true);
-
         try {
-            // 1. Pedimos permiso primero
             const granted = await OneSignal.Notifications.requestPermission();
 
-            if (!granted) {
-                toast.error("No se pudo activar las notificaciones", {
-                    description: "El navegador rechazó el permiso."
+            if (granted) {
+                await supabase.from('profiles').upsert({
+                    id: session.user.id,
+                    push_notifications: true,
+                    push_enabled_at: new Date().toISOString()
                 });
-                return;
+
+                toast.success("✅ Notificaciones activadas");
+            } else {
+                toast.info("Notificaciones bloqueadas");
             }
-
-            // 2. Pequeña pausa para que OneSignal cree la suscripción
-            await new Promise(resolve => setTimeout(resolve, 1200));
-
-            // 3. Ahora sí actualizamos en Supabase
-            const { error } = await supabase.from('profiles').upsert({
-                id: session.user.id,
-                push_notifications: true,
-                push_enabled_at: new Date().toISOString()
-            });
-
-            if (error) throw error;
-
-            toast.success("✅ Notificaciones activadas correctamente");
-
         } catch (err) {
-            console.error("Error completo al activar push:", err);
-            toast.error("Error al activar notificaciones", {
-                description: "Inténtalo de nuevo. Si persiste, prueba en otro navegador."
-            });
+            console.error(err);
+            toast.error("Error al activar notificaciones");
         } finally {
             setLoading(false);
             setVisible(false);
-            setTimeout(() => setShow(false), 800);
+            setTimeout(() => setShow(false), 600);
         }
     };
 

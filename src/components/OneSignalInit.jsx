@@ -20,19 +20,12 @@ const OneSignalInit = () => {
             },
           },
 
-          // === CONFIGURACIONES IMPORTANTES PARA PC (Chrome/Firefox) ===
+          // === CONFIGURACIÓN IMPORTANTE PARA VERCEL + VITE ===
           serviceWorkerPath: "/OneSignalSDKWorker.js",
           serviceWorkerParam: { scope: "/" },
-
+          
+          // Opcional pero recomendado
           persistNotification: true,
-
-          // Ayuda a estabilizar la creación de suscripciones en desktop
-          subscriptionOptions: {
-            enableOnSession: true,
-          },
-
-          // Reduce errores ruidosos de OneSignal
-          // OneSignal.Debug.setLogLevel("Error");   // Descomenta si quieres menos ruido en consola
         });
 
         console.log("✅ OneSignal inicializado correctamente");
