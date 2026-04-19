@@ -4,6 +4,7 @@ import { History, Home as HomeIcon, LogOut, User, Settings, ChevronDown, LogIn, 
 import { supabase } from '../utils/supabaseClient';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'framer-motion';
+import OneSignal from "react-onesignal";
 
 const Navbar = ({ session }) => {   // ← solo añadimos esta prop
   const location = useLocation();
@@ -13,13 +14,28 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
   const dropdownRef = useRef(null);
 
   const handleLogout = async () => {
-    const { error } = await supabase.auth.signOut({ scope: 'local' });
-    if (error) {
-      console.error("Error en signOut:", error);
-      toast.error("Error al cerrar sesión");
-    } else {
-      toast.info("Sesión cerrada");
-      setIsDropdownOpen(false);
+    try {
+      // ←←← AÑADIR ESTO: Logout de OneSignal
+      if (OneSignal) {
+        await OneSignal.logout();
+        console.log("✅ OneSignal logout ejecutado");
+      }
+
+      // Logout de Supabase
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+
+      if (error) {
+        console.error("Error en signOut:", error);
+        toast.error("Error al cerrar sesión");
+      } else {
+        toast.info("Sesión cerrada correctamente");
+        setIsDropdownOpen(false);
+        navigate("/auth");
+      }
+    } catch (err) {
+      console.error("Error durante logout:", err);
+      // Aún así intentamos cerrar sesión en Supabase
+      await supabase.auth.signOut({ scope: 'local' });
       navigate("/auth");
     }
   };
@@ -132,7 +148,7 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
               <History className="w-5 h-5" />
               <span>Historial</span>
             </Link>
-            
+
           </nav>
         </div>
       </div>
