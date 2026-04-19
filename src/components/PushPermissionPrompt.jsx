@@ -58,7 +58,11 @@ const PushPermissionPrompt = ({ session }) => {
     const handleEnable = async () => {
         setLoading(true);
         try {
+            console.log("Solicitando permiso de notificaciones...");
+
             const granted = await OneSignal.Notifications.requestPermission();
+
+            console.log("Resultado de requestPermission:", granted);
 
             if (granted) {
                 await supabase.from('profiles').upsert({
@@ -70,11 +74,12 @@ const PushPermissionPrompt = ({ session }) => {
                 toast.success("✅ Notificaciones push activadas");
                 setShow(false);
             } else {
-                toast.info("Has bloqueado las notificaciones");
+                toast.info("Notificaciones bloqueadas por el navegador");
+                setShow(false);
             }
         } catch (err) {
-            console.error(err);
-            toast.error("Error al activar notificaciones");
+            console.error("Error en requestPermission:", err);
+            toast.error("Error al activar notificaciones. Inténtalo de nuevo.");
         } finally {
             setLoading(false);
         }
