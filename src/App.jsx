@@ -26,8 +26,8 @@ function App() {
   // ==================== ONESIGNAL LOGIN / LOGOUT ====================
   useEffect(() => {
     const handleOneSignalAuth = async () => {
-      // Esperamos un poco más para asegurar que OneSignalInit ya terminó
-      await new Promise(resolve => setTimeout(resolve, 1200));
+      // Espera más generosa para que OneSignalInit termine completamente
+      await new Promise(resolve => setTimeout(resolve, 300));
 
       if (!session?.user?.id) {
         // Logout
@@ -35,25 +35,29 @@ function App() {
           await OneSignal.logout();
           console.log("✅ OneSignal.logout() ejecutado correctamente");
         } catch (err) {
-          console.warn("OneSignal.logout() falló (normal si SDK no está listo):", err.message);
+          console.warn("OneSignal.logout() falló (puede ser normal):", err.message || err);
         }
         return;
       }
 
-      // Login
+      // Login con nuevo usuario
       try {
         const isInitialized = await OneSignal.isInitialized?.();
-
-        if (isInitialized) {
-          await OneSignal.login(session.user.id);
-        } else {
-          await new Promise(r => setTimeout(r, 800));
-          await OneSignal.login(session.user.id);
+        if (!isInitialized) {
+          await new Promise(r => setTimeout(r, 1000));
         }
 
+        await OneSignal.login(session.user.id);
         console.log(`🔑 OneSignal.login() correcto para usuario: ${session.user.id}`);
       } catch (err) {
-        console.error("Error en OneSignal.login():", err);
+        const errorMsg = err.message || JSON.stringify(err);
+
+        if (errorMsg.includes("user-2") || errorMsg.includes("409") || errorMsg.includes("Aliases claimed")) {
+          // Este error es esperado al cambiar de cuenta
+          console.warn(`⚠️ OneSignal 409 / user-2 (normal al cambiar de usuario): ${errorMsg}`);
+        } else {
+          console.error("Error real en OneSignal.login():", err);
+        }
       }
     };
 
