@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { Bell } from "lucide-react";
 import OneSignal from "react-onesignal";
 import { toast } from "sonner";
+import { supabase } from '../utils/supabaseClient';
 
 const PushPermissionPrompt = ({ session }) => {
     const [show, setShow] = useState(false);
