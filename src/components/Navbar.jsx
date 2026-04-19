@@ -17,12 +17,15 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
     setIsDropdownOpen(false);
 
     try {
-      // Logout OneSignal primero
-      await OneSignal.logout().catch(err => {
-        console.warn("OneSignal.logout() falló:", err);
-      });
+      // Intentamos logout en OneSignal de forma segura
+      try {
+        await OneSignal.logout();
+        console.log("✅ OneSignal.logout() desde Navbar");
+      } catch (onesignalErr) {
+        console.warn("OneSignal.logout() falló (puede que no estuviera listo):", onesignalErr.message);
+      }
 
-      // Logout Supabase
+      // Cerramos sesión en Supabase
       const { error } = await supabase.auth.signOut({ scope: 'local' });
 
       if (error) throw error;
@@ -33,8 +36,7 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
     } catch (err) {
       console.error("Error al cerrar sesión:", err);
       toast.error("No se pudo cerrar la sesión");
-      // Aún así intentamos redirigir
-      navigate("/auth", { replace: true });
+      navigate("/auth", { replace: true }); // forzamos redirección aunque falle
     }
   };
 
