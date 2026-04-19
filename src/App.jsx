@@ -25,35 +25,31 @@ function App() {
 
   // ==================== ONESIGNAL LOGIN / LOGOUT ====================
   useEffect(() => {
+    let mounted = true;
+
     const handleOneSignalAuth = async () => {
+      if (!mounted) return;
+
       if (!session?.user?.id) {
-        try { await OneSignal.logout(); } catch { }
+        try {
+          await OneSignal.logout();
+          console.log("✅ OneSignal.logout() - sin sesión");
+        } catch (e) {
+          console.warn("OneSignal.logout() falló:", e.message);
+        }
         return;
       }
 
-      // Espera un poco más a que el SDK esté listo
-      await new Promise(r => setTimeout(r, 1500));
-
-      try {
-        await OneSignal.logout(); // limpiar estado anterior
-        await new Promise(r => setTimeout(r, 800));
-
-        await OneSignal.login(session.user.id);
-        console.log(`✅ OneSignal.login() para usuario: ${session.user.id}`);
-
-        // Verifica estado después del login
-        setTimeout(() => {
-          console.log("PushSubscription ID:", OneSignal.User.PushSubscription.id);
-          console.log("Opted in?", OneSignal.User.PushSubscription.optedIn);
-          console.log("Permission:", OneSignal.Notifications.permission);
-        }, 2000);
-      } catch (err) {
-        console.error("Error en OneSignal.login():", err);
-      }
+      // Solo hacemos login cuando el usuario pulsa "Activar" 
+      // (evitamos conflictos con el prompt)
+      console.log(`[OneSignalAuth] Usuario ${session.user.id} autenticado. Login se hará al activar push.`);
     };
 
     handleOneSignalAuth();
+
+    return () => { mounted = false; };
   }, [session?.user?.id]);
+
 
   useEffect(() => {
     // 1. Carga inicial de la sesión

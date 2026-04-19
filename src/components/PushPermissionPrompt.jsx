@@ -18,7 +18,6 @@ const PushPermissionPrompt = ({ session }) => {
     }, [session?.user?.id]); // ← Clave: se resetea al cambiar de usuario
 
     // Cargar preferencia del usuario actual
-    // Cargar preferencia del usuario actual
     useEffect(() => {
         if (!session?.user?.id) return;
 
@@ -69,33 +68,30 @@ const PushPermissionPrompt = ({ session }) => {
                 return;
             }
 
-            console.log("✅ Permiso del navegador concedido");
+            console.log("✅ Permiso concedido");
 
-            // Pequeña espera para que el SDK procese el permiso
-            await new Promise(r => setTimeout(r, 800));
+            // Espera breve
+            await new Promise(r => setTimeout(r, 700));
 
-            // Login después del permiso
+            // === LOGIN + OPT-IN ===
             await OneSignal.login(session.user.id);
             console.log(`🔑 OneSignal.login() ejecutado para: ${session.user.id}`);
 
-            // Forzar opt-in de la suscripción push (esto ayuda mucho)
             await OneSignal.User.PushSubscription.optIn();
 
-            // Espera adicional para que OneSignal registre la subscription en el servidor
-            await new Promise(r => setTimeout(r, 1500));
+            // Espera importante para que OneSignal registre la subscription
+            await new Promise(r => setTimeout(r, 1800));
 
             // Guardar en Supabase
-            const { error } = await supabase.from('profiles').upsert({
+            await supabase.from('profiles').upsert({
                 id: session.user.id,
                 push_notifications: true,
                 push_enabled_at: new Date().toISOString()
             });
 
-            if (error) console.error("Error upsert Supabase:", error);
-
             toast.success("✅ Notificaciones activadas correctamente");
 
-            // Logs para depurar
+            // Logs finales
             console.log("PushSubscription ID:", OneSignal.User.PushSubscription.id);
             console.log("Opted in?", OneSignal.User.PushSubscription.optedIn);
             console.log("Token:", OneSignal.User.PushSubscription.token);
