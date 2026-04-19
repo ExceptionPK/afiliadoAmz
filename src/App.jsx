@@ -25,29 +25,28 @@ function App() {
 
   // ==================== ONESIGNAL LOGIN / LOGOUT ====================
   useEffect(() => {
-    let mounted = true;
+    if (!session?.user?.id) return;
 
-    const handleOneSignalAuth = async () => {
-      if (!mounted) return;
+    const handleLogin = async () => {
+      try {
+        // Esperamos a que el SDK esté fully loaded
+        const isInitialized = await OneSignal.isInitialized?.();
 
-      if (!session?.user?.id) {
-        try {
-          await OneSignal.logout();
-          console.log("✅ OneSignal.logout() - sin sesión");
-        } catch (e) {
-          console.warn("OneSignal.logout() falló:", e.message);
+        if (isInitialized) {
+          await OneSignal.login(session.user.id);
+        } else {
+          // Si no tiene isInitialized, usamos timeout
+          await new Promise(r => setTimeout(r, 1200));
+          await OneSignal.login(session.user.id);
         }
-        return;
-      }
 
-      // Solo hacemos login cuando el usuario pulsa "Activar" 
-      // (evitamos conflictos con el prompt)
-      console.log(`[OneSignalAuth] Usuario ${session.user.id} autenticado. Login se hará al activar push.`);
+        console.log(`🔑 Usuario ${session.user.id} identificado correctamente`);
+      } catch (err) {
+        console.error("Error al identificar usuario en OneSignal:", err);
+      }
     };
 
-    handleOneSignalAuth();
-
-    return () => { mounted = false; };
+    handleLogin();
   }, [session?.user?.id]);
 
 
