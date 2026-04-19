@@ -16,7 +16,7 @@ const OneSignalInit = ({ session }) => {
         await OneSignal.init({
           appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
           allowLocalhostAsSecureOrigin: true,
-          autoResubscribe: true,
+          autoResubscribe: false,
           notifyButton: { enable: false },
           promptOptions: {
             slidedown: { enabled: false, autoPrompt: false },
