@@ -4,66 +4,68 @@ import OneSignal from "react-onesignal";
 import { toast } from "sonner";
 
 const PushPermissionPrompt = ({ session }) => {
-const [show, setShow] = useState(false);
-  const [visible, setVisible] = useState(false);
-  const [permission, setPermission] = useState(Notification.permission);
+    const [show, setShow] = useState(false);
+    const [visible, setVisible] = useState(false);
+    const [permission, setPermission] = useState(Notification.permission);
 
-  // Solo inicializamos si hay sesión
-  useEffect(() => {
-    if (!session?.user?.id) {
-      setShow(false);
-      setVisible(false);
-      return;
-    }
-
-    if (permission === "default") {
-      const dismissedUntil = localStorage.getItem("push_prompt_dismissed_until");
-      const shouldShow = !dismissedUntil || Date.now() > parseInt(dismissedUntil);
-
-      if (shouldShow) {
-        const timer = setTimeout(() => {
-          setShow(true);
-          setTimeout(() => setVisible(true), 20);
-        }, 2800);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [permission, session?.user?.id]);   // ←←← Dependemos también de la sesión
-
-  const handleEnable = async () => {
-    try {
-      await OneSignal.showSlidedownPrompt();
-      setVisible(false);
-      setTimeout(() => setShow(false), 500);
-
-      setTimeout(async () => {
-        const newPermission = await OneSignal.getPermission();
-        setPermission(newPermission);
-
-        if (newPermission === "granted") {
-          toast.success("Notificaciones activadas", {
-            description: "Recibe una notificación cuando bajen de precio tus favoritos.",
-            duration: 4000,
-          });
+    // Solo inicializamos si hay sesión
+    useEffect(() => {
+        if (!session?.user?.id) {
+            setShow(false);
+            setVisible(false);
+            return;
         }
-      }, 1000);
-    } catch (err) {
-      console.error(err);
-      toast.error("No se pudieron activar las notificaciones");
-    }
-  };
 
-  const handleDismiss = () => {
-    setVisible(false);
-    setTimeout(() => {
-      setShow(false);
-      const dismissUntil = Date.now() + 24 * 60 * 60 * 1000;
-      localStorage.setItem("push_prompt_dismissed_until", dismissUntil.toString());
-    }, 500);
-  };
+        if (permission === "default") {
+            const dismissedUntil = localStorage.getItem("push_prompt_dismissed_until");
+            const shouldShow = !dismissedUntil || Date.now() > parseInt(dismissedUntil);
 
-  // ←←← NUEVO: No renderizamos nada si no hay sesión
-  if (!session?.user?.id || !show) return null;
+            if (shouldShow) {
+                const timer = setTimeout(() => {
+                    setShow(true);
+                    setTimeout(() => setVisible(true), 20);
+                }, 2800);
+                return () => clearTimeout(timer);
+            }
+        }
+    }, [permission, session?.user?.id]);   // ←←← Dependemos también de la sesión
+
+    const handleEnable = async () => {
+        try {
+            // Opción 1 (Recomendada): Mostrar el prompt nativo del navegador directamente
+            const granted = await OneSignal.Notifications.requestPermission();
+
+            setPermission(granted ? "granted" : "denied");
+
+            if (granted) {
+                toast.success("Notificaciones activadas", {
+                    description: "Recibirás alertas cuando bajen de precio tus favoritos.",
+                    duration: 4000,
+                });
+            } else {
+                toast.info("Notificaciones bloqueadas por el navegador");
+            }
+
+            // Cerrar tu prompt personalizado
+            setVisible(false);
+            setTimeout(() => setShow(false), 500);
+        } catch (err) {
+            console.error("Error al solicitar permiso:", err);
+            toast.error("No se pudo activar las notificaciones");
+        }
+    };
+
+    const handleDismiss = () => {
+        setVisible(false);
+        setTimeout(() => {
+            setShow(false);
+            const dismissUntil = Date.now() + 24 * 60 * 60 * 1000;
+            localStorage.setItem("push_prompt_dismissed_until", dismissUntil.toString());
+        }, 500);
+    };
+
+    // ←←← NUEVO: No renderizamos nada si no hay sesión
+    if (!session?.user?.id || !show) return null;
 
     return (
         <div
