@@ -7,68 +7,37 @@ import { supabase } from '../utils/supabaseClient';
 const PushPermissionPrompt = ({ session }) => {
     const [show, setShow] = useState(false);
     const [visible, setVisible] = useState(false);
+    const [permission, setPermission] = useState("default");
     const [loading, setLoading] = useState(false);
 
-    // Resetear cuando cambia el usuario
+    // Resetear todo cuando cambia el usuario
     useEffect(() => {
         setShow(false);
         setVisible(false);
-    }, [session?.user?.id]);
+        setPermission(Notification.permission);
+    }, [session?.user?.id]); // ← Clave: se resetea al cambiar de usuario
 
-    // Cargar preferencia y estado real de OneSignal
+    // Cargar preferencia del usuario actual
     useEffect(() => {
         if (!session?.user?.id) return;
 
         const loadUserPreference = async () => {
-            try {
-                const { data } = await supabase
-                    .from('profiles')
-                    .select('push_notifications')
-                    .eq('id', session.user.id)
-                    .maybeSingle();
+            const { data } = await supabase
+                .from('profiles')
+                .select('push_notifications')
+                .eq('id', session.user.id)
+                .maybeSingle();
 
-                const userWantsPush = data?.push_notifications === true;
+            const alreadyEnabled = data?.push_notifications === true;
 
-                if (userWantsPush) {
-                    setShow(false);
-                    return;
-                }
-
-                // Esperar un poco a que OneSignal esté fully ready después del login
-                await new Promise(resolve => setTimeout(resolve, 800));
-
-                // Estado correcto de OneSignal (Web SDK)
-                const currentPermission = OneSignal.Notifications.permission; // NO await
-                const isOptedIn = OneSignal.User?.PushSubscription?.optedIn ?? false;
-
-                const shouldShowPrompt = currentPermission === "default" && !isOptedIn;
-
-                if (shouldShowPrompt) {
-                    setTimeout(() => {
-                        setShow(true);
-                        setTimeout(() => setVisible(true), 150);
-                    }, 1800);
-                } else {
-                    // Si ya tiene permiso pero no lo tenemos guardado en la DB → actualizar
-                    if (currentPermission === "granted" && !userWantsPush) {
-                        await supabase.from('profiles').upsert({
-                            id: session.user.id,
-                            push_notifications: true,
-                            push_enabled_at: new Date().toISOString()
-                        });
-                    }
-                    setShow(false);
-                }
-            } catch (err) {
-                console.error("Error checking OneSignal push status:", err);
-
-                // Fallback seguro
-                if (Notification.permission === "default") {
-                    setTimeout(() => {
-                        setShow(true);
-                        setTimeout(() => setVisible(true), 150);
-                    }, 2000);
-                }
+            if (alreadyEnabled) {
+                setShow(false); // No mostrar si ya lo activó
+            } else if (Notification.permission === "default") {
+                // Mostrar prompt
+                setTimeout(() => {
+                    setShow(true);
+                    setTimeout(() => setVisible(true), 120);
+                }, 2000);
             }
         };
 
@@ -76,6 +45,8 @@ const PushPermissionPrompt = ({ session }) => {
     }, [session?.user?.id]);
 
     const handleEnable = async () => {
+        if (!session?.user?.id) return;
+
         setLoading(true);
         try {
             const granted = await OneSignal.Notifications.requestPermission();
@@ -86,14 +57,13 @@ const PushPermissionPrompt = ({ session }) => {
                     push_notifications: true,
                     push_enabled_at: new Date().toISOString()
                 });
-
-                toast.success("✅ Notificaciones activadas correctamente");
+                toast.success("✅ Notificaciones push activadas");
             } else {
-                toast.info("Notificaciones denegadas");
+                toast.info("Has bloqueado las notificaciones");
             }
         } catch (err) {
             console.error(err);
-            toast.error("Error al activar las notificaciones");
+            toast.error("Error al activar notificaciones push");
         } finally {
             setLoading(false);
             setVisible(false);

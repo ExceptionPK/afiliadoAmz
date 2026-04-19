@@ -23,7 +23,6 @@ function App() {
 
   const isAuthPage = location.pathname === '/auth';
 
-  // ==================== ONESIGNAL LOGIN / LOGOUT ====================
   useEffect(() => {
     if (!session?.user?.id) return;
 
@@ -48,7 +47,6 @@ function App() {
 
     handleLogin();
   }, [session?.user?.id]);
-
 
   useEffect(() => {
     // 1. Carga inicial de la sesión
@@ -98,7 +96,7 @@ function App() {
         }}
       />
 
-      <OneSignalInit />
+      {session && <OneSignalInit session={session} />}
       <PushPermissionPrompt session={session} />
       <ChatWidget />
 
