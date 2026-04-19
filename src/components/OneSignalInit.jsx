@@ -7,25 +7,18 @@ const OneSignalInit = () => {
       try {
         await OneSignal.init({
           appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
-
           allowLocalhostAsSecureOrigin: true,
           autoResubscribe: true,
-
           notifyButton: { enable: false },
-
           promptOptions: {
             slidedown: {
               enabled: false,
               autoPrompt: false,
             },
           },
-
-          // === CONFIGURACIÓN IMPORTANTE PARA VERCEL + VITE ===
-          serviceWorkerPath: "/OneSignalSDKWorker.js",
-          serviceWorkerParam: { scope: "/" },
-          
-          // Opcional pero recomendado
-          persistNotification: true,
+          notifyButton: {
+            enable: false,
+          },
         });
 
         console.log("✅ OneSignal inicializado correctamente");

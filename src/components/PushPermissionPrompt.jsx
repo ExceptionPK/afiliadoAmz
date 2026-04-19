@@ -22,34 +22,22 @@ const PushPermissionPrompt = ({ session }) => {
         if (!session?.user?.id) return;
 
         const loadUserPreference = async () => {
-            try {
-                const { data, error } = await supabase
-                    .from('profiles')
-                    .select('push_notifications')
-                    .eq('id', session.user.id)
-                    .maybeSingle();
+            const { data } = await supabase
+                .from('profiles')
+                .select('push_notifications')
+                .eq('id', session.user.id)
+                .maybeSingle();
 
-                // Si no existe el registro o está en false → mostramos el prompt
-                const alreadyEnabled = data?.push_notifications === true;
+            const alreadyEnabled = data?.push_notifications === true;
 
-                console.log(`[PushPrompt] Usuario ${session.user.id.slice(0, 8)}... → alreadyEnabled: ${alreadyEnabled} | permission: ${Notification.permission}`);
-
-                if (alreadyEnabled) {
-                    console.log("[PushPrompt] No mostrar → ya activado en BD");
-                    setShow(false);
-                } else {
-                    // Mostramos el prompt aunque el navegador ya tenga "granted"
-                    // (esto es lo que quieres para cuentas nuevas)
-                    console.log("[PushPrompt] Mostrando prompt porque push_notifications = false o null");
-                    setTimeout(() => {
-                        setShow(true);
-                        setTimeout(() => setVisible(true), 250);
-                    }, 1800);
-                }
-            } catch (err) {
-                console.error("[PushPrompt] Error:", err);
-                // En caso de error, mostramos por defecto
-                setTimeout(() => setShow(true), 2000);
+            if (alreadyEnabled) {
+                setShow(false); // No mostrar si ya lo activó
+            } else if (Notification.permission === "default") {
+                // Mostrar prompt
+                setTimeout(() => {
+                    setShow(true);
+                    setTimeout(() => setVisible(true), 120);
+                }, 2000);
             }
         };
 
@@ -59,50 +47,26 @@ const PushPermissionPrompt = ({ session }) => {
     const handleEnable = async () => {
         setLoading(true);
         try {
-            console.log("[PushPrompt] Solicitando permiso...");
-
             const granted = await OneSignal.Notifications.requestPermission();
 
-            if (!granted) {
-                toast.info("Notificaciones bloqueadas por el navegador");
-                return;
+            if (granted) {
+                await supabase.from('profiles').upsert({
+                    id: session.user.id,
+                    push_notifications: true,
+                    push_enabled_at: new Date().toISOString()
+                });
+
+                toast.success("✅ Notificaciones activadas");
+            } else {
+                toast.info("Notificaciones bloqueadas");
             }
-
-            console.log("✅ Permiso concedido");
-
-            // Espera breve
-            await new Promise(r => setTimeout(r, 700));
-
-            // === LOGIN + OPT-IN ===
-            await OneSignal.login(session.user.id);
-            console.log(`🔑 OneSignal.login() ejecutado para: ${session.user.id}`);
-
-            await OneSignal.User.PushSubscription.optIn();
-
-            // Espera importante para que OneSignal registre la subscription
-            await new Promise(r => setTimeout(r, 1800));
-
-            // Guardar en Supabase
-            await supabase.from('profiles').upsert({
-                id: session.user.id,
-                push_notifications: true,
-                push_enabled_at: new Date().toISOString()
-            });
-
-            toast.success("✅ Notificaciones activadas correctamente");
-
-            // Logs finales
-            console.log("PushSubscription ID:", OneSignal.User.PushSubscription.id);
-            console.log("Opted in?", OneSignal.User.PushSubscription.optedIn);
-            console.log("Token:", OneSignal.User.PushSubscription.token);
-
         } catch (err) {
-            console.error("Error en handleEnable:", err);
+            console.error(err);
             toast.error("Error al activar notificaciones");
         } finally {
             setLoading(false);
             setVisible(false);
-            setTimeout(() => setShow(false), 700);
+            setTimeout(() => setShow(false), 600);
         }
     };
 
