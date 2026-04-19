@@ -10,6 +10,9 @@ import Planes from './pages/Planes';
 import Success from './pages/Success';
 import ChatWidget from './components/ChatWidget';
 import LoadingScreen from './components/LoadingScreen';
+import OneSignalInit from './components/OneSignalInit';
+import PushPermissionPrompt from './components/PushPermissionPrompt';
+import OneSignal from "react-onesignal";
 import { supabase } from './utils/supabaseClient';
 import { useState, useEffect } from 'react';
 
@@ -19,6 +22,18 @@ function App() {
   const location = useLocation();
 
   const isAuthPage = location.pathname === '/auth';
+
+  useEffect(() => {
+    if (session?.user?.id) {
+      OneSignal.login(session.user.id)
+        .then(() => {
+          console.log(`🔑 Usuario ${session.user.id} identificado correctamente en OneSignal`);
+        })
+        .catch(err => {
+          console.error("Error al identificar usuario en OneSignal:", err);
+        });
+    }
+  }, [session?.user?.id]);
 
   useEffect(() => {
     // 1. Carga inicial de la sesión
@@ -68,6 +83,8 @@ function App() {
         }}
       />
 
+      <OneSignalInit />
+      <PushPermissionPrompt session={session} />
       <ChatWidget />
 
       {/* Solo mostramos Navbar si NO estamos en la página de auth */}
@@ -80,7 +97,7 @@ function App() {
         <Route path="/history" element={<History />} />
         <Route path="/planes" element={<Planes />} />
         <Route path="/success" element={<Success />} />
-        
+
         <Route
           path="/chat"
           element={

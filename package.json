@@ -31,6 +31,7 @@
     "react-datepicker": "^9.1.0",
     "react-dom": "^19.1.1",
     "react-markdown": "^10.1.0",
+    "react-onesignal": "^3.5.1",
     "react-responsive": "^10.0.1",
     "react-router-dom": "^7.9.5",
     "remark-gfm": "^4.0.1",
