@@ -4,7 +4,6 @@ import OneSignal from "react-onesignal";
 
 const OneSignalInit = ({ session }) => {
   useEffect(() => {
-    // ← Solo inicializamos si hay sesión
     if (!session?.user?.id) {
       console.log("⏸️ OneSignal: sin sesión → no inicializamos");
       return;
@@ -12,6 +11,8 @@ const OneSignalInit = ({ session }) => {
 
     const initializeOneSignal = async () => {
       try {
+        console.log(`🚀 Iniciando OneSignal para usuario: ${session.user.id}`);
+
         await OneSignal.init({
           appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
           allowLocalhostAsSecureOrigin: true,
@@ -25,12 +26,16 @@ const OneSignalInit = ({ session }) => {
           },
         });
 
-        console.log("✅ OneSignal inicializado para usuario:", session.user.id);
+        console.log("✅ OneSignal SDK inicializado correctamente");
 
-        // Login del usuario en OneSignal (external_id)
+        // Pequeño delay importante para evitar race conditions con el backend de OneSignal
+        await new Promise((resolve) => setTimeout(resolve, 800));
+
+        // Login del usuario (external user ID)
         await OneSignal.login(session.user.id);
 
         console.log(`🔑 OneSignal login exitoso para: ${session.user.id}`);
+
       } catch (error) {
         console.error("❌ Error al inicializar OneSignal:", error);
       }
@@ -38,11 +43,12 @@ const OneSignalInit = ({ session }) => {
 
     initializeOneSignal();
 
-    // Cleanup opcional (buena práctica)
+    // Cleanup (opcional pero recomendado)
     return () => {
-      // OneSignal no tiene un "destroy" oficial fácil, pero podemos desuscribir si quieres
+      // OneSignal no tiene un método destroy oficial, pero podemos limpiar listeners si fuera necesario
+      console.log(`🧹 OneSignal cleanup para usuario: ${session.user.id}`);
     };
-  }, [session?.user?.id]); // ← Importante: depende del user id
+  }, [session?.user?.id]);
 
   return null;
 };
