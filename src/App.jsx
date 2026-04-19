@@ -24,15 +24,28 @@ function App() {
   const isAuthPage = location.pathname === '/auth';
 
   useEffect(() => {
-    if (session?.user?.id) {
-      OneSignal.login(session.user.id)
-        .then(() => {
-          console.log(`🔑 Usuario ${session.user.id} identificado correctamente en OneSignal`);
-        })
-        .catch(err => {
-          console.error("Error al identificar usuario en OneSignal:", err);
-        });
-    }
+    if (!session?.user?.id) return;
+
+    const handleLogin = async () => {
+      try {
+        // Esperamos a que el SDK esté fully loaded
+        const isInitialized = await OneSignal.isInitialized?.();
+
+        if (isInitialized) {
+          await OneSignal.login(session.user.id);
+        } else {
+          // Si no tiene isInitialized, usamos timeout
+          await new Promise(r => setTimeout(r, 1200));
+          await OneSignal.login(session.user.id);
+        }
+
+        console.log(`🔑 Usuario ${session.user.id} identificado correctamente`);
+      } catch (err) {
+        console.error("Error al identificar usuario en OneSignal:", err);
+      }
+    };
+
+    handleLogin();
   }, [session?.user?.id]);
 
   useEffect(() => {
