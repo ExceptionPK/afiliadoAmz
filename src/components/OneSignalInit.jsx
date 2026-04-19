@@ -9,10 +9,13 @@ const OneSignalInit = ({ session }) => {
       return;
     }
 
+    let isMounted = true;
+
     const initializeOneSignal = async () => {
       try {
         console.log(`🚀 Iniciando OneSignal para usuario: ${session.user.id}`);
 
+        // 1. Inicializar OneSignal
         await OneSignal.init({
           appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
           allowLocalhostAsSecureOrigin: true,
@@ -26,15 +29,49 @@ const OneSignalInit = ({ session }) => {
           },
         });
 
-        console.log("✅ OneSignal SDK inicializado correctamente");
+        console.log("✅ OneSignal SDK inicializado");
 
-        // Pequeño delay importante para evitar race conditions con el backend de OneSignal
-        await new Promise((resolve) => setTimeout(resolve, 800));
+        if (!isMounted) return;
 
-        // Login del usuario (external user ID)
+        // 2. Login del usuario (external_id)
         await OneSignal.login(session.user.id);
-
         console.log(`🔑 OneSignal login exitoso para: ${session.user.id}`);
+
+        // 3. Listener para detectar cuando la suscripción se crea/actualiza correctamente
+        const subscriptionListener = OneSignal.User.PushSubscription.addEventListener(
+          "subscriptionChange",
+          (event) => {
+            console.log("📡 Cambio en suscripción detectado:", event);
+
+            if (event.current?.id) {
+              console.log(`✅ Suscripción creada correctamente. ID: ${event.current.id}`);
+              // Aquí podrías guardar el subscription ID en tu base de datos si quieres
+            }
+
+            if (event.current?.optedIn === true) {
+              console.log("✅ Usuario suscrito y listo para recibir pushes");
+            }
+          }
+        );
+
+        // Listener opcional para cambios de permiso
+        const permissionListener = OneSignal.Notifications.addEventListener(
+          "permissionChange",
+          (permission) => {
+            console.log(`🔄 Permiso cambiado a: ${permission}`);
+          }
+        );
+
+        // Cleanup de listeners cuando se desmonta el componente
+        return () => {
+          console.log("🧹 Limpiando listeners de OneSignal");
+          if (subscriptionListener) {
+            OneSignal.User.PushSubscription.removeEventListener("subscriptionChange", subscriptionListener);
+          }
+          if (permissionListener) {
+            OneSignal.Notifications.removeEventListener("permissionChange", permissionListener);
+          }
+        };
 
       } catch (error) {
         console.error("❌ Error al inicializar OneSignal:", error);
@@ -43,10 +80,9 @@ const OneSignalInit = ({ session }) => {
 
     initializeOneSignal();
 
-    // Cleanup (opcional pero recomendado)
+    // Cleanup general del useEffect
     return () => {
-      // OneSignal no tiene un método destroy oficial, pero podemos limpiar listeners si fuera necesario
-      console.log(`🧹 OneSignal cleanup para usuario: ${session.user.id}`);
+      isMounted = false;
     };
   }, [session?.user?.id]);
 

@@ -52,23 +52,21 @@ const PushPermissionPrompt = ({ session }) => {
             if (granted) {
                 console.log("✅ Permiso del navegador concedido");
 
-                // Esperar a que OneSignal procese la suscripción
-                await new Promise(resolve => setTimeout(resolve, 1200));
-
+                // Ya no necesitamos delay largo porque usamos el listener
                 await supabase.from('profiles').upsert({
                     id: session.user.id,
                     push_notifications: true,
                     push_enabled_at: new Date().toISOString()
                 });
 
-                toast.success("✅ Notificaciones activadas correctamente");
+                toast.success("✅ Notificaciones push activadas correctamente");
                 setShow(false);
             } else {
-                toast.info("Notificaciones bloqueadas");
+                toast.info("Notificaciones bloqueadas por el navegador");
             }
         } catch (err) {
-            console.error("Error en requestPermission:", err);
-            toast.error("Error al activar notificaciones");
+            console.error("Error requesting OneSignal permission:", err);
+            toast.error("Error al activar las notificaciones");
         } finally {
             setLoading(false);
         }
