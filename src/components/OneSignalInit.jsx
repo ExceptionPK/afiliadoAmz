@@ -2,35 +2,42 @@ import { useEffect } from "react";
 import OneSignal from "react-onesignal";
 
 const OneSignalInit = () => {
-    useEffect(() => {
-        const initialize = async () => {
-            try {
-                await OneSignal.init({
-                    appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
-                    allowLocalhostAsSecureOrigin: true,
-                    autoResubscribe: true,
-                    notifyButton: { enable: false },
-                    promptOptions: {
-                        slidedown: {
-                            enabled: false,
-                            autoPrompt: false,
-                        },
-                    },
-                    notifyButton: {
-                        enable: false,
-                    },
-                });
+  useEffect(() => {
+    const initialize = async () => {
+      try {
+        await OneSignal.init({
+          appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
 
-                console.log("✅ OneSignal inicializado correctamente");
-            } catch (error) {
-                console.error("❌ Error al inicializar OneSignal:", error);
-            }
-        };
+          allowLocalhostAsSecureOrigin: true,
+          autoResubscribe: true,
 
-        initialize();
-    }, []);
+          notifyButton: { enable: false },
 
-    return null;
+          promptOptions: {
+            slidedown: {
+              enabled: false,
+              autoPrompt: false,
+            },
+          },
+
+          // === CONFIGURACIÓN IMPORTANTE PARA VERCEL + VITE ===
+          serviceWorkerPath: "/OneSignalSDKWorker.js",
+          serviceWorkerParam: { scope: "/" },
+          
+          // Opcional pero recomendado
+          persistNotification: true,
+        });
+
+        console.log("✅ OneSignal inicializado correctamente");
+      } catch (error) {
+        console.error("❌ Error al inicializar OneSignal:", error);
+      }
+    };
+
+    initialize();
+  }, []);
+
+  return null;
 };
 
 export default OneSignalInit;
