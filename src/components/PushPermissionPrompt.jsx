@@ -60,26 +60,53 @@ const PushPermissionPrompt = ({ session }) => {
     const handleEnable = async () => {
         setLoading(true);
         try {
+            console.log("[PushPrompt] Solicitando permiso...");
+
             const granted = await OneSignal.Notifications.requestPermission();
 
-            if (granted) {
-                await supabase.from('profiles').upsert({
-                    id: session.user.id,
-                    push_notifications: true,
-                    push_enabled_at: new Date().toISOString()
-                });
-
-                toast.success("✅ Notificaciones activadas");
-            } else {
-                toast.info("Notificaciones bloqueadas");
+            if (!granted) {
+                toast.info("Notificaciones bloqueadas por el navegador");
+                return;
             }
+
+            console.log("✅ Permiso del navegador concedido");
+
+            // Pequeña espera para que el SDK procese el permiso
+            await new Promise(r => setTimeout(r, 800));
+
+            // Login después del permiso
+            await OneSignal.login(session.user.id);
+            console.log(`🔑 OneSignal.login() ejecutado para: ${session.user.id}`);
+
+            // Forzar opt-in de la suscripción push (esto ayuda mucho)
+            await OneSignal.User.PushSubscription.optIn();
+
+            // Espera adicional para que OneSignal registre la subscription en el servidor
+            await new Promise(r => setTimeout(r, 1500));
+
+            // Guardar en Supabase
+            const { error } = await supabase.from('profiles').upsert({
+                id: session.user.id,
+                push_notifications: true,
+                push_enabled_at: new Date().toISOString()
+            });
+
+            if (error) console.error("Error upsert Supabase:", error);
+
+            toast.success("✅ Notificaciones activadas correctamente");
+
+            // Logs para depurar
+            console.log("PushSubscription ID:", OneSignal.User.PushSubscription.id);
+            console.log("Opted in?", OneSignal.User.PushSubscription.optedIn);
+            console.log("Token:", OneSignal.User.PushSubscription.token);
+
         } catch (err) {
-            console.error(err);
+            console.error("Error en handleEnable:", err);
             toast.error("Error al activar notificaciones");
         } finally {
             setLoading(false);
             setVisible(false);
-            setTimeout(() => setShow(false), 600);
+            setTimeout(() => setShow(false), 700);
         }
     };
 

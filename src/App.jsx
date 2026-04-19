@@ -25,51 +25,34 @@ function App() {
 
   // ==================== ONESIGNAL LOGIN / LOGOUT ====================
   useEffect(() => {
-    let mounted = true;
-
     const handleOneSignalAuth = async () => {
-      if (!mounted) return;
-
-      // Esperamos a que OneSignalInit esté completamente listo
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
       if (!session?.user?.id) {
-        // Logout cuando no hay sesión
-        try {
-          await OneSignal.logout();
-          console.log("✅ OneSignal.logout() ejecutado (sin sesión)");
-        } catch (err) {
-          console.warn("OneSignal.logout() falló (normal si SDK no está listo):", err.message || err);
-        }
+        try { await OneSignal.logout(); } catch { }
         return;
       }
 
-      // Login con nuevo usuario
-      try {
-        await new Promise(resolve => setTimeout(resolve, 1200));
+      // Espera un poco más a que el SDK esté listo
+      await new Promise(r => setTimeout(r, 1500));
 
-        // Forzamos logout primero para limpiar estado anterior
-        try {
-          await OneSignal.logout();
-        } catch { }
+      try {
+        await OneSignal.logout(); // limpiar estado anterior
+        await new Promise(r => setTimeout(r, 800));
 
         await OneSignal.login(session.user.id);
-        console.log(`🔑 OneSignal.login() correcto para usuario: ${session.user.id}`);
+        console.log(`✅ OneSignal.login() para usuario: ${session.user.id}`);
+
+        // Verifica estado después del login
+        setTimeout(() => {
+          console.log("PushSubscription ID:", OneSignal.User.PushSubscription.id);
+          console.log("Opted in?", OneSignal.User.PushSubscription.optedIn);
+          console.log("Permission:", OneSignal.Notifications.permission);
+        }, 2000);
       } catch (err) {
-        const msg = err?.message || JSON.stringify(err);
-        if (msg.includes("Qe") || msg.includes("undefined") || msg.includes("409") || msg.includes("user-2")) {
-          console.warn("⚠️ Error esperado de OneSignal al cambiar de cuenta:", msg);
-        } else {
-          console.error("Error real en OneSignal.login():", err);
-        }
+        console.error("Error en OneSignal.login():", err);
       }
     };
 
     handleOneSignalAuth();
-
-    return () => {
-      mounted = false;
-    };
   }, [session?.user?.id]);
 
   useEffect(() => {
