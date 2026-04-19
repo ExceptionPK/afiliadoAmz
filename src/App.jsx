@@ -26,37 +26,35 @@ function App() {
   // ==================== ONESIGNAL LOGIN / LOGOUT ====================
   useEffect(() => {
     const handleOneSignalAuth = async () => {
-      // Espera más generosa para que OneSignalInit termine completamente
-      await new Promise(resolve => setTimeout(resolve, 300));
+      await new Promise(resolve => setTimeout(resolve, 200)); // espera más estable
 
       if (!session?.user?.id) {
-        // Logout
         try {
           await OneSignal.logout();
-          console.log("✅ OneSignal.logout() ejecutado correctamente");
+          console.log("✅ OneSignal.logout() ejecutado");
         } catch (err) {
-          console.warn("OneSignal.logout() falló (puede ser normal):", err.message || err);
+          console.warn("OneSignal.logout() falló:", err.message || err);
         }
         return;
       }
 
-      // Login con nuevo usuario
       try {
-        const isInitialized = await OneSignal.isInitialized?.();
-        if (!isInitialized) {
-          await new Promise(r => setTimeout(r, 1000));
-        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
 
+        // Forzamos logout primero para limpiar aliases anteriores
+        try {
+          await OneSignal.logout();
+        } catch { }
+
+        // Ahora hacemos login con el nuevo usuario
         await OneSignal.login(session.user.id);
-        console.log(`🔑 OneSignal.login() correcto para usuario: ${session.user.id}`);
+        console.log(`🔑 OneSignal.login() correcto para: ${session.user.id}`);
       } catch (err) {
-        const errorMsg = err.message || JSON.stringify(err);
-
-        if (errorMsg.includes("user-2") || errorMsg.includes("409") || errorMsg.includes("Aliases claimed")) {
-          // Este error es esperado al cambiar de cuenta
-          console.warn(`⚠️ OneSignal 409 / user-2 (normal al cambiar de usuario): ${errorMsg}`);
+        const msg = err?.message || JSON.stringify(err);
+        if (msg.includes("user-2") || msg.includes("409") || msg.includes("Aliases claimed")) {
+          console.warn(`⚠️ OneSignal 409/user-2 (esperado al cambiar cuenta)`);
         } else {
-          console.error("Error real en OneSignal.login():", err);
+          console.error("Error grave en OneSignal:", err);
         }
       }
     };
