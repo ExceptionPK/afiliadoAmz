@@ -18,6 +18,7 @@ const PushPermissionPrompt = ({ session }) => {
     }, [session?.user?.id]); // ← Clave: se resetea al cambiar de usuario
 
     // Cargar preferencia del usuario actual
+    // Cargar preferencia del usuario actual
     useEffect(() => {
         if (!session?.user?.id) return;
 
@@ -29,29 +30,27 @@ const PushPermissionPrompt = ({ session }) => {
                     .eq('id', session.user.id)
                     .maybeSingle();
 
-                if (error) {
-                    console.warn('Error al leer push_notifications:', error);
-                }
-
+                // Si no existe el registro o está en false → mostramos el prompt
                 const alreadyEnabled = data?.push_notifications === true;
 
+                console.log(`[PushPrompt] Usuario ${session.user.id.slice(0, 8)}... → alreadyEnabled: ${alreadyEnabled} | permission: ${Notification.permission}`);
+
                 if (alreadyEnabled) {
+                    console.log("[PushPrompt] No mostrar → ya activado en BD");
                     setShow(false);
-                } else if (Notification.permission === "default") {
-                    // Pequeño delay para que el usuario vea la interfaz primero
+                } else {
+                    // Mostramos el prompt aunque el navegador ya tenga "granted"
+                    // (esto es lo que quieres para cuentas nuevas)
+                    console.log("[PushPrompt] Mostrando prompt porque push_notifications = false o null");
                     setTimeout(() => {
                         setShow(true);
-                        setTimeout(() => setVisible(true), 150);
+                        setTimeout(() => setVisible(true), 250);
                     }, 1800);
-                } else {
-                    setShow(false); // ya denegado o granted
                 }
             } catch (err) {
-                console.error("Excepción al cargar preferencia push:", err);
-                // En caso de error, mostramos el prompt por seguridad (mejor UX)
-                if (Notification.permission === "default") {
-                    setTimeout(() => setShow(true), 2000);
-                }
+                console.error("[PushPrompt] Error:", err);
+                // En caso de error, mostramos por defecto
+                setTimeout(() => setShow(true), 2000);
             }
         };
 
