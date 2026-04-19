@@ -26,7 +26,7 @@ const PushPermissionPrompt = ({ session }) => {
                 .from('profiles')
                 .select('push_notifications')
                 .eq('id', session.user.id)
-                .single();
+                .maybeSingle();
 
             const alreadyEnabled = data?.push_notifications === true;
 
