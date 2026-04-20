@@ -38,6 +38,11 @@ export const saveToHistory = async (entry) => {
 
   const now = new Date().toISOString();
 
+  const firstEverPrice = entry.first_ever_price
+    || entry.price
+    || entry.originalPrice
+    || null;
+
   // Preparar los datos para Supabase
   const data = {
     user_id: user.id,
@@ -49,6 +54,7 @@ export const saveToHistory = async (entry) => {
     product_title: entry.productTitle || entry.product_title || `Producto ${entry.asin}`,
     price: entry.price || null,
     original_price: entry.originalPrice || entry.original_price || null,
+    first_ever_price: firstEverPrice,
     prices_history: entry.prices ? entry.prices : [],
     last_update: entry.lastUpdate || now,
     recommended: entry.recommended ? entry.recommended : [],
@@ -138,29 +144,99 @@ export const updateHistoryPositions = async (userId, positions) => {
  * @returns {Promise<void>}
  */
 
+/**
+ * Actualiza un elemento específico en el historial
+ * Soporte mejorado para historial acumulativo cuando cambian price o original_price
+ */
 export const updateHistoryItem = async (updatedEntry) => {
   const user = await getCurrentUser();
+  const now = new Date().toISOString();
+  const domain = updatedEntry.domain || updatedEntry.dominio || 'amazon.es';
 
   if (!user?.id) {
+    // ==================== MODO LOCALSTORAGE ====================
     const history = getHistory();
-    const updatedHistory = history.map(h =>
-      h.id === updatedEntry.id ? { ...h, ...updatedEntry } : h
-    );
+    const updatedHistory = history.map(h => {
+      if (h.id === updatedEntry.id) {
+        let pricesHistory = Array.isArray(h.prices) ? [...h.prices] : [];
+
+        const oldPrice = h.price || null;
+        const newPrice = updatedEntry.price && updatedEntry.price.trim()
+          ? updatedEntry.price.trim()
+          : null;
+
+        const oldOriginal = h.originalPrice || null;
+        const newOriginal = updatedEntry.originalPrice && updatedEntry.originalPrice.trim()
+          ? updatedEntry.originalPrice.trim()
+          : null;
+
+        // Registramos cambio si price o original_price cambiaron
+        if (newPrice !== oldPrice || newOriginal !== oldOriginal) {
+          pricesHistory.push({
+            timestamp: now,
+            price: newPrice,                    // precio actual en ese momento
+            original_price: newOriginal,        // precio original en ese momento
+            type: "manual"
+          });
+        }
+
+        return {
+          ...h,
+          ...updatedEntry,
+          prices: pricesHistory,
+          lastUpdate: now
+        };
+      }
+      return h;
+    });
+
     localStorage.setItem('amazon-affiliate-history', JSON.stringify(updatedHistory));
     window.dispatchEvent(new Event('amazon-history-updated'));
     return;
   }
 
-  // ── Preparar los datos para affiliate_history ───────────────────────────────
+  // ==================== MODO SUPABASE ====================
+  const { data: current, error: fetchErr } = await supabase
+    .from('affiliate_history')
+    .select('prices_history, price, original_price')
+    .eq('user_id', user.id)
+    .eq('asin', updatedEntry.asin)
+    .eq('dominio', domain)
+    .single();
+
+  if (fetchErr && fetchErr.code !== 'PGRST116') {
+    console.warn('Error al obtener datos actuales:', fetchErr);
+  }
+
+  let pricesHistory = current?.prices_history || [];
+
+  const oldPrice = current?.price || null;
+  const newPrice = updatedEntry.price && updatedEntry.price.trim()
+    ? updatedEntry.price.trim()
+    : null;
+
+  const oldOriginal = current?.original_price || null;
+  const newOriginal = updatedEntry.originalPrice && updatedEntry.originalPrice.trim()
+    ? updatedEntry.originalPrice.trim()
+    : null;
+
+  // Si cambió price O original_price → registramos en el historial
+  if (newPrice !== oldPrice || newOriginal !== oldOriginal) {
+    pricesHistory.push({
+      timestamp: now,
+      price: newPrice,
+      original_price: newOriginal,     // ← Guardamos también el original_price en ese momento
+      type: "manual"
+    });
+  }
+
   const data = {
-    user_id: user.id,
-    asin: updatedEntry.asin,
-    dominio: updatedEntry.domain || updatedEntry.dominio || 'amazon.es',
     product_title: updatedEntry.productTitle?.trim() || `Producto ${updatedEntry.asin}`,
     title_is_custom: updatedEntry.title_is_custom ?? true,
-    price: updatedEntry.price && updatedEntry.price.trim() ? updatedEntry.price : null,
-    original_price: updatedEntry.originalPrice || null,
-    prices_history: updatedEntry.prices || [],
+    price: newPrice,
+    original_price: newOriginal,
+    prices_history: pricesHistory,
+    last_update: now,
     short_link: updatedEntry.shortLink || null,
     recommended: updatedEntry.recommended || [],
   };
@@ -171,50 +247,39 @@ export const updateHistoryItem = async (updatedEntry) => {
       .update(data)
       .eq('user_id', user.id)
       .eq('asin', updatedEntry.asin)
-      .eq('dominio', data.dominio);
+      .eq('dominio', domain);
 
     if (updateErr) {
-      console.error('Error al actualizar affiliate_history:', updateErr);
+      console.error('Error al actualizar:', updateErr);
       toast.error('No se pudo actualizar el producto');
       return;
     }
 
-    const { data: favRecord, error: checkErr } = await supabase
+    // Sincronización con favoritos
+    const { data: favRecord } = await supabase
       .from('user_favorites')
-      .select('id, product_title')
+      .select('id')
       .eq('user_id', user.id)
       .eq('asin', updatedEntry.asin)
-      .eq('dominio', data.dominio)
+      .eq('dominio', domain)
       .maybeSingle();
 
-    if (checkErr) {
-      console.warn('Error al verificar si es favorito:', checkErr);
-    }
-
     if (favRecord) {
-      const favUpdateData = {
-        product_title: data.product_title,
-        price: data.price,
-        original_price: data.original_price,
-      };
-
-      const { error: favUpdateErr } = await supabase
+      await supabase
         .from('user_favorites')
-        .update(favUpdateData)
+        .update({
+          product_title: data.product_title,
+          price: data.price,
+          original_price: data.original_price,
+        })
         .eq('id', favRecord.id);
-
-      if (favUpdateErr) {
-        console.warn(`No se pudo sincronizar el título en favoritos para ASIN ${updatedEntry.asin}:`, favUpdateErr);
-      } else {
-        console.log(`[sync-favorites] Título actualizado en user_favorites para ${updatedEntry.asin}`);
-      }
     }
 
     window.dispatchEvent(new Event('amazon-history-updated'));
 
   } catch (err) {
     console.error('Excepción durante updateHistoryItem:', err);
-    toast.error('Error inesperado al actualizar el producto');
+    toast.error('Error al actualizar producto');
   }
 };
 
@@ -349,6 +414,7 @@ export const getUserHistory = async (limit = 2000) => {
       title_is_custom: item.title_is_custom ?? false,
       price: item.price,
       originalPrice: item.original_price,
+      first_ever_price: item.first_ever_price,
       prices: item.prices_history || [],
       lastUpdate: item.last_update,
       timestamp: item.created_at,
@@ -574,7 +640,7 @@ export const bulkDeleteItems = async (itemsToDelete) => {
       return !keysToRemove.has(key);
     });
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(remaining));
+    localStorage.setItem('amazon-affiliate-history', JSON.stringify(remaining));
     window.dispatchEvent(new Event('amazon-history-updated'));
     return true;
   }

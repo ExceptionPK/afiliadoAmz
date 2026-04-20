@@ -147,6 +147,7 @@ export default function AmazonAffiliate() {
         affiliateUrl: newAffiliateUrl,
         asin,
         domain,
+        first_ever_price: null,
       });
 
       toast.success("Producto guardado", { duration: 1500 });

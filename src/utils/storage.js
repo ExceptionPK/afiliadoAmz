@@ -183,6 +183,7 @@ export const addToHistory = async (entry) => {
         shortLink,
         price: null,
         originalPrice: null,
+        first_ever_price: null,
         prices: [],
         lastUpdate: null,
     };
@@ -295,13 +296,14 @@ export const fetchRealData = async (entry) => {
         let previousPrice = null;
         let previousPricesHistory = [];
         let previousOriginalPrice = null;
+        let previousFirstEverPrice = null;
         let previousTitle = entry.productTitle;
         let titleIsCustom = false;
 
         if (isLoggedIn) {
             const { data: current, error: fetchErr } = await supabase
                 .from('affiliate_history')
-                .select('price, original_price, prices_history, product_title, title_is_custom')
+                .select('price, original_price, prices_history, product_title, title_is_custom, first_ever_price')
                 .eq('user_id', user.id)
                 .eq('asin', asin)
                 .eq('dominio', domain)
@@ -310,6 +312,7 @@ export const fetchRealData = async (entry) => {
             if (!fetchErr) {
                 previousPrice = current?.price || null;
                 previousOriginalPrice = current?.original_price || null;
+                previousFirstEverPrice = current?.first_ever_price || null;   // ← NUEVO
                 previousPricesHistory = current?.prices_history || [];
                 previousTitle = current?.product_title || previousTitle;
                 titleIsCustom = current?.title_is_custom ?? false;
@@ -320,6 +323,7 @@ export const fetchRealData = async (entry) => {
             if (existing) {
                 previousPrice = existing.price || null;
                 previousOriginalPrice = existing.originalPrice || null;
+                previousFirstEverPrice = existing.first_ever_price || null;   // ← NUEVO
                 previousPricesHistory = existing.prices || [];
                 previousTitle = existing.productTitle || previousTitle;
                 titleIsCustom = existing.title_is_custom ?? false;
@@ -354,13 +358,20 @@ export const fetchRealData = async (entry) => {
             updateData.title_is_custom = true;
         }
 
-        // ── LÓGICA DE PRECIO MEJORADA ───────────────────────────────────────
+        // ── FIRST EVER PRICE: Solo se guarda la PRIMERA vez que detectamos precio
+        if (price && !previousFirstEverPrice) {
+            updateData.first_ever_price = price;
+            console.log(`[fetchRealData] Guardando first_ever_price para ${asin} → ${price}`);
+        }
+
+        // ── LÓGICA DE PRECIO MEJORADA + HISTORIAL ACUMULATIVO ─────────────────
         let shouldUpdatePrice = false;
         let newPricesHistory = [...previousPricesHistory];
         let showSameAsOriginalToast = false;
 
         if (price && price.trim() !== '') {
             const scrapedPriceClean = price.trim();
+            const now = new Date().toISOString();
 
             // Función auxiliar para comparar precios numéricamente
             const normalizePrice = (p) => {
@@ -375,30 +386,35 @@ export const fetchRealData = async (entry) => {
             const originalNum = normalizePrice(previousOriginalPrice);
             const currentNum = normalizePrice(previousPrice);
 
+            // Siempre añadimos la entrada al historial (acumulativo)
+            const historyEntry = {
+                timestamp: now,
+                price: scrapedPriceClean,
+                type: "scrape"                    // ← importante para futuras gráficas
+            };
+
             // Caso 1: No había precio original → actualizamos todo
             if (!previousOriginalPrice || isNaN(originalNum)) {
                 shouldUpdatePrice = true;
-                newPricesHistory.push({ timestamp: now, price: scrapedPriceClean });
+                newPricesHistory.push(historyEntry);
             }
             // Caso 2: Sí había precio original
             else {
-                // Precio scrapeado DIFERENTE del original → actualizamos
+                // Precio scrapeado DIFERENTE del original → actualizamos precio visible
                 if (!isNaN(scrapedNum) && scrapedNum !== originalNum) {
                     shouldUpdatePrice = true;
-                    newPricesHistory.push({ timestamp: now, price: scrapedPriceClean });
+                    newPricesHistory.push(historyEntry);
                 }
                 // Precio scrapeado IGUAL al original
                 else {
-                    // Si el precio actual (manual) era diferente → mostramos toast
+                    // Si el precio actual (manual) era diferente → mostramos toast informativo
                     if (previousPrice && !isNaN(currentNum) && currentNum !== originalNum) {
                         showSameAsOriginalToast = true;
                     }
 
-                    // Registramos en historial que volvió al precio original
-                    // (aunque no cambiemos el price mostrado)
+                    // Registramos en el historial que volvió al precio original
                     newPricesHistory.push({
-                        timestamp: now,
-                        price: scrapedPriceClean,
+                        ...historyEntry,
                         note: "Vuelto a precio original (scraping)"
                     });
                 }
@@ -407,13 +423,13 @@ export const fetchRealData = async (entry) => {
 
         // ── Aplicamos cambios ───────────────────────────────────────────────
         if (shouldUpdatePrice) {
-            updateData.price = price;  // el precio formateado que viene del scrape
+            updateData.price = price;                    // precio visible actual
             updateData.original_price = previousOriginalPrice || price;
             updateData.prices_history = newPricesHistory;
             updateData.last_update = now;
         }
         else if (newPricesHistory.length > previousPricesHistory.length) {
-            // Actualizamos historial aunque no cambie price (caso "volvió a original")
+            // Solo actualizamos el historial (caso "volvió al original")
             updateData.prices_history = newPricesHistory;
             updateData.last_update = now;
         }
@@ -445,13 +461,16 @@ export const fetchRealData = async (entry) => {
                             final.title_is_custom = true;
                         }
 
+                        if (updateData.first_ever_price) {
+                            final.first_ever_price = updateData.first_ever_price;
+                        }
+
                         if (shouldUpdatePrice) {
                             final.price = price;
                             final.originalPrice = previousOriginalPrice || price;
                             final.prices = newPricesHistory;
                             final.lastUpdate = now;
                         } else if (newPricesHistory.length > previousPricesHistory.length) {
-                            // Actualizamos historial y timestamp aunque no cambie price
                             final.prices = newPricesHistory;
                             final.lastUpdate = now;
                         }

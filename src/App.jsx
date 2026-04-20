@@ -8,6 +8,7 @@ import Chat from './pages/Chat';
 import Auth from './pages/Auth';
 import Planes from './pages/Planes';
 import Success from './pages/Success';
+import Profile from './pages/Profile';
 import ChatWidget from './components/ChatWidget';
 import LoadingScreen from './components/LoadingScreen';
 import OneSignalInit from './components/OneSignalInit';
@@ -92,6 +93,8 @@ function App() {
             session ? <Chat /> : <Navigate to="/auth" state={{ from: location }} replace />
           }
         />
+
+        <Route path="/profile" element={session ? <Profile /> : <Navigate to="/auth" replace />} />
 
         <Route
           path="*"
