@@ -73,7 +73,7 @@ const PushPermissionPrompt = ({ session }) => {
                     push_enabled_at: new Date().toISOString(),
                 });
 
-                toast.success("✅ Notificaciones activadas correctamente");
+                toast.success("Notificaciones activadas");
                 setShow(false);
             } else {
                 toast.info("Notificaciones denegadas por el navegador");
