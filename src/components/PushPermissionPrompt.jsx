@@ -95,38 +95,96 @@ const PushPermissionPrompt = ({ session }) => {
     if (!session?.user?.id || !show) return null;
 
     return (
-        <div className={`fixed bottom-6 left-6 z-[100] max-w-[300px] bg-white/95 backdrop-blur-xl border border-violet-200 
-                    rounded-2xl shadow-2xl overflow-hidden transition-all duration-500
-                    ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}>
+        <>
+            {/* ====================== MÓVIL - Barra superior ====================== */}
+            <div className="md:hidden">
+                <div
+                    className={`fixed top-0 left-0 right-0 z-[100] bg-white border-b border-violet-200 shadow-md
+                        transition-all duration-500 ease-out ${visible ? 'translate-y-0' : '-translate-y-full'}`}
+                >
 
-            <div className="flex justify-center pt-3 pb-2 border-b border-violet-100">
-                <div className="w-10 h-10 bg-violet-100 rounded-2xl flex items-center justify-center">
-                    <Bell className="w-6 h-6 text-violet-600" />
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-300/30 to-transparent 
+                  -skew-x-12 pointer-events-none animate-shimmer" />
+                    <div className="flex items-start gap-3 px-4 py-4">
+                        {/* Texto + Botones */}
+                        <div className="flex-1">
+                            <p className="text-sm text-slate-700 leading-tight">
+                                <span className="font-semibold text-slate-700">Recibe una notificación</span> cuando bajen de precio tus productos favoritos.
+                            </p>
+
+                            <div className="flex gap-2 mt-3">
+                                <button
+                                    onClick={handleDismiss}
+                                    className="flex-1 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 contenedorCosas transition-colors"
+                                >
+                                    Ahora no
+                                </button>
+                                <button
+                                    onClick={handleEnable}
+                                    disabled={loading}
+                                    className="flex-1 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold contenedorCosas transition-all active:scale-[0.97] flex items-center justify-center gap-1.5"
+                                >
+                                    <Bell className="w-4 h-4" />
+                                    Activar
+                                </button>
+                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent 
+                              -skew-x-12 pointer-events-none animate-shimmer" />
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            <div className="px-5 py-5 text-center">
-                <p className="text-slate-700 text-[15px]">
-                    ¿Quieres recibir <span className="font-semibold">notificaciones</span> cuando bajen de precio tus productos favoritos?
-                </p>
-            </div>
+            {/* ====================== DESKTOP - Tu diseño original exacto ====================== */}
+            <div className="hidden md:block">
+                <div
+                    className={`fixed bottom-6 left-6 z-[100] max-w-[300px] bg-white/50 border border-violet-200 
+                        rounded-xl shadow-xl overflow-hidden transition-all duration-500 ease-out
+                        ${visible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-8'}`}
+                >
+                    {/* Brillo morado suave */}
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-violet-300/25 to-transparent 
+                              -skew-x-12 pointer-events-none animate-shimmer" />
 
-            <div className="flex border-t border-violet-100 bg-violet-50 px-4 py-3 gap-2">
-                <button
-                    onClick={handleDismiss}
-                    className="flex-1 py-2.5 text-sm font-medium text-slate-600 bg-white hover:bg-slate-100 rounded-xl transition"
-                >
-                    Ahora no
-                </button>
-                <button
-                    onClick={handleEnable}
-                    disabled={loading}
-                    className="flex-1 py-2.5 bg-violet-600 hover:bg-violet-700 disabled:bg-violet-400 text-white text-sm font-semibold rounded-xl transition"
-                >
-                    {loading ? "Activando..." : "Activar ahora"}
-                </button>
+                    {/* Cabecera - Solo icono centrado */}
+                    <div className="flex justify-center pt-2 pb-2 border-b border-violet-100 relative z-10">
+                        <div className="w-9 h-9 bg-violet-100 rounded-2xl flex items-center justify-center">
+                            <Bell className="w-5 h-5 text-violet-600" />
+                        </div>
+                    </div>
+
+                    {/* Texto */}
+                    <div className="px-4 py-4 text-center relative z-10">
+                        <p className="text-slate-600 text-sm leading-[1.4]">
+                            <span className="font-semibold text-slate-700">Recibe una notificación</span> cuando bajen de precio tus productos favoritos.
+                        </p>
+                    </div>
+
+                    {/* Botones */}
+                    <div className="flex border-t border-violet-100 bg-violet-50/70 px-4 py-3 gap-2 relative z-10">
+                        <button
+                            onClick={handleDismiss}
+                            className="flex-1 py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 contenedorCosas transition-colors"
+                        >
+                            Ahora no
+                        </button>
+
+                        <button
+                            onClick={handleEnable}
+                            disabled={loading}
+                            className="flex-1 py-2 bg-violet-600 hover:bg-violet-700 text-white text-sm font-semibold contenedorCosas transition-all active:scale-[0.97] flex items-center justify-center gap-1.5 overflow-hidden relative group"
+                        >
+                            <Bell className="w-4 h-4" />
+                            Activar
+
+                            {/* Shimmer blanco dentro del botón */}
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent 
+                                  -skew-x-12 pointer-events-none animate-shimmer" />
+                        </button>
+                    </div>
+                </div>
             </div>
-        </div>
+        </>
     );
 };
 
