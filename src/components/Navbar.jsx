@@ -15,26 +15,21 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
 
   const handleLogout = async () => {
     try {
-      // ←←← AÑADIR ESTO: Logout de OneSignal
-      if (OneSignal) {
-        await OneSignal.logout();
-        console.log("✅ OneSignal logout ejecutado");
-      }
+      await OneSignal.logout();
+      await OneSignal.User.PushSubscription.optOut();
+      console.log("✅ OneSignal logout + optOut ejecutado");
 
-      // Logout de Supabase
       const { error } = await supabase.auth.signOut({ scope: 'local' });
 
       if (error) {
-        console.error("Error en signOut:", error);
         toast.error("Error al cerrar sesión");
       } else {
-        toast.info("Sesión cerrada correctamente");
+        toast.info("Sesión cerrada");
         setIsDropdownOpen(false);
         navigate("/auth");
       }
     } catch (err) {
       console.error("Error durante logout:", err);
-      // Aún así intentamos cerrar sesión en Supabase
       await supabase.auth.signOut({ scope: 'local' });
       navigate("/auth");
     }

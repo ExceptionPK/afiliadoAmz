@@ -24,28 +24,14 @@ function App() {
   const isAuthPage = location.pathname === '/auth';
 
   useEffect(() => {
-    if (!session?.user?.id) return;
+    if (!session?.user?.id) {
+      OneSignal.logout?.().catch((err) => {
+        console.log("OneSignal logout (sin sesión):", err?.message || "no active session");
+      });
+      return;
+    }
 
-    const handleLogin = async () => {
-      try {
-        // Esperamos a que el SDK esté fully loaded
-        const isInitialized = await OneSignal.isInitialized?.();
-
-        if (isInitialized) {
-          await OneSignal.login(session.user.id);
-        } else {
-          // Si no tiene isInitialized, usamos timeout
-          await new Promise(r => setTimeout(r, 1200));
-          await OneSignal.login(session.user.id);
-        }
-
-        console.log(`🔑 Usuario ${session.user.id} identificado correctamente`);
-      } catch (err) {
-        console.error("Error al identificar usuario en OneSignal:", err);
-      }
-    };
-
-    handleLogin();
+    console.log(`🔄 Sesión detectada para usuario: ${session.user.id} (login manejado por OneSignalInit)`);
   }, [session?.user?.id]);
 
   useEffect(() => {
@@ -96,7 +82,7 @@ function App() {
         }}
       />
 
-      {session && <OneSignalInit session={session} />}
+      <OneSignalInit session={session} />
       <PushPermissionPrompt session={session} />
       <ChatWidget />
 
