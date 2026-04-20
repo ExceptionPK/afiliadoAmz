@@ -59,32 +59,29 @@ const PushPermissionPrompt = ({ session }) => {
     const handleEnable = async () => {
         setLoading(true);
         try {
-            await new Promise((resolve) => {
-                window.OneSignalDeferred.push(async function (OneSignalAPI) {
-                    if (session?.user?.id) {
-                        await OneSignalAPI.login(session.user.id);
-                    }
+            // Fuerza login justo antes de pedir permiso (importante)
+            if (session?.user?.id) {
+                await OneSignal.login(session.user.id);
+            }
 
-                    const granted = await OneSignalAPI.Notifications.requestPermission();
+            const granted = await OneSignal.Notifications.requestPermission();
 
-                    if (granted) {
-                        await supabase.from('profiles').upsert({
-                            id: session.user.id,
-                            push_notifications: true,
-                            push_enabled_at: new Date().toISOString(),
-                        });
-                        toast.success("✅ Notificaciones activadas en este dispositivo");
-                        setShow(false);
-                    } else {
-                        toast.info("Notificaciones bloqueadas por el navegador");
-                        setShow(false);
-                    }
-                    resolve();
+            if (granted) {
+                await supabase.from('profiles').upsert({
+                    id: session.user.id,
+                    push_notifications: true,
+                    push_enabled_at: new Date().toISOString(),
                 });
-            });
+
+                toast.success("✅ Notificaciones activadas correctamente");
+                setShow(false);
+            } else {
+                toast.info("Notificaciones denegadas por el navegador");
+                setShow(false);
+            }
         } catch (err) {
             console.error("Error activando notificaciones:", err);
-            toast.error("Error al activar notificaciones. Inténtalo de nuevo.");
+            toast.error("Error al activar. Recarga la página e inténtalo de nuevo.");
         } finally {
             setLoading(false);
         }
