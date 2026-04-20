@@ -3,14 +3,17 @@ import { useEffect, useRef } from "react";
 import OneSignal from "react-onesignal";
 
 const OneSignalInit = ({ session }) => {
-  const initialized = useRef(false);
+  const isInitialized = useRef(false);
+  const isLoggingIn = useRef(false);
 
-  // 1. Inicializar SDK SOLO UNA VEZ (al montar la app)
+  // Inicializar SDK SOLO UNA VEZ
   useEffect(() => {
-    if (initialized.current) return;
+    if (isInitialized.current) return;
 
-    const initialize = async () => {
+    const initSDK = async () => {
       try {
+        console.log("🚀 Iniciando OneSignal SDK...");
+
         await OneSignal.init({
           appId: import.meta.env.VITE_ONESIGNAL_APP_ID,
           allowLocalhostAsSecureOrigin: true,
@@ -20,39 +23,63 @@ const OneSignalInit = ({ session }) => {
             slidedown: { enabled: false, autoPrompt: false },
           },
         });
-        console.log("✅ OneSignal SDK inicializado (UNA sola vez)");
-        initialized.current = true;
+
+        console.log("✅ OneSignal SDK inicializado correctamente");
+        isInitialized.current = true;
       } catch (error) {
-        console.error("❌ Error al inicializar OneSignal:", error);
+        console.error("❌ Error inicializando OneSignal:", error);
       }
     };
 
-    initialize();
+    initSDK();
   }, []);
 
-  // 2. Login / Logout cuando cambia la sesión
+  // Manejar login / logout cuando cambia la sesión
   useEffect(() => {
-    if (!initialized.current) return; // esperar a que init termine
+    if (!isInitialized.current) return;
 
-    const handleAuthChange = async () => {
+    const manageUser = async () => {
+      if (isLoggingIn.current) return; // Evitar llamadas simultáneas
+      isLoggingIn.current = true;
+
       try {
         if (session?.user?.id) {
-          // Pequeño delay para evitar race condition con logout anterior
-          await new Promise((r) => setTimeout(r, 500));
+          console.log(`🔑 Intentando login para usuario: ${session.user.id}`);
+
+          // Pequeño delay para asegurar que el SDK esté listo después de init
+          await new Promise((resolve) => setTimeout(resolve, 600));
+
           await OneSignal.login(session.user.id);
-          console.log(`🔑 OneSignal login exitoso → usuario ${session.user.id}`);
+          console.log(`✅ Login exitoso para usuario: ${session.user.id}`);
         } else {
+          console.log("🚪 No hay sesión → haciendo logout + optOut");
           await OneSignal.logout();
-          // Opcional pero recomendado: fuerza que la próxima suscripción sea "limpia"
-          await OneSignal.User.PushSubscription.optOut();
-          console.log("🚪 OneSignal logout + optOut ejecutado");
+          // Forzamos que la subscription quede limpia para el próximo usuario
+          try {
+            await OneSignal.User.PushSubscription.optOut();
+          } catch (e) {
+            console.log("optOut no crítico:", e.message);
+          }
         }
-      } catch (err) {
-        console.error("Error en login/logout OneSignal:", err);
+      } catch (error) {
+        console.error("❌ Error en login/logout OneSignal:", error);
+        // Si falla el login, intentamos de nuevo una sola vez
+        if (session?.user?.id && error.message?.includes("undefined")) {
+          console.log("🔄 Reintentando login después de error...");
+          await new Promise((r) => setTimeout(r, 800));
+          try {
+            await OneSignal.login(session.user.id);
+            console.log("✅ Reintento de login exitoso");
+          } catch (retryErr) {
+            console.error("Reintento también falló:", retryErr);
+          }
+        }
+      } finally {
+        isLoggingIn.current = false;
       }
     };
 
-    handleAuthChange();
+    manageUser();
   }, [session?.user?.id]);
 
   return null;

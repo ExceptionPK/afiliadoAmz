@@ -24,17 +24,6 @@ function App() {
   const isAuthPage = location.pathname === '/auth';
 
   useEffect(() => {
-    if (!session?.user?.id) {
-      OneSignal.logout?.().catch((err) => {
-        console.log("OneSignal logout (sin sesión):", err?.message || "no active session");
-      });
-      return;
-    }
-
-    console.log(`🔄 Sesión detectada para usuario: ${session.user.id} (login manejado por OneSignalInit)`);
-  }, [session?.user?.id]);
-
-  useEffect(() => {
     // 1. Carga inicial de la sesión
     const initializeAuth = async () => {
       try {
