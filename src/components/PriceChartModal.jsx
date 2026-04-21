@@ -35,7 +35,7 @@ const CustomSelect = ({ options, value, onChange }) => {
         <div className="relative w-full sm:w-56" ref={dropdownRef}>
             <button
                 onClick={() => setIsOpen(!isOpen)}
-                className="contenedorCosas w-full bg-white border border-slate-300 hover:border-violet-400 contenedorCosas px-5 py-3 text-sm font-medium text-slate-900 flex items-center justify-between transition-all active:scale-[0.985]"
+                className="contenedorCosas w-full bg-white border border-slate-300 hover:border-violet-400 px-4 py-2.5 text-sm font-medium text-slate-900 flex items-center justify-between transition-all active:scale-[0.985]"
             >
                 <span className="truncate">{selected?.label}</span>
                 <ChevronDown
@@ -385,7 +385,7 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
 
                         {/* Gráfico */}
                         <div className="lg:col-span-8 flex flex-col">
-                            <div className="flex flex-col sm:flex-row md:gap-10 gap-4 mb-8 justify-center items-center">
+                            <div className="grid grid-cols-3 gap-2 mb-8 px-2">
                                 <CustomSelect options={viewOptions} value={viewMode} onChange={setViewMode} />
                                 <CustomSelect options={chartTypeOptions} value={chartType} onChange={setChartType} />
                                 <CustomSelect options={periods} value={selectedPeriod} onChange={setSelectedPeriod} />
@@ -457,7 +457,7 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                     <TrendingUp className="w-20 h-20 text-slate-300 mb-4" />
                                     <p className="text-slate-500 text-lg">No hay datos en el período seleccionado</p>
                                     <p className="text-slate-400 text-sm mt-1 text-center max-w-[280px]">
-                                        Prueba seleccionando "Todo el historial" o un período más amplio
+                                        Prueba seleccionando "Desde siempre" o un período más amplio.
                                     </p>
                                 </div>
                             )}
