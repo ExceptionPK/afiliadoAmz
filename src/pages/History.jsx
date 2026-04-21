@@ -1468,37 +1468,104 @@ export default function HistoryPage() {
     }, [showExportModal]);
     useEffect(() => {
         console.log("[HISTORY LOAD] useEffect disparado. isAuthenticated =", isAuthenticated);
-        const loadHistory = async () => {
-            setIsLoading(true);
-            console.log("[HISTORY LOAD] Intentando cargar historial... Fuente esperada:",
-                isAuthenticated ? "Supabase" : "localStorage");
+
+        let realtimeSubscription = null;
+
+        const loadHistory = async (showLoading = true) => {
+            if (showLoading) setIsLoading(true);
+
             try {
                 const data = await getUserHistory(2000);
-                console.log("[HISTORY LOAD] Datos obtenidos:",
-                    data?.length || 0, "items | Primera entrada:", data?.[0]?.asin || "vacío");
+                console.log("[HISTORY LOAD] Datos obtenidos:", data?.length || 0, "items");
                 setHistory(data || []);
             } catch (err) {
                 console.error("[HISTORY LOAD] ERROR CRÍTICO:", err);
                 toast.error("Error al cargar historial. Refresca manualmente.");
                 setHistory([]);
             } finally {
-                setIsLoading(false);
+                if (showLoading) setIsLoading(false);
             }
         };
-        loadHistory(); // carga inicial
+
+        // Carga inicial
+        loadHistory();
+
+        // Escucha eventos locales (import, delete, reorder, etc.)
         const handleUpdate = () => {
             if (isImporting || ignoreUpdatesDuringImport) {
                 console.log("[EVENTO] amazon-history-updated → IGNORADO (importación en curso)");
                 return;
             }
             console.log("[EVENTO] amazon-history-updated recibido → recargando");
-            loadHistory();
+            loadHistory(false); // sin loading
         };
+
         window.addEventListener('amazon-history-updated', handleUpdate);
+
+        // ==================== SUPABASE REALTIME ====================
+        const setupRealtime = async () => {
+            if (!isAuthenticated) return;
+
+            try {
+                const { data: { user } } = await supabase.auth.getUser();
+                if (!user?.id) return;
+
+                realtimeSubscription = supabase
+                    .channel(`history_updates_${user.id.slice(0, 8)}`)
+                    .on(
+                        'postgres_changes',
+                        {
+                            event: 'UPDATE',
+                            schema: 'public',
+                            table: 'affiliate_history',
+                            filter: `user_id=eq.${user.id}`,
+                        },
+                        (payload) => {
+                            const { new: newRecord } = payload;
+
+                            console.log(`[REALTIME] Actualización recibida para ASIN: ${newRecord.asin}`);
+
+                            setHistory(prevHistory =>
+                                prevHistory.map(item =>
+                                    item.id === newRecord.id
+                                        ? {
+                                            ...item,
+                                            price: newRecord.price,
+                                            originalPrice: newRecord.original_price,
+                                            prices_history: newRecord.prices_history,
+                                            last_update: newRecord.last_update,
+                                            // Mantener información local importante
+                                            isFavorite: item.isFavorite,
+                                            shortLink: item.shortLink || newRecord.short_link,
+                                            title_is_custom: item.title_is_custom,
+                                        }
+                                        : item
+                                )
+                            );
+                        }
+                    )
+                    .subscribe((status) => {
+                        console.log(`[REALTIME] Estado de suscripción: ${status}`);
+                    });
+            } catch (err) {
+                console.error("[REALTIME] Error configurando suscripción:", err);
+            }
+        };
+
+        // Iniciar realtime si está autenticado
+        if (isAuthenticated) {
+            setupRealtime();
+        }
+
+        // Cleanup
         return () => {
             window.removeEventListener('amazon-history-updated', handleUpdate);
+            if (realtimeSubscription) {
+                supabase.removeChannel(realtimeSubscription);
+            }
         };
     }, [isAuthenticated, isImporting, ignoreUpdatesDuringImport]);
+
     useEffect(() => {
         const handleWindowFocus = () => {
             console.log("[WINDOW FOCUS] Volviste a la pestaña → recargando historial si autenticado");
