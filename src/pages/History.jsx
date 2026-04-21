@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import { supabase } from "../utils/supabaseClient";
 import MagicParticles from "../components/MagicParticles";
+import PriceChartModal from "../components/PriceChartModal";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { Send } from "lucide-react";
@@ -36,7 +37,8 @@ import {
     Sliders,
     MoreVertical,
     Star,
-    Bug
+    Bug,
+    TrendingUp
 } from "lucide-react";
 import {
     getHistory,
@@ -119,6 +121,7 @@ const HistoryItem = ({
     const [customMessage, setCustomMessage] = useState("");
     const [selectedOption, setSelectedOption] = useState("none");
     const [showQuickDropdown, setShowQuickDropdown] = useState(false);
+    const [showChartModal, setShowChartModal] = useState(false);
 
     // ── NUEVO: menú contextual y favoritos ───────────────────────────────
     const [showContextMenu, setShowContextMenu] = useState(false);
@@ -1067,6 +1070,20 @@ const HistoryItem = ({
                         <Tag className="w-4 h-4 flex-shrink-0 text-slate-400" />
                         <span>Añadir etiqueta</span>
                     </button>
+
+                    <div className="h-px bg-slate-100 mx-2" />
+                    
+                    {/* Ver Gráfica */}
+                    <button
+                        onClick={() => {
+                            setShowChartModal(true);
+                            closeContextMenu();
+                        }}
+                        className="w-full px-4 py-3 flex items-center gap-3 text-left text-slate-700 hover:bg-slate-50 active:bg-slate-100 transition-colors duration-150"
+                    >
+                        <TrendingUp className="w-4 h-4 flex-shrink-0 text-slate-500" />
+                        <span>Ver gráfico</span>
+                    </button>
                 </div>,
                 document.body
             )}
@@ -1280,6 +1297,13 @@ const HistoryItem = ({
                 </div>,
                 document.body
             )}
+
+            {/* === MODAL DE GRÁFICA DE PRECIOS === */}
+            <PriceChartModal
+                product={propItem}
+                isOpen={showChartModal}
+                onClose={() => setShowChartModal(false)}
+            />
         </div>
     );
 };
