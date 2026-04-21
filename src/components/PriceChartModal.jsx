@@ -13,6 +13,7 @@ import {
     Tooltip,
     ResponsiveContainer,
     Legend,
+    ReferenceLine,
 } from "recharts";
 
 const CustomSelect = ({ options, value, onChange }) => {
@@ -267,6 +268,10 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
         };
     }, [isOpen]);
 
+    const firstEverPrice = product.first_ever_price
+        ? parseFloat(String(product.first_ever_price).replace(/[^0-9.,]/g, "").replace(",", ".")) || null
+        : null;
+
     const periods = [
         { value: "7d", label: "7 días" },
         { value: "30d", label: "1 mes" },
@@ -277,8 +282,8 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
 
     const viewOptions = [
         { value: "both", label: "Ambos" },
-        { value: "price", label: "Precio" },
         { value: "original", label: "Original" },
+        { value: "price", label: "Actual" },
     ];
 
     const chartTypeOptions = [
@@ -288,18 +293,43 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
 
     const CustomTooltip = ({ active, payload }) => {
         if (!active || !payload || payload.length === 0) return null;
+
+        // Ordenamos para que "Original" aparezca primero, luego "Actual"
+        const orderedPayload = [...payload].sort((a, b) => {
+            if (a.name === "Precio Original" || a.name === "Original") return -1;
+            if (b.name === "Precio Original" || b.name === "Original") return 1;
+            return 0;
+        });
+
         return (
             <div className="bg-white border border-slate-200 contenedorCosas shadow-2xl p-4 text-sm min-w-[200px]">
-                <p className="font-medium text-slate-500 mb-3 border-b pb-2">{payload[0].payload.fullLabel}</p>
-                {payload.map((entry) => (
-                    <div key={entry.name} className="flex justify-between items-center gap-6 py-1">
-                        <div className="flex items-center gap-2">
-                            <div className="w-3 h-3 contenedorCosas" style={{ backgroundColor: entry.color }} />
-                            <span className="text-slate-700">{entry.name}</span>
+                <p className="font-medium text-slate-500 mb-3 border-b pb-2">
+                    {payload[0].payload.fullLabel}
+                </p>
+
+                {orderedPayload.map((entry) => {
+                    let displayName = entry.name;
+                    if (entry.name === "Precio Original" || entry.name === "Original") displayName = "Original";
+                    if (entry.name === "Precio" || entry.name === "Actual") displayName = "Actual";
+
+                    return (
+                        <div key={entry.name} className="flex justify-between items-center gap-6 py-1">
+                            <div className="flex items-center gap-2">
+                                <div
+                                    className="w-3 h-3 rounded-full"
+                                    style={{ backgroundColor: entry.color }}
+                                />
+                                <span className="text-slate-700">{displayName}</span>
+                            </div>
+                            <span className="font-semibold text-slate-900">
+                                {entry.value.toLocaleString('es-ES', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                })} €
+                            </span>
                         </div>
-                        <span className="font-semibold text-slate-900">{entry.value.toFixed(2)} €</span>
-                    </div>
-                ))}
+                    );
+                })}
             </div>
         );
     };
@@ -334,29 +364,33 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
 
                         {/* Panel izquierdo */}
                         <div className="lg:col-span-4 bg-slate-50 contenedorCosas rounded-3xl p-6 lg:p-8 flex flex-col">
-                            <h3 className="text-sm text-center uppercase tracking-widest text-slate-500 font-medium mb-6">PRECIOS</h3>
+                            <h3 className="text-sm text-center uppercase tracking-widest text-slate-600 font-bold mb-6">PRECIOS</h3>
 
                             <div className="space-y-5 flex-1">
                                 <div className="flex justify-between items-center bg-white contenedorCosas px-5 py-4 shadow-sm">
-                                    <span className="text-slate-600 text-[15px]">Actual</span>
-                                    <span className="font-semibold text-emerald-600 text-2xl tracking-tight">
-                                        {product.price || "—"}
+                                    <span className="text-slate-600 text-[15px]">Primero</span>
+                                    <span className="font-semibold text-[#303030] text-2xl tracking-tight">
+                                        {product.first_ever_price || "—"}
                                     </span>
                                 </div>
 
                                 <div className="flex justify-between items-center bg-white contenedorCosas px-5 py-4 shadow-sm">
                                     <span className="text-slate-600 text-[15px]">Original</span>
-                                    <span className="font-semibold text-slate-700 text-2xl tracking-tight line-through">
+                                    <span className="font-semibold text-[#3b82f6] text-2xl tracking-tight">
                                         {product.originalPrice || "—"}
                                     </span>
                                 </div>
 
                                 <div className="flex justify-between items-center bg-white contenedorCosas px-5 py-4 shadow-sm">
-                                    <span className="text-slate-600 text-[15px]">Primero</span>
-                                    <span className="font-semibold text-amber-600 text-2xl tracking-tight">
-                                        {product.first_ever_price || "—"}
+                                    <span className="text-slate-600 text-[15px]">Actual</span>
+                                    <span className="font-semibold text-violet-600 text-2xl tracking-tight">
+                                        {product.price || "—"}
                                     </span>
                                 </div>
+
+
+
+
                             </div>
 
                             {/* Botones de acción */}
@@ -410,7 +444,16 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
                                                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
                                                 <Tooltip content={<CustomTooltip />} />
-                                                <Legend verticalAlign="bottom" height={45} wrapperStyle={{ fontSize: '13px', color: '#475569' }} />
+                                                <Legend
+                                                    verticalAlign="bottom"
+                                                    height={45}
+                                                    wrapperStyle={{ fontSize: '13px', color: '#475569' }}
+                                                    formatter={(value) => {
+                                                        if (value === "Precio") return "Actual";
+                                                        if (value === "Precio Original") return "Original";
+                                                        return value;
+                                                    }}
+                                                />
 
                                                 {/* Precio Actual - Siempre se muestra */}
                                                 {showPrice && (
@@ -418,7 +461,7 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                                         type="natural"
                                                         dataKey="Precio"
                                                         stroke="#8b5cf6"
-                                                        strokeWidth={3.5}
+                                                        strokeWidth={2}
                                                         fill="url(#colorPrecio)"
                                                         name="Precio"
                                                         dot={false}
@@ -431,10 +474,26 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                                         type="natural"
                                                         dataKey="Precio Original"
                                                         stroke="#3b82f6"
-                                                        strokeWidth={3}
+                                                        strokeWidth={2}
                                                         fill="url(#colorOriginal)"
                                                         name="Precio Original"
                                                         dot={false}
+                                                    />
+                                                )}
+
+                                                {firstEverPrice && (
+                                                    <ReferenceLine
+                                                        y={firstEverPrice}
+                                                        stroke="#303030"
+                                                        strokeDasharray="10 4"
+                                                        strokeWidth={2}
+                                                        label={{
+                                                            value: ``,
+                                                            position: "topRight",
+                                                            fill: "#303030",
+                                                            fontSize: 10,
+                                                            fontWeight: "600"
+                                                        }}
                                                     />
                                                 )}
                                             </AreaChart>
@@ -444,10 +503,35 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                                 <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
                                                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
                                                 <Tooltip content={<CustomTooltip />} />
-                                                <Legend verticalAlign="bottom" height={45} wrapperStyle={{ fontSize: '13px', color: '#475569' }} />
+                                                <Legend
+                                                    verticalAlign="bottom"
+                                                    height={45}
+                                                    wrapperStyle={{ fontSize: '13px', color: '#475569' }}
+                                                    formatter={(value) => {
+                                                        if (value === "Precio") return "Actual";
+                                                        if (value === "Precio Original") return "Original";
+                                                        return value;
+                                                    }}
+                                                />
 
                                                 {showOriginal && <Bar dataKey="Precio Original" fill="#3b82f6" name="Precio Original" radius={[2, 2, 0, 0]} />}
                                                 {showPrice && <Bar dataKey="Precio" fill="#8b5cf6" name="Precio" radius={[2, 2, 0, 0]} />}
+
+                                                {firstEverPrice && (
+                                                    <ReferenceLine
+                                                        y={firstEverPrice}
+                                                        stroke="#303030"
+                                                        strokeDasharray="10 4"
+                                                        strokeWidth={2}
+                                                        label={{
+                                                            value: ``,
+                                                            position: "topRight",
+                                                            fill: "#303030",
+                                                            fontSize: 10,
+                                                            fontWeight: "600"
+                                                        }}
+                                                    />
+                                                )}
                                             </BarChart>
                                         )}
                                     </ResponsiveContainer>
