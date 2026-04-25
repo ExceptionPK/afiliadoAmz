@@ -222,29 +222,32 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
         return filtered;
     }, [rawData, selectedPeriod]);
 
+    // Dentro de chartData, añade timestamp
     const chartData = useMemo(() => {
         return filteredData.map((item) => ({
-            // Formato corto: "07/2025", "02/2026"
+            timestamp: item.timestamp, // <- IMPORTANTE
             date: item.dateObj.toLocaleDateString("es-ES", {
                 month: "2-digit",
                 year: "numeric"
-            }).replace("/", "/"),   // 07/2025
-
+            }),
             fullLabel: item.fullLabel,
             Precio: item.Precio,
-            "Precio Original": item["Precio Original"] !== null && item["Precio Original"] !== undefined
-                ? item["Precio Original"]
-                : null,
-
-            // Para el tooltip (más legible)
-            fullDate: item.dateObj.toLocaleDateString("es-ES", {
-                day: "2-digit",
-                month: "long",
-                year: "numeric"
-            }) + " " + item.dateObj.toLocaleTimeString("es-ES", {
-                hour: "2-digit",
-                minute: "2-digit"
-            })
+            "Precio Original":
+                item["Precio Original"] !== null &&
+                    item["Precio Original"] !== undefined
+                    ? item["Precio Original"]
+                    : null,
+            fullDate:
+                item.dateObj.toLocaleDateString("es-ES", {
+                    day: "2-digit",
+                    month: "long",
+                    year: "numeric"
+                }) +
+                " " +
+                item.dateObj.toLocaleTimeString("es-ES", {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                })
         }));
     }, [filteredData]);
 
@@ -441,7 +444,34 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                                     </linearGradient>
                                                 </defs>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
+                                                <XAxis
+                                                    dataKey="timestamp"
+                                                    tick={{ fontSize: 11, fill: "#64748b" }}
+                                                    tickLine={false}
+                                                    minTickGap={20}
+                                                    tickFormatter={(value) => {
+                                                        const date = new Date(value);
+
+                                                        if (selectedPeriod === "7d" || selectedPeriod === "30d") {
+                                                            return date.toLocaleDateString("es-ES", {
+                                                                day: "2-digit",
+                                                                month: "2-digit",
+                                                            });
+                                                        }
+
+                                                        if (selectedPeriod === "180d") {
+                                                            return date.toLocaleDateString("es-ES", {
+                                                                day: "2-digit",
+                                                                month: "2-digit",
+                                                            });
+                                                        }
+
+                                                        return date.toLocaleDateString("es-ES", {
+                                                            month: "2-digit",
+                                                            year: "numeric",
+                                                        });
+                                                    }}
+                                                />
                                                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
                                                 <Tooltip content={<CustomTooltip />} />
                                                 <Legend
@@ -500,7 +530,34 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                         ) : (
                                             <BarChart data={chartData} margin={{ top: 0, right: 10, left: -35, bottom: -20 }}>
                                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                                <XAxis dataKey="date" tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
+                                                <XAxis
+                                                    dataKey="timestamp"
+                                                    tick={{ fontSize: 11, fill: "#64748b" }}
+                                                    tickLine={false}
+                                                    minTickGap={20}
+                                                    tickFormatter={(value) => {
+                                                        const date = new Date(value);
+
+                                                        if (selectedPeriod === "7d" || selectedPeriod === "30d") {
+                                                            return date.toLocaleDateString("es-ES", {
+                                                                day: "2-digit",
+                                                                month: "2-digit",
+                                                            });
+                                                        }
+
+                                                        if (selectedPeriod === "180d") {
+                                                            return date.toLocaleDateString("es-ES", {
+                                                                day: "2-digit",
+                                                                month: "2-digit",
+                                                            });
+                                                        }
+
+                                                        return date.toLocaleDateString("es-ES", {
+                                                            month: "2-digit",
+                                                            year: "numeric",
+                                                        });
+                                                    }}
+                                                />
                                                 <YAxis tick={{ fontSize: 11, fill: '#64748b' }} tickLine={false} />
                                                 <Tooltip content={<CustomTooltip />} />
                                                 <Legend
