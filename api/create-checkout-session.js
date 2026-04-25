@@ -10,7 +10,7 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { plan, billing } = req.body;        // ← Aquí está la diferencia clave
+    const { plan, billing } = req.body;
 
     const priceMap = {
       pro: {

@@ -109,7 +109,7 @@ export default function ChatWidget() {
       type: "function",
       function: {
         name: "web_search",
-        description: "Busca información actualizada en internet (precios Amazon, ofertas, reseñas, novedades 2025/2026). Úsala SIEMPRE que necesites datos post-2024.",
+        description: "Busca información actualizada en internet (precios Amazon, ofertas, reseñas, novedades 2025/2026). Úsala cuando necesites información actualizada a lo más reciente posible o precios reales.",
         parameters: {
           type: "object",
           properties: {
@@ -189,7 +189,7 @@ IMPORTANTE: Tu entrenamiento base llega hasta 2024. Si te pregunto algo posterio
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "meta-llama/llama-4-maverick-17b-128e-instruct",
+          model: "llama-3.3-70b-versatile",
           messages: [systemPrompt, ...history],
           temperature: 0.7,
           max_tokens: 400,
