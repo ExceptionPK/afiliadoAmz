@@ -1,3 +1,45 @@
+// =========================
+// ROTACIÓN DE KEYS (GLOBAL)
+// =========================
+const keys = [
+  process.env.TAVILY_API_KEY_1,
+  process.env.TAVILY_API_KEY_2,
+  process.env.TAVILY_API_KEY_3,
+].filter(Boolean);
+
+// IMPORTANTE: fuera del handler para persistencia en runtime
+let keyIndex = 0;
+
+function getNextKey() {
+  if (!keys.length) return process.env.TAVILY_API_KEY_1;
+
+  const key = keys[keyIndex % keys.length];
+  keyIndex++;
+  return key;
+}
+
+// =========================
+// FORZAR AMAZON ESPAÑA
+// =========================
+function forceAmazonSpain(url = "") {
+  return url
+    .replace(/amazon\.[a-z.]+/g, "amazon.es")
+    .split("?")[0]; // elimina tracking
+}
+
+// =========================
+// FORZAR QUERY A ESPAÑA
+// =========================
+function forceESQuery(q = "") {
+  const lower = q.toLowerCase();
+
+  if (lower.includes("amazon")) {
+    return `${q} site:amazon.es`;
+  }
+
+  return `${q} amazon españa site:amazon.es`;
+}
+
 export default async function handler(req, res) {
   const { q } = req.query;
 
@@ -12,25 +54,13 @@ export default async function handler(req, res) {
     });
   }
 
-  // =========================
-  // FORZAR AMAZON ESPAÑA
-  // =========================
-  const normalizeAmazonUrl = (url = "") => {
-    return url
-      .replace("amazon.com.mx", "amazon.es")
-      .replace("amazon.com", "amazon.es")
-      .replace("amazon.co.uk", "amazon.es")
-      .replace("amazon.de", "amazon.es")
-      .replace("amazon.fr", "amazon.es");
-  };
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 9000);
 
   try {
     // =========================
-    // TIMEOUT SAFE (Vercel friendly)
+    // PETICIÓN A TAVILY
     // =========================
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 8000);
-
     const response = await fetch("https://api.tavily.com/search", {
       method: "POST",
       signal: controller.signal,
@@ -38,13 +68,13 @@ export default async function handler(req, res) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        api_key: process.env.TAVILY_API_KEY,
-        query: q,
+        api_key: getNextKey(),
+        query: forceESQuery(q),
 
         search_depth: "advanced",
         include_answer: true,
         include_results: true,
-        max_results: 5,
+        max_results: 6,
         include_raw_content: false,
       }),
     });
@@ -52,7 +82,7 @@ export default async function handler(req, res) {
     clearTimeout(timeout);
 
     // =========================
-    // SI TAVILY FALLA
+    // ERROR HTTP
     // =========================
     if (!response.ok) {
       const text = await response.text();
@@ -65,11 +95,15 @@ export default async function handler(req, res) {
       });
     }
 
+    // =========================
+    // PARSE JSON SEGURO
+    // =========================
     let data;
     try {
       data = await response.json();
-    } catch (e) {
-      console.error("Tavily JSON parse error:", e);
+    } catch (err) {
+      console.error("JSON parse error:", err);
+
       return res.status(200).json({
         result: "Respuesta inválida de búsqueda",
         results: [],
@@ -78,18 +112,16 @@ export default async function handler(req, res) {
     }
 
     // =========================
-    // SANITIZAR RESULTS
+    // SANITIZAR RESULTADOS
     // =========================
-    const results = Array.isArray(data?.results)
-      ? data.results
-          .map((r) => ({
-            title: r?.title || "Sin título",
-            url: normalizeAmazonUrl(r?.url || ""),
-            content: (r?.content || "").slice(0, 200),
-            score: r?.score || 0,
-          }))
-          .filter(r => r.url.includes("amazon.es")) // evita basura
-      : [];
+    const results = (data?.results || [])
+      .map((r) => ({
+        title: r?.title || "Sin título",
+        url: forceAmazonSpain(r?.url || ""),
+        content: (r?.content || "").slice(0, 220),
+        score: r?.score || 0,
+      }))
+      .filter((r) => r.url.includes("amazon.es")); // SOLO ESPAÑA
 
     // =========================
     // ORDENAR POR RELEVANCIA
@@ -106,7 +138,7 @@ export default async function handler(req, res) {
               `Título: ${r.title}\nURL: ${r.url}\nInfo: ${r.content}`
           )
           .join("\n\n")
-      : "Sin resultados relevantes";
+      : "Sin resultados relevantes en Amazon España";
 
     // =========================
     // RESPUESTA FINAL
@@ -117,9 +149,10 @@ export default async function handler(req, res) {
       result: llmText,
     });
   } catch (error) {
+    clearTimeout(timeout);
+
     console.error("Tavily exception:", error);
 
-    // 🔥 nunca romper frontend
     return res.status(200).json({
       result: "Error interno en búsqueda",
       results: [],
