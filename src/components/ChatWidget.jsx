@@ -225,10 +225,8 @@ IMPORTANTE: Tu entrenamiento base llega hasta 2024. Si te pregunto algo posterio
 
           // Añade el resultado como mensaje de tool
           history.push({
-            role: "tool",
-            tool_call_id: toolCall.id,
-            name: funcName,
-            content: toolResult,
+            role: "user",
+            content: `Resultado de ${funcName}: ${toolResult}`,
           });
         }
 
