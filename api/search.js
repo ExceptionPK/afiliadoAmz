@@ -2,7 +2,7 @@ export default async function handler(req, res) {
   const { q } = req.query;
 
   // =========================
-  // VALIDACIÓN INICIAL
+  // VALIDACIÓN
   // =========================
   if (!q || typeof q !== "string") {
     return res.status(400).json({
@@ -12,9 +12,21 @@ export default async function handler(req, res) {
     });
   }
 
+  // =========================
+  // FORZAR AMAZON ESPAÑA
+  // =========================
+  const normalizeAmazonUrl = (url = "") => {
+    return url
+      .replace("amazon.com.mx", "amazon.es")
+      .replace("amazon.com", "amazon.es")
+      .replace("amazon.co.uk", "amazon.es")
+      .replace("amazon.de", "amazon.es")
+      .replace("amazon.fr", "amazon.es");
+  };
+
   try {
     // =========================
-    // TIMEOUT (evita cuelgues en Vercel)
+    // TIMEOUT SAFE (Vercel friendly)
     // =========================
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
@@ -40,11 +52,11 @@ export default async function handler(req, res) {
     clearTimeout(timeout);
 
     // =========================
-    // VALIDAR STATUS (CRÍTICO)
+    // SI TAVILY FALLA
     // =========================
     if (!response.ok) {
       const text = await response.text();
-      console.error("Tavily error response:", text);
+      console.error("Tavily error:", text);
 
       return res.status(200).json({
         result: "Error en búsqueda externa",
@@ -53,24 +65,39 @@ export default async function handler(req, res) {
       });
     }
 
-    const data = await response.json();
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      console.error("Tavily JSON parse error:", e);
+      return res.status(200).json({
+        result: "Respuesta inválida de búsqueda",
+        results: [],
+        answer: null,
+      });
+    }
 
     // =========================
     // SANITIZAR RESULTS
     // =========================
-    const results = Array.isArray(data.results)
-      ? data.results.map((r) => ({
-          title: r?.title || "Sin título",
-          url: r?.url || "",
-          content: (r?.content || "").slice(0, 200),
-          score: r?.score || 0,
-        }))
+    const results = Array.isArray(data?.results)
+      ? data.results
+          .map((r) => ({
+            title: r?.title || "Sin título",
+            url: normalizeAmazonUrl(r?.url || ""),
+            content: (r?.content || "").slice(0, 200),
+            score: r?.score || 0,
+          }))
+          .filter(r => r.url.includes("amazon.es")) // evita basura
       : [];
 
+    // =========================
+    // ORDENAR POR RELEVANCIA
+    // =========================
     const sorted = results.sort((a, b) => b.score - a.score);
 
     // =========================
-    // OUTPUT PARA LLM
+    // FORMATO PARA LLM
     // =========================
     const llmText = sorted.length
       ? sorted
@@ -82,19 +109,17 @@ export default async function handler(req, res) {
       : "Sin resultados relevantes";
 
     // =========================
-    // RESPUESTA FINAL SIEMPRE JSON VÁLIDO
+    // RESPUESTA FINAL
     // =========================
     return res.status(200).json({
-      answer: data.answer || null,
+      answer: data?.answer || null,
       results: sorted,
       result: llmText,
     });
   } catch (error) {
     console.error("Tavily exception:", error);
 
-    // =========================
-    // SI FALLA TODO → NUNCA HTML
-    // =========================
+    // 🔥 nunca romper frontend
     return res.status(200).json({
       result: "Error interno en búsqueda",
       results: [],
