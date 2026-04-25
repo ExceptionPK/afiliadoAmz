@@ -1,5 +1,5 @@
 // =========================
-// ROTACIÓN DE KEYS (GLOBAL)
+// ROTACIÓN KEYS
 // =========================
 const keys = [
   process.env.TAVILY_API_KEY_1,
@@ -7,7 +7,6 @@ const keys = [
   process.env.TAVILY_API_KEY_3,
 ].filter(Boolean);
 
-// IMPORTANTE: fuera del handler para persistencia en runtime
 let keyIndex = 0;
 
 function getNextKey() {
@@ -19,16 +18,17 @@ function getNextKey() {
 }
 
 // =========================
-// FORZAR AMAZON ESPAÑA
+// AMAZON CLEANER
 // =========================
-function forceAmazonSpain(url = "") {
+function cleanAmazonUrl(url = "") {
   return url
     .replace(/amazon\.[a-z.]+/g, "amazon.es")
-    .split("?")[0]; // elimina tracking
+    .split("?")[0]
+    .replace(/\/ref=.*/, "");
 }
 
 // =========================
-// FORZAR QUERY A ESPAÑA
+// FORZAR ESPAÑA
 // =========================
 function forceESQuery(q = "") {
   const lower = q.toLowerCase();
@@ -40,6 +40,39 @@ function forceESQuery(q = "") {
   return `${q} amazon españa site:amazon.es`;
 }
 
+// =========================
+// DETECTAR CALIDAD / PRECIO
+// =========================
+function scoreProduct(item) {
+  let score = item.score || 0;
+
+  const text = (item.title + item.content).toLowerCase();
+
+  if (text.includes("pro")) score += 0.5;
+  if (text.includes("5g")) score += 0.3;
+  if (text.includes("nuevo")) score += 0.2;
+  if (text.includes("oferta")) score += 0.4;
+  if (text.includes("descuento")) score += 0.4;
+
+  return score;
+}
+
+// =========================
+// LINK COMPRA DIRECTA
+// =========================
+function makeBuyLink(url = "") {
+  if (!url) return "";
+
+  const clean = cleanAmazonUrl(url);
+
+  // si ya es producto amazon
+  if (clean.includes("/dp/") || clean.includes("/gp/product/")) {
+    return clean;
+  }
+
+  return clean;
+}
+
 export default async function handler(req, res) {
   const { q } = req.query;
 
@@ -47,10 +80,11 @@ export default async function handler(req, res) {
   // VALIDACIÓN
   // =========================
   if (!q || typeof q !== "string") {
-    return res.status(400).json({
+    return res.status(200).json({
+      success: false,
       result: "Falta query válida",
+      best: null,
       results: [],
-      answer: null,
     });
   }
 
@@ -58,9 +92,6 @@ export default async function handler(req, res) {
   const timeout = setTimeout(() => controller.abort(), 9000);
 
   try {
-    // =========================
-    // PETICIÓN A TAVILY
-    // =========================
     const response = await fetch("https://api.tavily.com/search", {
       method: "POST",
       signal: controller.signal,
@@ -74,89 +105,98 @@ export default async function handler(req, res) {
         search_depth: "advanced",
         include_answer: true,
         include_results: true,
-        max_results: 6,
+        max_results: 7,
         include_raw_content: false,
       }),
     });
 
     clearTimeout(timeout);
 
-    // =========================
-    // ERROR HTTP
-    // =========================
     if (!response.ok) {
-      const text = await response.text();
-      console.error("Tavily error:", text);
-
       return res.status(200).json({
+        success: false,
         result: "Error en búsqueda externa",
+        best: null,
         results: [],
-        answer: null,
       });
     }
 
-    // =========================
-    // PARSE JSON SEGURO
-    // =========================
     let data;
     try {
       data = await response.json();
-    } catch (err) {
-      console.error("JSON parse error:", err);
-
+    } catch (e) {
       return res.status(200).json({
-        result: "Respuesta inválida de búsqueda",
+        success: false,
+        result: "Error parseando respuesta",
+        best: null,
         results: [],
-        answer: null,
       });
     }
 
     // =========================
-    // SANITIZAR RESULTADOS
+    // LIMPIEZA DE RESULTADOS
     // =========================
-    const results = (data?.results || [])
+    const resultsRaw = (data?.results || []).map((r) => ({
+      title: r?.title || "Sin título",
+      url: cleanAmazonUrl(r?.url || ""),
+      content: (r?.content || "").slice(0, 200),
+      score: r?.score || 0,
+    }));
+
+    const results = resultsRaw
       .map((r) => ({
-        title: r?.title || "Sin título",
-        url: forceAmazonSpain(r?.url || ""),
-        content: (r?.content || "").slice(0, 220),
-        score: r?.score || 0,
+        ...r,
+        score: scoreProduct(r),
+        buyLink: makeBuyLink(r.url),
       }))
-      .filter((r) => r.url.includes("amazon.es")); // SOLO ESPAÑA
+      .filter((r) => r.url.includes("amazon.es"))
+      .sort((a, b) => b.score - a.score);
 
     // =========================
-    // ORDENAR POR RELEVANCIA
+    // MEJOR PRODUCTO
     // =========================
-    const sorted = results.sort((a, b) => b.score - a.score);
+    const best = results[0]
+      ? {
+          title: results[0].title,
+          url: results[0].buyLink,
+          reason: "Mejor relación calidad/precio estimada",
+        }
+      : null;
 
     // =========================
-    // FORMATO PARA LLM
+    // OUTPUT LLM
     // =========================
-    const llmText = sorted.length
-      ? sorted
+    const llmText = results.length
+      ? results
           .map(
             (r) =>
-              `Título: ${r.title}\nURL: ${r.url}\nInfo: ${r.content}`
+              `Título: ${r.title}
+Precio/Info: ${r.content}
+Link: ${r.buyLink}`
           )
           .join("\n\n")
-      : "Sin resultados relevantes en Amazon España";
+      : "No se encontraron productos en Amazon España";
 
     // =========================
     // RESPUESTA FINAL
     // =========================
     return res.status(200).json({
+      success: true,
       answer: data?.answer || null,
-      results: sorted,
+      best,
+      results,
       result: llmText,
     });
   } catch (error) {
     clearTimeout(timeout);
 
-    console.error("Tavily exception:", error);
+    console.error("Search error:", error);
 
     return res.status(200).json({
+      success: false,
       result: "Error interno en búsqueda",
+      best: null,
       results: [],
-      answer: null,
     });
   }
 }
