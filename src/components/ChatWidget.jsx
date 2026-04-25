@@ -163,18 +163,30 @@ export default function ChatWidget() {
     setInput("");
     setIsTyping(true);
 
+    // 🔒 aislamos history SIEMPRE (evita contaminación)
+    const history = updatedMessages.map((msg) => ({
+      role: msg.sender === "bot" ? "assistant" : "user",
+      content: msg.text,
+    }));
+
+    const systemPrompt = {
+      role: "system",
+      content: `Eres un amigo que ayuda con cosas de Amazon, hablas de forma normal y relajada como una persona real, nada de lenguaje de robot ni muy formal. 
+Cuando te pido que generes un mensaje para alguien (por ejemplo "generame un mensaje para Teresa"), escribe exactamente un mensaje corto y natural como si lo estuviera mandando yo por WhatsApp o Instagram, sin sonar a vendedor profesional, sin exagerar, sin inventarte ofertas ni precios que no sepas, y sin poner emojis.
+
+Si te pido recomendaciones, búsquedas o filtrados de productos, responde de manera clara y directa con lo que sabes de verdad, sin inventarte nada. Si no tienes información suficiente o actualizada, dilo sin rodeos.
+
+Recuerda y haz referencia a lo que hablamos antes. 
+No empieces conversaciones de cero si ya hemos hablado del tema.
+Mantén el contexto de la conversación. Sé breve cuando no haga falta alargar. Usa alguna expresión coloquial de vez en cuando, como "pues mira", "la verdad es que", "no sé si te servirá pero...", pero sin pasarte.
+
+IMPORTANTE: Tu entrenamiento base llega hasta 2024. Si te pregunto algo posterior a eso (como ofertas 2025 o 2026), usa la tool "web_search" o "browse_amazon_page" para obtener info actualizada y no inventes precios ni novedades. Describe la tool call claramente si es necesario, pero responde al usuario de forma natural una vez tengas el resultado.`,
+    };
+
     try {
-      const history = updatedMessages.map((msg) => ({
-        role: msg.sender === "bot" ? "assistant" : "user",
-        content: msg.text,
-      }));
-
-      const systemPrompt = {
-        role: "system",
-        content: `Eres un amigo que ayuda con cosas de Amazon... (tu prompt igual)`,
-      };
-
-      // 🔥 1ª llamada a Groq
+      // =========================
+      // 1️⃣ PRIMERA LLAMADA GROQ
+      // =========================
       const response = await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
         {
@@ -194,83 +206,126 @@ export default function ChatWidget() {
         }
       );
 
-      if (!response.ok) throw new Error("Error Groq");
-
       const data = await response.json();
-      const message = data.choices?.[0]?.message;
 
-      let finalAnswer = "";
+      if (!response.ok) {
+        console.error("Groq error:", data);
+        throw new Error("Groq request failed");
+      }
+
+      const message = data?.choices?.[0]?.message;
 
       // =========================
-      // 🧠 CASO 1: SIN TOOLS
+      // CASO 1: SIN TOOLS
       // =========================
       if (!message?.tool_calls) {
-        finalAnswer = message?.content?.trim();
+        const finalAnswer =
+          message?.content?.trim() || "No se pudo generar respuesta.";
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + 1,
+            text: finalAnswer,
+            sender: "bot",
+            timestamp: Date.now(),
+          },
+        ]);
+
+        setIsTyping(false);
+        return;
       }
 
       // =========================
-      // 🧠 CASO 2: CON TOOLS
+      // CASO 2: CON TOOL
       // =========================
-      else {
-        const toolCall = message.tool_calls[0];
-        const funcName = toolCall.function.name;
-        const args = JSON.parse(toolCall.function.arguments);
+      const toolCall = message.tool_calls?.[0];
 
-        let toolResult = "";
+      if (!toolCall) {
+        throw new Error("Tool call vacío");
+      }
 
-        if (funcName === "web_search") {
-          const res = await fetch(
-            `/api/search?q=${encodeURIComponent(args.query)}`
-          );
-          const json = await res.json();
-          toolResult = json.result || "Sin resultados";
-        }
+      const funcName = toolCall.function.name;
+      let args = {};
 
-        if (funcName === "browse_amazon_page") {
-          const res = await fetch(
-            `/api/browse?url=${encodeURIComponent(
-              args.url
-            )}&instructions=${encodeURIComponent(args.instructions)}`
-          );
-          const json = await res.json();
-          toolResult = json.content || "No pude leer la página";
-        }
+      try {
+        args = JSON.parse(toolCall.function.arguments || "{}");
+      } catch (e) {
+        console.error("Error parsing tool args", e);
+      }
 
-        // 🔥 2ª Y ÚLTIMA LLAMADA (limpia y correcta)
-        const finalResponse = await fetch(
-          "https://api.groq.com/openai/v1/chat/completions",
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${GROQ_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "llama-3.3-70b-versatile",
-              messages: [
-                systemPrompt,
-                ...history,
-                {
-                  role: "user",
-                  content: `Información actualizada:\n${toolResult}`,
-                },
-              ],
-              temperature: 0.7,
-              max_tokens: 400,
-            }),
-          }
+      let toolResult = "";
+
+      // =========================
+      // WEB SEARCH
+      // =========================
+      if (funcName === "web_search") {
+        const res = await fetch(
+          `/api/search?q=${encodeURIComponent(args.query || "")}`
         );
 
-        const finalData = await finalResponse.json();
-        finalAnswer =
-          finalData.choices?.[0]?.message?.content?.trim() ||
-          "Error al procesar tool.";
+        const json = await res.json();
+        toolResult = json?.result || "Sin resultados";
       }
 
       // =========================
-      // RESPUESTA FINAL
+      // AMAZON BROWSE
       // =========================
-      finalAnswer = finalAnswer?.replace(/^"(.+)"$/, "$1").trim();
+      if (funcName === "browse_amazon_page") {
+        if (!args.url) {
+          toolResult = "No se proporcionó URL válida.";
+        } else {
+          const res = await fetch(
+            `/api/browse?url=${encodeURIComponent(args.url)}&instructions=${encodeURIComponent(args.instructions || "")}`
+          );
+
+          const json = await res.json();
+          toolResult = json?.content || "No pude leer la página";
+        }
+      }
+
+      // 🔥 IMPORTANTE: si tool falla, NO rompas el chat
+      if (!toolResult) {
+        toolResult = "No se pudo obtener información externa.";
+      }
+
+      // =========================
+      // 2ª LLAMADA (pero SEGURA)
+      // =========================
+      const finalResponse = await fetch(
+        "https://api.groq.com/openai/v1/chat/completions",
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${GROQ_API_KEY}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages: [
+              systemPrompt,
+              ...history,
+              {
+                role: "user",
+                content: `Datos obtenidos de herramientas:\n${toolResult}`,
+              },
+            ],
+            temperature: 0.7,
+            max_tokens: 400,
+          }),
+        }
+      );
+
+      const finalData = await finalResponse.json();
+
+      if (!finalResponse.ok) {
+        console.error("Final Groq error:", finalData);
+        throw new Error("Final request failed");
+      }
+
+      const finalAnswer =
+        finalData?.choices?.[0]?.message?.content?.trim() ||
+        "Error generando respuesta final.";
 
       setMessages((prev) => [
         ...prev,
@@ -282,7 +337,8 @@ export default function ChatWidget() {
         },
       ]);
     } catch (err) {
-      console.error(err);
+      console.error("Chat error:", err);
+
       setMessages((prev) => [
         ...prev,
         {
