@@ -13,22 +13,8 @@ export default async function handler(req, res) {
   }
 
   // =========================
-  // ROTACIÓN DE KEYS
+  // FORZAR AMAZON ESPAÑA
   // =========================
-  const keys = [
-    process.env.TAVILY_API_KEY_1,
-    process.env.TAVILY_API_KEY_2,
-    process.env.TAVILY_API_KEY_3,
-  ].filter(Boolean);
-
-  if (keys.length === 0) {
-    return res.status(500).json({
-      result: "No hay API keys configuradas",
-      results: [],
-      answer: null,
-    });
-  }
-
   const normalizeAmazonUrl = (url = "") => {
     return url
       .replace("amazon.com.mx", "amazon.es")
@@ -38,58 +24,58 @@ export default async function handler(req, res) {
       .replace("amazon.fr", "amazon.es");
   };
 
-  // =========================
-  // FUNCIÓN DE FETCH CON KEY ROTATIVA
-  // =========================
-  const fetchWithKeyRotation = async () => {
-    let lastError = null;
+  try {
+    // =========================
+    // TIMEOUT SAFE (Vercel friendly)
+    // =========================
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 8000);
 
-    for (let i = 0; i < keys.length; i++) {
-      const apiKey = keys[i];
+    const response = await fetch("https://api.tavily.com/search", {
+      method: "POST",
+      signal: controller.signal,
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        api_key: process.env.TAVILY_API_KEY_1,
+        query: q,
 
-      try {
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
+        search_depth: "advanced",
+        include_answer: true,
+        include_results: true,
+        max_results: 5,
+        include_raw_content: false,
+      }),
+    });
 
-        const response = await fetch("https://api.tavily.com/search", {
-          method: "POST",
-          signal: controller.signal,
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            api_key: apiKey,
-            query: q,
-            search_depth: "advanced",
-            include_answer: true,
-            include_results: true,
-            max_results: 5,
-            include_raw_content: false,
-          }),
-        });
+    clearTimeout(timeout);
 
-        clearTimeout(timeout);
+    // =========================
+    // SI TAVILY FALLA
+    // =========================
+    if (!response.ok) {
+      const text = await response.text();
+      console.error("Tavily error:", text);
 
-        if (!response.ok) {
-          const text = await response.text();
-          console.error(`Tavily error con key ${i}:`, text);
-          lastError = text;
-          continue; // 🔥 prueba siguiente key
-        }
-
-        return await response.json();
-      } catch (err) {
-        console.error(`Error con key ${i}:`, err);
-        lastError = err;
-        continue;
-      }
+      return res.status(200).json({
+        result: "Error en búsqueda externa",
+        results: [],
+        answer: null,
+      });
     }
 
-    throw lastError || new Error("Todas las keys fallaron");
-  };
-
-  try {
-    let data = await fetchWithKeyRotation();
+    let data;
+    try {
+      data = await response.json();
+    } catch (e) {
+      console.error("Tavily JSON parse error:", e);
+      return res.status(200).json({
+        result: "Respuesta inválida de búsqueda",
+        results: [],
+        answer: null,
+      });
+    }
 
     // =========================
     // SANITIZAR RESULTS
@@ -102,7 +88,7 @@ export default async function handler(req, res) {
             content: (r?.content || "").slice(0, 200),
             score: r?.score || 0,
           }))
-          .filter((r) => r.url.includes("amazon.es"))
+          .filter(r => r.url.includes("amazon.es")) // evita basura
       : [];
 
     // =========================
@@ -122,6 +108,9 @@ export default async function handler(req, res) {
           .join("\n\n")
       : "Sin resultados relevantes";
 
+    // =========================
+    // RESPUESTA FINAL
+    // =========================
     return res.status(200).json({
       answer: data?.answer || null,
       results: sorted,
@@ -130,6 +119,7 @@ export default async function handler(req, res) {
   } catch (error) {
     console.error("Tavily exception:", error);
 
+    // 🔥 nunca romper frontend
     return res.status(200).json({
       result: "Error interno en búsqueda",
       results: [],
