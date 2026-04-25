@@ -240,10 +240,10 @@ IMPORTANTE: Tu entrenamiento base llega hasta 2024. Si te pregunto algo posterio
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "meta-llama/llama-4-maverick-17b-128e-instruct",
+            model: "mixtral-8x7b-32768",
             messages: [systemPrompt, ...history],
-            tools: tools,
-            tool_choice: "auto",
+            temperature: 0.7,
+            max_tokens: 400,
           }),
         });
 
