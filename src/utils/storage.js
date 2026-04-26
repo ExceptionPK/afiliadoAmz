@@ -291,6 +291,72 @@ export const fetchRealData = async (entry) => {
             }
         }
 
+        // ───────────────────────────────────────────────────────────────
+        // ── EXTRACCIÓN TEMPORAL DE PRODUCTOS RECOMENDADOS ───────────────
+        // ───────────────────────────────────────────────────────────────
+        let recommended = [];
+
+        const recSelectors = [
+            '#related-products .a-carousel-card',
+            '#similar-products .a-carousel-card',
+            '#buying-choices .a-section',
+            'div[data-testid="card-container"]',
+            '.a-carousel-viewport .a-carousel-card',
+            '#product-rec .a-link-normal',
+            '.a-section .a-link-normal[href*="/dp/"]',
+        ];
+
+        for (const selector of recSelectors) {
+            const cards = doc.querySelectorAll(selector);
+            if (cards.length === 0) continue;
+
+            for (const card of cards) {
+                const link = card.querySelector('a[href*="/dp/"]') || card.querySelector('a');
+                if (!link) continue;
+
+                const href = link.getAttribute('href');
+                const recAsinMatch = href.match(/\/dp\/([A-Z0-9]{10})/i);
+                if (!recAsinMatch) continue;
+
+                const recAsin = recAsinMatch[1];
+                if (recAsin === asin) continue;
+
+                // Extraer título
+                let recTitle = '';
+                const titleEls = card.querySelectorAll('h2, .a-size-base, .product-title, span.a-truncate-full, .a-link-normal');
+                for (const el of titleEls) {
+                    if (el && el.textContent && el.textContent.trim().length > 15) {
+                        recTitle = el.textContent.trim();
+                        break;
+                    }
+                }
+
+                if (!recTitle || recTitle.length < 15) continue;
+
+                // Extraer precio (opcional)
+                let recPrice = '';
+                const priceEl = card.querySelector('.a-price .a-offscreen, .a-price-whole, span.a-offscreen');
+                if (priceEl) recPrice = priceEl.textContent.trim();
+
+                recommended.push({
+                    asin: recAsin,
+                    title: recTitle.slice(0, 120),
+                    price: recPrice || null,
+                });
+            }
+
+            if (recommended.length >= 8) break;
+        }
+
+        // Limpiar duplicados y basura
+        recommended = recommended
+            .filter((item, index, self) => 
+                index === self.findIndex(t => t.asin === item.asin)
+            )
+            .filter(r => r.title.length > 12 && !/patrocinado|anuncio|prime|oferta|descuento/i.test(r.title))
+            .slice(0, 8);
+
+        // ───────────────────────────────────────────────────────────────
         const { data: { user } } = await supabase.auth.getUser();
         const isLoggedIn = !!user?.id;
         const now = new Date().toISOString();
@@ -318,7 +384,7 @@ export const fetchRealData = async (entry) => {
             if (!fetchErr) {
                 previousPrice = current?.price || null;
                 previousOriginalPrice = current?.original_price || null;
-                previousFirstEverPrice = current?.first_ever_price || null;   // ← NUEVO
+                previousFirstEverPrice = current?.first_ever_price || null;
                 previousPricesHistory = current?.prices_history || [];
                 previousTitle = current?.product_title || previousTitle;
                 titleIsCustom = current?.title_is_custom ?? false;
@@ -329,7 +395,7 @@ export const fetchRealData = async (entry) => {
             if (existing) {
                 previousPrice = existing.price || null;
                 previousOriginalPrice = existing.originalPrice || null;
-                previousFirstEverPrice = existing.first_ever_price || null;   // ← NUEVO
+                previousFirstEverPrice = existing.first_ever_price || null;
                 previousPricesHistory = existing.prices || [];
                 previousTitle = existing.productTitle || previousTitle;
                 titleIsCustom = existing.title_is_custom ?? false;
@@ -341,7 +407,7 @@ export const fetchRealData = async (entry) => {
         // ───────────────────────────────────────────────────────────────
         let updateData = {};
 
-        // Título: solo si no es custom y conseguimos uno mejor
+        // Título
         let shouldUpdateTitle = false;
         let newTitleValue = undefined;
 
@@ -364,76 +430,60 @@ export const fetchRealData = async (entry) => {
             updateData.title_is_custom = true;
         }
 
-        // ── FIRST EVER PRICE: Solo se guarda la PRIMERA vez que detectamos precio
+        // First ever price
         if (price && !previousFirstEverPrice) {
             updateData.first_ever_price = price;
             console.log(`[fetchRealData] Guardando first_ever_price para ${asin} → ${price}`);
         }
 
-        // ── LÓGICA DE PRECIO MEJORADA + HISTORIAL ACUMULATIVO ─────────────────
+        // Lógica de precio
         let shouldUpdatePrice = false;
         let newPricesHistory = [...previousPricesHistory];
         let showSameAsOriginalToast = false;
 
-        // Detectamos si es la primera inserción desde Home
-        const isFirstInsertion = entry.isFirstInsertion === true;
+        const isFirstInsertionLocal = entry.isFirstInsertion === true;
 
         if (price && price.trim() !== '') {
             const scrapedPriceClean = price.trim();
 
-            if (isFirstInsertion) {
+            if (isFirstInsertionLocal) {
                 console.log(`[fetchRealData] Primera inserción desde Home → price = NULL | original_price = ${scrapedPriceClean}`);
 
                 updateData.original_price = scrapedPriceClean;
 
                 if (!previousFirstEverPrice) {
                     updateData.first_ever_price = scrapedPriceClean;
-                    console.log(`[fetchRealData] Guardado first_ever_price: ${scrapedPriceClean}`);
                 }
 
             } else {
                 const now = new Date().toISOString();
 
-                // Función auxiliar para comparar precios numéricamente
                 const normalizePrice = (p) => {
                     if (!p || typeof p !== 'string') return NaN;
-                    return parseFloat(
-                        p.replace(/[^0-9.,]/g, '')
-                            .replace(',', '.')
-                    );
+                    return parseFloat(p.replace(/[^0-9.,]/g, '').replace(',', '.'));
                 };
 
                 const scrapedNum = normalizePrice(scrapedPriceClean);
                 const originalNum = normalizePrice(previousOriginalPrice);
                 const currentNum = normalizePrice(previousPrice);
 
-                // Siempre añadimos la entrada al historial (acumulativo)
                 const historyEntry = {
                     timestamp: now,
                     price: scrapedPriceClean,
                     type: "scrape"
                 };
 
-                // Caso 1: No había precio original → actualizamos todo
                 if (!previousOriginalPrice || isNaN(originalNum)) {
                     shouldUpdatePrice = true;
                     newPricesHistory.push(historyEntry);
-                }
-                // Caso 2: Sí había precio original
-                else {
-                    // Precio scrapeado DIFERENTE del original → actualizamos precio visible
+                } else {
                     if (!isNaN(scrapedNum) && scrapedNum !== originalNum) {
                         shouldUpdatePrice = true;
                         newPricesHistory.push(historyEntry);
-                    }
-                    // Precio scrapeado IGUAL al original
-                    else {
-                        // Si el precio actual (manual) era diferente → mostramos toast informativo
+                    } else {
                         if (previousPrice && !isNaN(currentNum) && currentNum !== originalNum) {
                             showSameAsOriginalToast = true;
                         }
-
-                        // Registramos en el historial que volvió al precio original
                         newPricesHistory.push({
                             ...historyEntry,
                             note: "Vuelto a precio original (scraping)"
@@ -443,21 +493,20 @@ export const fetchRealData = async (entry) => {
             }
         }
 
-        // ── Aplicamos cambios ───────────────────────────────────────────────
+        // Aplicamos cambios de precio y título
         if (shouldUpdatePrice) {
-            updateData.price = price;                    // precio visible actual
+            updateData.price = price;
             updateData.original_price = previousOriginalPrice || price;
             updateData.prices_history = newPricesHistory;
             updateData.last_update = now;
         }
         else if (newPricesHistory.length > previousPricesHistory.length) {
-            // Solo actualizamos el historial (caso "volvió al original")
             updateData.prices_history = newPricesHistory;
             updateData.last_update = now;
         }
 
         // ───────────────────────────────────────────────────────────────
-        // Guardamos SOLO si hay algo que actualizar
+        // Guardamos (solo título, precio, etc. — NO recommended)
         // ───────────────────────────────────────────────────────────────
         if (Object.keys(updateData).length > 0 || showSameAsOriginalToast) {
             if (isLoggedIn) {
@@ -470,9 +519,8 @@ export const fetchRealData = async (entry) => {
 
                 if (updateErr) throw updateErr;
 
-                console.log(`[fetchRealData] ÉXITO Supabase ${asin}: título ${shouldUpdateTitle ? 'actualizado' : 'mantenido'}, precio ${shouldUpdatePrice ? 'actualizado → ' + price : 'mantenido'}`);
+                console.log(`[fetchRealData] ÉXITO Supabase ${asin}: título ${shouldUpdateTitle ? 'actualizado' : 'mantenido'}, precio ${shouldUpdatePrice ? 'actualizado' : 'mantenido'}`);
             } else {
-                // localStorage
                 const history = getHistory();
                 const updatedHistory = history.map(h => {
                     if (h.asin === asin && h.domain === domain) {
@@ -503,12 +551,25 @@ export const fetchRealData = async (entry) => {
                 });
 
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedHistory));
-                console.log(`[fetchRealData] ÉXITO local ${asin}: título ${shouldUpdateTitle ? 'actualizado' : 'mantenido'}, precio ${shouldUpdatePrice ? 'actualizado → ' + price : 'mantenido'}`);
+                console.log(`[fetchRealData] ÉXITO local ${asin}: título ${shouldUpdateTitle ? 'actualizado' : 'mantenido'}, precio ${shouldUpdatePrice ? 'actualizado' : 'mantenido'}`);
             }
 
             window.dispatchEvent(new Event('amazon-history-updated'));
         } else {
             console.log(`[fetchRealData] ${asin} → sin cambios relevantes`);
+        }
+
+        // ───────────────────────────────────────────────────────────────
+        // NUEVO: Enviar los recomendados temporalmente a RecommendedProducts
+        // ───────────────────────────────────────────────────────────────
+        if (recommended.length > 0) {
+            window.dispatchEvent(new CustomEvent('recommended-products-loaded', {
+                detail: {
+                    asin: asin,
+                    domain: domain,
+                    recommended: recommended
+                }
+            }));
         }
 
     } catch (err) {

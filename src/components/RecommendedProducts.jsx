@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { Sparkles, ExternalLink, Plus } from "lucide-react";
-import { getHistory } from "../utils/storage";
+import { Sparkles, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 const RecommendedProducts = ({
@@ -13,8 +12,8 @@ const RecommendedProducts = ({
     AFFILIATE_ID = "dekolaps-21"
 }) => {
     const [recs, setRecs] = useState([]);
-    const [loading, setLoading] = useState(true); // ← nuevo: estado de carga
-    const [hasFailed, setHasFailed] = useState(false); // ← nuevo: si falló o timeout
+    const [loading, setLoading] = useState(true);
+    const [hasFailed, setHasFailed] = useState(false);
 
     useEffect(() => {
         setLoading(true);
@@ -23,14 +22,15 @@ const RecommendedProducts = ({
 
         let timeoutId = null;
 
-        const check = () => {
-            const history = getHistory();
-            const item = history.find(h => h.asin === asin && h.domain === domain);
+        // Función que recibe los recomendados del evento
+        const handleRecommendedLoaded = (event) => {
+            const { asin: eventAsin, domain: eventDomain, recommended } = event.detail;
 
-            if (item?.recommended?.length > 0) {
-                const filtered = item.recommended
+            // Solo procesamos si coincide con el producto actual
+            if (eventAsin === asin && eventDomain === domain && recommended?.length > 0) {
+                const filtered = recommended
                     .filter(r => {
-                        const title = r.title.toLowerCase();
+                        const title = (r.title || "").toLowerCase();
                         return (
                             r.title &&
                             r.title.length > 10 &&
@@ -57,29 +57,26 @@ const RecommendedProducts = ({
             }
         };
 
-        // Comprobación inmediata
-        check();
+        // Listener para los recomendados temporales
+        window.addEventListener('recommended-products-loaded', handleRecommendedLoaded);
 
-        // Listener para actualizaciones
-        const handler = () => check();
-        window.addEventListener('amazon-history-updated', handler);
-
-        // Timeout de seguridad: 10 segundos
+        // Timeout de seguridad (15 segundos)
         timeoutId = setTimeout(() => {
             if (loading && recs.length === 0) {
                 setLoading(false);
                 setHasFailed(true);
             }
-        }, 10000); // 10 segundos
+        }, 15000);
 
+        // Limpieza
         return () => {
-            window.removeEventListener('amazon-history-updated', handler);
+            window.removeEventListener('recommended-products-loaded', handleRecommendedLoaded);
             if (timeoutId) clearTimeout(timeoutId);
         };
     }, [asin, domain]);
 
-    const openInNewTab = (asin) => {
-        const affiliateUrl = `https://${domain}/dp/${asin}/ref=nosim?tag=${AFFILIATE_ID}`;
+    const openInNewTab = (recAsin) => {
+        const affiliateUrl = `https://${domain}/dp/${recAsin}/ref=nosim?tag=${AFFILIATE_ID}`;
         window.open(affiliateUrl, '_blank', 'noopener,noreferrer');
     };
 
@@ -104,32 +101,30 @@ const RecommendedProducts = ({
     return (
         <div className="-mt-4 animate-fade-in-up">
             <div className="text-center mb-4">
-                <h3 className="text-lg font-semibold text-slate-800 flex items-center justify-center">
-                    Productos similares
-                </h3>
             </div>
 
             {/* ESTADO DE CARGA */}
             {loading && (
-                <div className="text-center py-0">
+                <div className="text-center py-8">
                     <div className="inline-flex items-center gap-2 text-slate-600">
                         <div className="flex gap-1">
                             <div className="w-2 h-2 bg-violet-600 rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
                             <div className="w-2 h-2 bg-violet-600 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
                             <div className="w-2 h-2 bg-violet-600 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
                         </div>
+                        <span className="text-sm ml-2">Buscando productos similares...</span>
                     </div>
                 </div>
             )}
 
             {/* ESTADO DE ERROR / NO DISPONIBLE */}
             {hasFailed && !loading && (
-                <div className="text-center py-0">
+                <div className="text-center py-8">
                     <p className="text-sm text-slate-500">
                         No se pudieron cargar productos similares en este momento.
                     </p>
-                    <p className="text-xs text-slate-400 mt-0">
-                        Puede volver a intentarlo más tarde.
+                    <p className="text-xs text-slate-400 mt-1">
+                        Inténtalo de nuevo más tarde.
                     </p>
                 </div>
             )}
@@ -137,19 +132,19 @@ const RecommendedProducts = ({
             {/* PRODUCTOS REALES */}
             {!loading && !hasFailed && recs.length > 0 && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {recs.map((r, i) => (
+                    {recs.map((r) => (
                         <div
                             key={r.asin}
-                            className="relative bg-white border border-slate-200 contenedorCosas p-3 text-left hover:shadow-lg hover:border-violet-400 transition-all duration-300 text-xs flex flex-col justify-between"
+                            className="relative bg-white border border-slate-200 contenedorCosas p-3 text-left hover:shadow-lg hover:border-violet-400 transition-all duration-300 text-xs flex flex-col justify-between min-h-[140px]"
                         >
                             <div
                                 onClick={() => openInNewTab(r.asin)}
-                                className="cursor-pointer"
+                                className="cursor-pointer flex-1"
                             >
-                                <div className="font-medium text-slate-700 group-hover:text-violet-700 line-clamp-2 leading-tight">
+                                <div className="font-medium text-slate-700 line-clamp-3 leading-tight mb-2">
                                     {r.title}
                                 </div>
-                                <div className="text-slate-500 mt-1 font-mono opacity-70">
+                                <div className="text-slate-500 font-mono text-[10px] opacity-70">
                                     {r.asin}
                                 </div>
                             </div>
@@ -159,13 +154,20 @@ const RecommendedProducts = ({
                                     e.stopPropagation();
                                     addToAffiliate(r);
                                 }}
-                                className="absolute bottom-2 right-2 p-1 botonesAniadirHome text-white contenedorCosas transition-all shadow-md flex items-center justify-center"
+                                className="absolute bottom-3 right-3 p-1.5 bg-violet-600 hover:bg-violet-700 text-white rounded-full contenedorCosas transition-all shadow-md flex items-center justify-center"
                                 title="Añadir como afiliado"
                             >
                                 <Plus className="w-4 h-4" />
                             </button>
                         </div>
                     ))}
+                </div>
+            )}
+
+            {/* Mensaje cuando no hay recomendados después de cargar */}
+            {!loading && !hasFailed && recs.length === 0 && (
+                <div className="text-center py-6 text-slate-500 text-sm">
+                    No se encontraron productos similares para este artículo.
                 </div>
             )}
         </div>
