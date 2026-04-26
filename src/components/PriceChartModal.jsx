@@ -70,6 +70,17 @@ const CustomSelect = ({ options, value, onChange }) => {
     );
 };
 
+// Función auxiliar para parsear precios en formato español (1.449,00)
+const parsePrice = (priceStr) => {
+    if (!priceStr || typeof priceStr !== "string") return 0;
+    
+    return parseFloat(
+        priceStr
+            .replace(/\./g, "")      // Eliminar separadores de miles
+            .replace(",", ".")       // Convertir coma decimal en punto
+    ) || 0;
+};
+
 const PriceChartModal = ({ product, isOpen, onClose }) => {
     if (!isOpen || !product) return null;
 
@@ -78,7 +89,6 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
     const [chartType, setChartType] = useState("line");
 
     // ====================== FUNCIÓN EXPORTAR CSV ======================
-    // Reemplaza tu función exportToCSV actual por esta:
     const exportToCSV = () => {
         const history = product.prices_history || product.prices || [];
 
@@ -90,19 +100,8 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
         const rows = history.map((entry) => {
             const date = new Date(entry.timestamp);
 
-            // Manejo más robusto del precio
-            const precioActualStr = entry.price || "";
-            const precioActual = parseFloat(precioActualStr.replace(/[^0-9.,]/g, "").replace(",", ".")) || 0;
-
-            // Soporta tanto "originalPrice" como "original_price"
-            let precioOriginal = 0;
-            if (entry.originalPrice) {
-                precioOriginal = parseFloat(entry.originalPrice.replace(/[^0-9.,]/g, "").replace(",", ".")) || 0;
-            } else if (entry.original_price) {
-                precioOriginal = parseFloat(entry.original_price.replace(/[^0-9.,]/g, "").replace(",", ".")) || 0;
-            } else {
-                precioOriginal = precioActual;
-            }
+            const precioActual = parsePrice(entry.price);
+            const precioOriginal = parsePrice(entry.original_price || entry.originalPrice);
 
             const diferencia = precioActual - precioOriginal;
             const diferenciaPorcentaje = precioOriginal > 0
@@ -161,27 +160,21 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
         let data = pricesHistory.map((entry) => {
             const date = new Date(entry.timestamp);
 
-            const precioActual = parseFloat(
-                (entry.price || "").replace(/[^0-9.,]/g, "").replace(",", ".")
-            ) || 0;
+            const precioActual = parsePrice(entry.price);
 
             // Soporte para original_price y originalPrice
             let precioOriginal = null;
             if (entry.original_price) {
-                precioOriginal = parseFloat(
-                    entry.original_price.replace(/[^0-9.,]/g, "").replace(",", ".")
-                ) || null;
+                precioOriginal = parsePrice(entry.original_price);
             } else if (entry.originalPrice) {
-                precioOriginal = parseFloat(
-                    entry.originalPrice.replace(/[^0-9.,]/g, "").replace(",", ".")
-                ) || null;
+                precioOriginal = parsePrice(entry.originalPrice);
             }
 
             return {
                 timestamp: date.getTime(),
                 dateObj: date,
                 Precio: precioActual,
-                "Precio Original": precioOriginal,        // puede ser null
+                "Precio Original": precioOriginal,
                 fullLabel: date.toLocaleString("es-ES", {
                     day: "2-digit",
                     month: "short",
@@ -216,27 +209,23 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
 
         const filtered = rawData.filter((item) => item.timestamp >= cutoff);
 
-        // DEBUG: Muestra en consola cuántos datos quedan después del filtro
         console.log(`Período: ${selectedPeriod} | Datos después del filtro: ${filtered.length}`);
 
         return filtered;
     }, [rawData, selectedPeriod]);
 
-    // Dentro de chartData, añade timestamp
     const chartData = useMemo(() => {
         return filteredData.map((item) => ({
-            timestamp: item.timestamp, // <- IMPORTANTE
+            timestamp: item.timestamp,
             date: item.dateObj.toLocaleDateString("es-ES", {
                 month: "2-digit",
                 year: "numeric"
             }),
             fullLabel: item.fullLabel,
             Precio: item.Precio,
-            "Precio Original":
-                item["Precio Original"] !== null &&
-                    item["Precio Original"] !== undefined
-                    ? item["Precio Original"]
-                    : null,
+            "Precio Original": item["Precio Original"] !== null && item["Precio Original"] !== undefined
+                ? item["Precio Original"]
+                : null,
             fullDate:
                 item.dateObj.toLocaleDateString("es-ES", {
                     day: "2-digit",
@@ -255,16 +244,12 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
         if (!isOpen) return;
 
         const handleContextMenu = (e) => {
-            // Si el clic derecho ocurre DENTRO del modal, bloqueamos SOLO el menú de tu app
             if (e.target.closest('.price-chart-modal-content')) {
-                // Permitimos el menú nativo del navegador, pero detenemos la propagación
-                // hacia el HistoryItem
                 e.stopPropagation();
-                // NO hacemos preventDefault() para que aparezca el menú del navegador
             }
         };
 
-        document.addEventListener('contextmenu', handleContextMenu, true); // capture phase
+        document.addEventListener('contextmenu', handleContextMenu, true);
 
         return () => {
             document.removeEventListener('contextmenu', handleContextMenu, true);
@@ -272,7 +257,7 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
     }, [isOpen]);
 
     const firstEverPrice = product.first_ever_price
-        ? parseFloat(String(product.first_ever_price).replace(/[^0-9.,]/g, "").replace(",", ".")) || null
+        ? parsePrice(String(product.first_ever_price))
         : null;
 
     const periods = [
@@ -297,7 +282,6 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
     const CustomTooltip = ({ active, payload }) => {
         if (!active || !payload || payload.length === 0) return null;
 
-        // Ordenamos para que "Original" aparezca primero, luego "Actual"
         const orderedPayload = [...payload].sort((a, b) => {
             if (a.name === "Precio Original" || a.name === "Original") return -1;
             if (b.name === "Precio Original" || b.name === "Original") return 1;
@@ -390,10 +374,6 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                         {product.price || "—"}
                                     </span>
                                 </div>
-
-
-
-
                             </div>
 
                             {/* Botones de acción */}
@@ -451,21 +431,12 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                                     minTickGap={20}
                                                     tickFormatter={(value) => {
                                                         const date = new Date(value);
-
-                                                        if (selectedPeriod === "7d" || selectedPeriod === "30d") {
+                                                        if (selectedPeriod === "7d" || selectedPeriod === "30d" || selectedPeriod === "180d") {
                                                             return date.toLocaleDateString("es-ES", {
                                                                 day: "2-digit",
                                                                 month: "2-digit",
                                                             });
                                                         }
-
-                                                        if (selectedPeriod === "180d") {
-                                                            return date.toLocaleDateString("es-ES", {
-                                                                day: "2-digit",
-                                                                month: "2-digit",
-                                                            });
-                                                        }
-
                                                         return date.toLocaleDateString("es-ES", {
                                                             month: "2-digit",
                                                             year: "numeric",
@@ -485,7 +456,6 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                                     }}
                                                 />
 
-                                                {/* Precio Actual - Siempre se muestra */}
                                                 {showPrice && (
                                                     <Area
                                                         type="natural"
@@ -498,7 +468,6 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                                     />
                                                 )}
 
-                                                {/* Precio Original - Solo se muestra si hay datos reales de original_price */}
                                                 {showOriginal && chartData.some(item => item["Precio Original"] !== null) && (
                                                     <Area
                                                         type="natural"
@@ -537,21 +506,12 @@ const PriceChartModal = ({ product, isOpen, onClose }) => {
                                                     minTickGap={20}
                                                     tickFormatter={(value) => {
                                                         const date = new Date(value);
-
-                                                        if (selectedPeriod === "7d" || selectedPeriod === "30d") {
+                                                        if (selectedPeriod === "7d" || selectedPeriod === "30d" || selectedPeriod === "180d") {
                                                             return date.toLocaleDateString("es-ES", {
                                                                 day: "2-digit",
                                                                 month: "2-digit",
                                                             });
                                                         }
-
-                                                        if (selectedPeriod === "180d") {
-                                                            return date.toLocaleDateString("es-ES", {
-                                                                day: "2-digit",
-                                                                month: "2-digit",
-                                                            });
-                                                        }
-
                                                         return date.toLocaleDateString("es-ES", {
                                                             month: "2-digit",
                                                             year: "numeric",
