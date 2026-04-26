@@ -297,7 +297,7 @@ IMPORTANTE: Tu conocimiento base llega hasta 2024. Usa "web_search" o "browse_am
               },
             ],
             temperature: 0.7,
-            max_tokens: 480,        // Suficiente para respuestas naturales
+            max_tokens: 600,        // Suficiente para respuestas naturales
           }),
         }
       );
