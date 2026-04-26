@@ -1049,7 +1049,7 @@ const HistoryItem = ({
                     </button>
 
                     {/* Separador sutil */}
-                    <div className="h-px bg-slate-100 mx-2" />
+                    <div className="h-px bg-slate-200 mx-2" />
 
                     {/* Botón Etiquetas */}
                     <button
@@ -1071,7 +1071,7 @@ const HistoryItem = ({
                         <span>Añadir etiqueta</span>
                     </button>
 
-                    <div className="h-px bg-slate-100 mx-2" />
+                    <div className="h-px bg-slate-300 mx-2" />
                     
                     {/* Ver Gráfica */}
                     <button
@@ -2642,6 +2642,7 @@ export default function HistoryPage() {
                                             Limpiar filtros
                                         </button>
                                     </div>
+                                    
                                 </div>
                             </div>
                         </div>

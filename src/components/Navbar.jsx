@@ -90,7 +90,7 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
                   className="absolute top-full left-0 mt-2 w-48 bg-white contenedorCosas shadow-xl border border-slate-200 overflow-hidden z-50"
                 >
                   <Link
-                    to="/profile"
+                    to="/"
                     onClick={() => setIsDropdownOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
                   >
@@ -98,7 +98,7 @@ const Navbar = ({ session }) => {   // ← solo añadimos esta prop
                     Perfil
                   </Link>
                   <Link
-                    to="/settings"
+                    to="/"
                     onClick={() => setIsDropdownOpen(false)}
                     className="flex items-center gap-3 px-4 py-3 text-sm font-medium text-slate-700 hover:bg-slate-50 transition"
                   >
