@@ -769,7 +769,7 @@ const HistoryItem = ({
                                     <RotatingLoadingText />
 
                                     {/* Barra de carga MÁS LARGA */}
-                                    <div className="md:w-[400px] w-[150px] h-1 bg-slate-200 contenedorCosas overflow-hidden mt-0.5">
+                                    <div className="md:w-[400px] w-[145px] h-1 bg-slate-200 contenedorCosas overflow-hidden mt-0.5">
                                         <div
                                             className="h-full bg-gradient-to-r from-emerald-400 via-emerald-500 to-emerald-400 animate-progress-infinite"
                                             style={{
