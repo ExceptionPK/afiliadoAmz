@@ -925,6 +925,18 @@ const HistoryItem = ({
                             </button>
                         )}
                     </p>
+                    {propItem.lastUpdate && (
+                        <div className="-mt-0.5 flex items-center absolute right-3 bottom-2 gap-1 text-[11px] text-slate-400">
+                            <RefreshCw className="w-3 h-3" />
+                            <span>
+                                {new Date(propItem.lastUpdate).toLocaleDateString("es-ES", {
+                                    day: "2-digit",
+                                    month: "2-digit",
+                                    year: "2-digit"
+                                })}
+                            </span>
+                        </div>
+                    )}
                 </div>
                 <div className="flex gap-2 flex-shrink-0 relative">
                     <a
@@ -1072,7 +1084,7 @@ const HistoryItem = ({
                     </button>
 
                     <div className="h-px bg-slate-300 mx-2" />
-                    
+
                     {/* Ver Gráfica */}
                     <button
                         onClick={() => {
@@ -2642,7 +2654,7 @@ export default function HistoryPage() {
                                             Limpiar filtros
                                         </button>
                                     </div>
-                                    
+
                                 </div>
                             </div>
                         </div>
