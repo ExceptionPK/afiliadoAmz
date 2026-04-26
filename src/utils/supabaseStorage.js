@@ -30,7 +30,6 @@ const getCurrentUser = async () => {
 export const saveToHistory = async (entry) => {
   const user = await getCurrentUser();
 
-  // Sin autenticación → fallback al almacenamiento local
   if (!user?.id) {
     addToLocal(entry);
     return;
@@ -38,12 +37,17 @@ export const saveToHistory = async (entry) => {
 
   const now = new Date().toISOString();
 
+  // Es la primera inserción desde Home si no viene ningún precio
+  const isFirstInsertion = !entry.price && !entry.originalPrice && !entry.first_ever_price;
+
+  const priceToSave = isFirstInsertion ? null : (entry.price ?? null);
+  const originalPriceToSave = entry.originalPrice ?? null;
+
   const firstEverPrice = entry.first_ever_price
-    || entry.price
-    || entry.originalPrice
+    || originalPriceToSave
+    || priceToSave
     || null;
 
-  // Preparar los datos para Supabase
   const data = {
     user_id: user.id,
     asin: entry.asin,
@@ -52,14 +56,16 @@ export const saveToHistory = async (entry) => {
     affiliate_url: entry.affiliateUrl || entry.affiliate_url || null,
     short_link: entry.shortLink || entry.short_link || null,
     product_title: entry.productTitle || entry.product_title || `Producto ${entry.asin}`,
-    price: entry.price || null,
-    original_price: entry.originalPrice || entry.original_price || null,
+
+    price: priceToSave,                    // ← NULL solo la primera vez
+    original_price: originalPriceToSave,
     first_ever_price: firstEverPrice,
+
     prices_history: entry.prices ? entry.prices : [],
     last_update: entry.lastUpdate || now,
     recommended: entry.recommended ? entry.recommended : [],
     created_at: entry.timestamp || now,
-    position: entry.position !== undefined ? entry.position : 0, // Si viene con posición, la respetamos; si no → 0 (se ajustará después)
+    position: entry.position !== undefined ? entry.position : 0,
   };
 
   try {
@@ -76,24 +82,23 @@ export const saveToHistory = async (entry) => {
       return;
     }
 
-    console.log(`[saveToHistory] Guardado/actualizado en Supabase → ASIN ${entry.asin}`);
+    console.log(`[saveToHistory] Guardado → ASIN ${entry.asin} | price: ${priceToSave === null ? 'NULL (primera vez)' : priceToSave}`);
 
-    // Disparar evento para actualizar UI
     window.dispatchEvent(new Event('amazon-history-updated'));
 
-    // Lanzamos el scraping de precio y título real después de guardar
-    console.log(`[saveToHistory] Iniciando fetchRealData para ASIN ${entry.asin} en 800ms`);
+    // Pasamos la bandera a fetchRealData
+    const entryForFetch = { ...entry, isFirstInsertion };
 
     setTimeout(() => {
       try {
-        fetchRealData(entry);
+        fetchRealData(entryForFetch);
       } catch (fetchErr) {
-        console.error(`[saveToHistory → fetchRealData] Error al lanzar para ${entry.asin}:`, fetchErr);
+        console.error(`[saveToHistory → fetchRealData] Error para ${entry.asin}:`, fetchErr);
       }
-    }, 800);  // 800 ms para dar tiempo a que el evento se procese y Supabase refleje el cambio
+    }, 800);
 
   } catch (err) {
-    console.error('Excepción al intentar guardar en Supabase:', err);
+    console.error('Excepción al guardar:', err);
     toast.error('Error inesperado al guardar el producto');
   }
 };

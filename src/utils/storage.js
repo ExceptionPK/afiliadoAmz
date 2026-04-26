@@ -209,6 +209,12 @@ export const fetchRealData = async (entry) => {
         return;
     }
 
+    const isFirstInsertion = entry.isFirstInsertion === true;
+
+    if (isFirstInsertion) {
+        console.log(`[fetchRealData] Primera inserción desde Home para ASIN ${asin} → price se mantiene NULL`);
+    }
+
     let domainPart = (entry.domain || 'amazon.es')
         .replace(/^(https?:\/\/)?(www\.)?/i, '')
         .replace(/^amazon\./i, '')
@@ -369,54 +375,70 @@ export const fetchRealData = async (entry) => {
         let newPricesHistory = [...previousPricesHistory];
         let showSameAsOriginalToast = false;
 
+        // Detectamos si es la primera inserción desde Home
+        const isFirstInsertion = entry.isFirstInsertion === true;
+
         if (price && price.trim() !== '') {
             const scrapedPriceClean = price.trim();
-            const now = new Date().toISOString();
 
-            // Función auxiliar para comparar precios numéricamente
-            const normalizePrice = (p) => {
-                if (!p || typeof p !== 'string') return NaN;
-                return parseFloat(
-                    p.replace(/[^0-9.,]/g, '')
-                        .replace(',', '.')
-                );
-            };
+            if (isFirstInsertion) {
+                console.log(`[fetchRealData] Primera inserción desde Home → price = NULL | original_price = ${scrapedPriceClean}`);
 
-            const scrapedNum = normalizePrice(scrapedPriceClean);
-            const originalNum = normalizePrice(previousOriginalPrice);
-            const currentNum = normalizePrice(previousPrice);
+                updateData.original_price = scrapedPriceClean;
 
-            // Siempre añadimos la entrada al historial (acumulativo)
-            const historyEntry = {
-                timestamp: now,
-                price: scrapedPriceClean,
-                type: "scrape"                    // ← importante para futuras gráficas
-            };
+                if (!previousFirstEverPrice) {
+                    updateData.first_ever_price = scrapedPriceClean;
+                    console.log(`[fetchRealData] Guardado first_ever_price: ${scrapedPriceClean}`);
+                }
 
-            // Caso 1: No había precio original → actualizamos todo
-            if (!previousOriginalPrice || isNaN(originalNum)) {
-                shouldUpdatePrice = true;
-                newPricesHistory.push(historyEntry);
-            }
-            // Caso 2: Sí había precio original
-            else {
-                // Precio scrapeado DIFERENTE del original → actualizamos precio visible
-                if (!isNaN(scrapedNum) && scrapedNum !== originalNum) {
+            } else {
+                const now = new Date().toISOString();
+
+                // Función auxiliar para comparar precios numéricamente
+                const normalizePrice = (p) => {
+                    if (!p || typeof p !== 'string') return NaN;
+                    return parseFloat(
+                        p.replace(/[^0-9.,]/g, '')
+                            .replace(',', '.')
+                    );
+                };
+
+                const scrapedNum = normalizePrice(scrapedPriceClean);
+                const originalNum = normalizePrice(previousOriginalPrice);
+                const currentNum = normalizePrice(previousPrice);
+
+                // Siempre añadimos la entrada al historial (acumulativo)
+                const historyEntry = {
+                    timestamp: now,
+                    price: scrapedPriceClean,
+                    type: "scrape"
+                };
+
+                // Caso 1: No había precio original → actualizamos todo
+                if (!previousOriginalPrice || isNaN(originalNum)) {
                     shouldUpdatePrice = true;
                     newPricesHistory.push(historyEntry);
                 }
-                // Precio scrapeado IGUAL al original
+                // Caso 2: Sí había precio original
                 else {
-                    // Si el precio actual (manual) era diferente → mostramos toast informativo
-                    if (previousPrice && !isNaN(currentNum) && currentNum !== originalNum) {
-                        showSameAsOriginalToast = true;
+                    // Precio scrapeado DIFERENTE del original → actualizamos precio visible
+                    if (!isNaN(scrapedNum) && scrapedNum !== originalNum) {
+                        shouldUpdatePrice = true;
+                        newPricesHistory.push(historyEntry);
                     }
+                    // Precio scrapeado IGUAL al original
+                    else {
+                        // Si el precio actual (manual) era diferente → mostramos toast informativo
+                        if (previousPrice && !isNaN(currentNum) && currentNum !== originalNum) {
+                            showSameAsOriginalToast = true;
+                        }
 
-                    // Registramos en el historial que volvió al precio original
-                    newPricesHistory.push({
-                        ...historyEntry,
-                        note: "Vuelto a precio original (scraping)"
-                    });
+                        // Registramos en el historial que volvió al precio original
+                        newPricesHistory.push({
+                            ...historyEntry,
+                            note: "Vuelto a precio original (scraping)"
+                        });
+                    }
                 }
             }
         }
