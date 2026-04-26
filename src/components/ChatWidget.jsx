@@ -163,34 +163,37 @@ export default function ChatWidget() {
     setInput("");
     setIsTyping(true);
 
-    // 🔒 aislamos history SIEMPRE (evita contaminación)
-    const history = updatedMessages.map((msg) => ({
-      role: msg.sender === "bot" ? "assistant" : "user",
-      content: msg.text,
-    }));
+    // ====================== CONFIGURACIÓN ======================
+    const CHAT_MODEL = "llama-3.1-8b-instant";
+    const MAX_HISTORY_MESSAGES = 12;     // Máximo de mensajes del historial que enviamos
+
+    // Función para obtener solo los mensajes recientes (ahorra muchos tokens)
+    const getRecentHistory = (msgs) => {
+      return msgs.slice(-MAX_HISTORY_MESSAGES).map((msg) => ({
+        role: msg.sender === "bot" ? "assistant" : "user",
+        content: msg.text,
+      }));
+    };
+
+    const history = getRecentHistory(updatedMessages);
 
     const systemPrompt = {
       role: "system",
-      content: `Eres un amigo que ayuda con cosas de Amazon, hablas de forma normal y relajada como una persona real, nada de lenguaje de robot ni muy formal. 
-Cuando te pido que generes un mensaje para alguien (por ejemplo "generame un mensaje para Teresa"), escribe exactamente un mensaje corto y natural como si lo estuviera mandando yo por WhatsApp o Instagram, sin sonar a vendedor profesional, sin exagerar, sin inventarte ofertas ni precios que no sepas, y sin poner emojis.
+      content: `Eres un amigo que ayuda con compras en Amazon.es. Habla de forma natural, relajada y cercana, como una persona real.
 
-Si te pido recomendaciones, búsquedas o filtrados de productos, responde de manera clara y directa con lo que sabes de verdad, sin inventarte nada. Si no tienes información suficiente o actualizada, dilo sin rodeos.
+Reglas importantes:
+- Sé directo y claro. No uses frases como "según la información obtenida".
+- Si no sabes algo o necesitas datos actualizados (2025/2026), usa las tools sin inventar.
+- Cuando te pida generar un mensaje para alguien, responde SOLO con el mensaje corto y natural (estilo WhatsApp), sin emojis ni lenguaje de vendedor.
+- Mantén el contexto de la conversación. Sé breve cuando no sea necesario alargar.
+- Cambia las frases de cierre para que suenen naturales.
 
-Recuerda y haz referencia a lo que hablamos antes. 
-No empieces conversaciones de cero si ya hemos hablado del tema.
-Mantén el contexto de la conversación. Sé breve cuando no haga falta alargar. 
-Usa alguna expresión coloquial A VECES, como "la verdad es que", "quizá te sirva...", pero sin pasarte.
-NO introduzcas en la frase "según la información que he obtenido". Di la información directamente.
-Al terminar la frase no siempre digas lo mismo de "Espero que te sea útil. ¡Si necesitas más ayuda, no dudes en preguntar!", cambialas de manera orgánica para que parezca que el usuario habla con una persona real. Se más dinámico
-
-IMPORTANTE: Tu entrenamiento base llega hasta 2024. Si te pregunto algo posterior a eso (como ofertas 2025 o 2026), usa la tool "web_search" o "browse_amazon_page" para obtener info actualizada y no inventes precios ni novedades. Describe la tool call claramente si es necesario, pero responde al usuario de forma natural una vez tengas el resultado.
-Todos los enlaces e infomración que busques de Amazon deben ser de amazon.es. 
-Si encuentras otro dominio (amazon.com, .mx, .de, etc.), haz la comparacion y busca si hay en amazon.es y debes convertirlo mentalmente a amazon.es antes de mostrarlo.`,
+IMPORTANTE: Tu conocimiento base llega hasta 2024. Usa "web_search" o "browse_amazon_page" para información reciente. Todos los enlaces deben ser de amazon.es.`,
     };
 
     try {
       // =========================
-      // 1️⃣ PRIMERA LLAMADA GROQ
+      // 1️⃣ PRIMERA LLAMADA - Decidir si usar tools
       // =========================
       const response = await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
@@ -201,10 +204,10 @@ Si encuentras otro dominio (amazon.com, .mx, .de, etc.), haz la comparacion y bu
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
+            model: CHAT_MODEL,
             messages: [systemPrompt, ...history],
-            temperature: 0.7,
-            max_tokens: 400,
+            temperature: 0.25,      // Más determinista para decidir tools
+            max_tokens: 220,        // Muy bajo, solo necesita decidir
             tools,
             tool_choice: "auto",
           }),
@@ -214,88 +217,66 @@ Si encuentras otro dominio (amazon.com, .mx, .de, etc.), haz la comparacion y bu
       const data = await response.json();
 
       if (!response.ok) {
-        console.error("Groq error:", data);
-        throw new Error("Groq request failed");
+        console.error("Groq error (1ª llamada):", data);
+        throw new Error(`Groq error: ${data.error?.message || "Unknown error"}`);
       }
 
       const message = data?.choices?.[0]?.message;
 
       // =========================
-      // CASO 1: SIN TOOLS
+      // CASO 1: NO necesita tools → respuesta directa
       // =========================
       if (!message?.tool_calls) {
-        const finalAnswer =
-          message?.content?.trim() || "No se pudo generar respuesta.";
+        const finalAnswer = message?.content?.trim() || "No se pudo generar respuesta.";
 
         setMessages((prev) => [
           ...prev,
-          {
-            id: Date.now() + 1,
-            text: finalAnswer,
-            sender: "bot",
-            timestamp: Date.now(),
-          },
+          { id: Date.now() + 1, text: finalAnswer, sender: "bot", timestamp: Date.now() },
         ]);
-
         setIsTyping(false);
         return;
       }
 
       // =========================
-      // CASO 2: CON TOOL
+      // CASO 2: Necesita tool
       // =========================
-      const toolCall = message.tool_calls?.[0];
-
-      if (!toolCall) {
-        throw new Error("Tool call vacío");
-      }
-
+      const toolCall = message.tool_calls[0];
       const funcName = toolCall.function.name;
       let args = {};
 
       try {
         args = JSON.parse(toolCall.function.arguments || "{}");
       } catch (e) {
-        console.error("Error parsing tool args", e);
+        console.error("Error parsing tool arguments:", e);
       }
 
       let toolResult = "";
 
-      // =========================
-      // WEB SEARCH
-      // =========================
+      // Ejecutar la tool correspondiente
       if (funcName === "web_search") {
-        const res = await fetch(
-          `/api/search?q=${encodeURIComponent(args.query || "")}`
-        );
-
+        const res = await fetch(`/api/search?q=${encodeURIComponent(args.query || "")}`);
         const json = await res.json();
-        toolResult = json?.result || "Sin resultados";
+        toolResult = json?.result || "No encontré resultados relevantes.";
       }
-
-      // =========================
-      // AMAZON BROWSE
-      // =========================
-      if (funcName === "browse_amazon_page") {
+      else if (funcName === "browse_amazon_page") {
         if (!args.url) {
-          toolResult = "No se proporcionó URL válida.";
+          toolResult = "No se proporcionó una URL válida.";
         } else {
           const res = await fetch(
             `/api/browse?url=${encodeURIComponent(args.url)}&instructions=${encodeURIComponent(args.instructions || "")}`
           );
-
           const json = await res.json();
-          toolResult = json?.content || "No pude leer la página";
+          toolResult = json?.content || "No pude leer la página de Amazon.";
         }
       }
 
-      // 🔥 IMPORTANTE: si tool falla, NO rompas el chat
-      if (!toolResult) {
-        toolResult = "No se pudo obtener información externa.";
+      // Seguridad: limitar tamaño del resultado
+      if (toolResult.length > 1800) {
+        toolResult = toolResult.slice(0, 1800) + "... (información resumida)";
       }
 
       // =========================
-      // 2ª LLAMADA (pero SEGURA)
+      // 2️⃣ SEGUNDA LLAMADA - Generar respuesta final
       // =========================
       const finalResponse = await fetch(
         "https://api.groq.com/openai/v1/chat/completions",
@@ -306,17 +287,17 @@ Si encuentras otro dominio (amazon.com, .mx, .de, etc.), haz la comparacion y bu
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
+            model: CHAT_MODEL,
             messages: [
               systemPrompt,
               ...history,
               {
                 role: "user",
-                content: `Datos obtenidos de herramientas:\n${toolResult}`,
+                content: `Información externa:\n${toolResult}`,
               },
             ],
             temperature: 0.7,
-            max_tokens: 400,
+            max_tokens: 480,        // Suficiente para respuestas naturales
           }),
         }
       );
@@ -324,34 +305,33 @@ Si encuentras otro dominio (amazon.com, .mx, .de, etc.), haz la comparacion y bu
       const finalData = await finalResponse.json();
 
       if (!finalResponse.ok) {
-        console.error("Final Groq error:", finalData);
-        throw new Error("Final request failed");
+        console.error("Groq error (2ª llamada):", finalData);
+        throw new Error(`Groq final error: ${finalData.error?.message || "Unknown error"}`);
       }
 
       const finalAnswer =
         finalData?.choices?.[0]?.message?.content?.trim() ||
-        "Error generando respuesta final.";
+        "Lo siento, hubo un problema al generar la respuesta.";
 
       setMessages((prev) => [
         ...prev,
-        {
-          id: Date.now() + 1,
-          text: finalAnswer,
-          sender: "bot",
-          timestamp: Date.now(),
-        },
+        { id: Date.now() + 1, text: finalAnswer, sender: "bot", timestamp: Date.now() },
       ]);
+
     } catch (err) {
       console.error("Chat error:", err);
 
+      let errorMessage = "Lo siento, hubo un error al procesar tu mensaje.";
+
+      if (err.message.includes("429")) {
+        errorMessage = "¡Demasiadas peticiones! Espera un momento e inténtalo de nuevo.";
+      } else if (err.message.includes("context length")) {
+        errorMessage = "La conversación es muy larga. ¿Podemos empezar de nuevo?";
+      }
+
       setMessages((prev) => [
         ...prev,
-        {
-          id: Date.now() + 1,
-          text: "Lo siento, hubo un error al procesar tu mensaje.",
-          sender: "bot",
-          timestamp: Date.now(),
-        },
+        { id: Date.now() + 1, text: errorMessage, sender: "bot", timestamp: Date.now() },
       ]);
     } finally {
       setIsTyping(false);
