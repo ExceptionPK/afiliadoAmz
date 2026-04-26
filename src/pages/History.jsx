@@ -521,14 +521,15 @@ const HistoryItem = ({
             - Puedes usar contracciones: q, xq, pa, tq, etc. cuando sea natural.
             - Máximo 3 a 5 líneas cortas.
             - Sin emojis ni signos de exclamación exagerados.
+            - A veces puedes ser mas gracioso y creativo con el texto que generas, pero NO DEMASIADO.
             - Termina invitando a mirar el enlace de forma suave.
             - No inventes características del producto.
             - Suena como un mensaje real de WhatsApp entre conocidos.
                   
             Ejemplos de lo que SÍ quieres (varía mucho):
             Hola, mira lo que he pillado, creo que te vendría genial para los peques.
-            Oye mamá, he visto esto y me he acordado de ti, ¿qué te parece?
-            Mira Juan, está bastante bien de precio, te lo paso por si te interesa.
+            Oye, he visto esto y me he acordado de ti, ¿qué te parece?
+            Mira, está bastante bien de precio, te lo paso por si te interesa.
                   
             Genera SOLO el texto del mensaje WhatsApp, nada más.`;
             const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
