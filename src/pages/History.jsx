@@ -515,7 +515,7 @@ const HistoryItem = ({
                   
             Reglas OBLIGATORIAS:
             - Empieza casi siempre con un saludo directo o nombre si se identifica uno (Hola Teresa, Oye mamá, Mira Juan, Ey Laura…)
-            - Habla SIEMPRE en PRIMERA PERSONA: "te paso", "mira lo que he visto", "he pensado en ti", etc.
+            - Habla en PRIMERA PERSONA: "te paso", "mira lo que he visto", "he pensado en ti", etc.
             - Prohibido hablar en tercera persona sobre el destinatario.
             - Español natural de España, coloquial pero no infantil.
             - Puedes usar contracciones: q, xq, pa, tq, etc. cuando sea natural.
@@ -526,7 +526,7 @@ const HistoryItem = ({
             - Suena como un mensaje real de WhatsApp entre conocidos.
                   
             Ejemplos de lo que SÍ quieres (varía mucho):
-            Hola Teresa, mira lo que he pillado, creo que te vendría genial para los peques.
+            Hola, mira lo que he pillado, creo que te vendría genial para los peques.
             Oye mamá, he visto esto y me he acordado de ti, ¿qué te parece?
             Mira Juan, está bastante bien de precio, te lo paso por si te interesa.
                   
